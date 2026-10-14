@@ -5,13 +5,10 @@ import {
   AlertCircle,
   RefreshCw,
   Sparkles,
-  Key,
   Database,
-  ExternalLink,
   X,
 } from 'lucide-react';
 import { seedAllDataToFirestore } from '../services/firebaseService.ts';
-import { getGeminiApiKey, setGeminiApiKey } from '../services/geminiService.ts';
 import { firebaseConfig } from '../services/firebase.ts';
 
 interface FirebaseSyncModalProps {
@@ -28,8 +25,6 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [progress, setProgress] = useState(0);
-  const [geminiKey, setGeminiKey] = useState(getGeminiApiKey());
-  const [savedKeyMsg, setSavedKeyMsg] = useState(false);
 
   if (!isOpen) return null;
 
@@ -54,13 +49,6 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
     } else {
       alert('⚠️ ' + result.message);
     }
-  };
-
-  const handleSaveGeminiKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    setGeminiApiKey(geminiKey);
-    setSavedKeyMsg(true);
-    setTimeout(() => setSavedKeyMsg(false), 3000);
   };
 
   return (
@@ -141,46 +129,20 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-indigo-600" />
-                <h4 className="font-bold text-gray-900 text-sm">Google AI Studio (Gemini API)</h4>
+                <h4 className="font-bold text-gray-900 text-sm">Google AI Studio (Gemini Server API)</h4>
               </div>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium"
-              >
-                รับ API Key ฟรี <ExternalLink className="w-3 h-3" />
-              </a>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5" /> พร้อมใช้งานผ่าน Server Proxy
+              </span>
             </div>
 
-            <p className="text-xs text-gray-600 mb-3">
-              ใช้สำหรับฟังก์ชัน AI ช่วยวิเคราะห์ผลการตรวจประเมินสถานประกอบการ, สรุปสาระสำคัญคำร้องเรียน และร่างหนังสือราชการ
+            <p className="text-xs text-gray-600 mb-2">
+              ขับเคลื่อนด้วยโมเดล Gemini 2.5 Flash บนฝั่งเซิร์ฟเวอร์แบบปลอดภัย (Server-Side Proxy) สำหรับการวิเคราะห์ผลการตรวจประเมินสุขลักษณะสถานประกอบการ, สรุปข้อบกพร่อง, และจำแนกคำร้องเรียน
             </p>
-
-            <form onSubmit={handleSaveGeminiKey} className="space-y-3">
-              <div className="relative">
-                <Key className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  placeholder="วางรหัส AIzaSy... จาก Google AI Studio ที่นี่"
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-indigo-200 rounded-lg text-xs font-mono text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-emerald-600 font-medium">
-                  {savedKeyMsg ? '✓ บันทึก API Key สำเร็จแล้ว!' : geminiKey ? '● มีการระบุ API Key แล้ว' : '○ ยังไม่ได้ระบุ API Key'}
-                </span>
-                <button
-                  type="submit"
-                  className="py-1.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors"
-                >
-                  บันทึก API Key
-                </button>
-              </div>
-            </form>
+            <div className="bg-white p-3 rounded-lg border border-indigo-100 text-xs text-indigo-900 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>การเชื่อมต่อระบบปัญญาประดิษฐ์ถูกบริหารจัดการโดยอัตโนมัติผ่านสภาพแวดล้อมระบบ ไม่ต้องระบุคีย์ด้วยตนเอง</span>
+            </div>
           </div>
         </div>
 

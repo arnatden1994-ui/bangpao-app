@@ -5,7 +5,7 @@ import { getStorage } from 'firebase/storage';
 
 // Configuration from Firebase Console for project: Bangpao Public Health
 export const firebaseConfig = {
-  apiKey: "AIzaSyB6Z6Z_sE4eH6tszOhwT_YPP_SjjyYsfk8",
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || "AIzaSyB6Z6Z_sE4eH6tszOhwT_YPP_SjjyYsfk8",
   authDomain: "bangpao-public-health.firebaseapp.com",
   projectId: "bangpao-public-health",
   storageBucket: "bangpao-public-health.firebasestorage.app",

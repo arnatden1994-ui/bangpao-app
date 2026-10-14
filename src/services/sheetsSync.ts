@@ -340,8 +340,8 @@ export async function syncToGoogleSheets(
   }
 }
 
-// Fetch data from Google Apps Script
-export async function fetchFromGoogleSheets(url: string): Promise<{
+// Fetch data from Google Sheets / Apps Script (Live sync)
+export async function fetchFromGoogleSheets(url?: string, sheetId?: string): Promise<{
   success: boolean;
   message: string;
   establishments?: Establishment[];
@@ -350,29 +350,76 @@ export async function fetchFromGoogleSheets(url: string): Promise<{
   petitions?: PublicPetition[];
 }> {
   try {
-    const response = await fetch('/api/gas-proxy', {
+    // 1. First attempt: Direct high-speed Live Google Sheets endpoint
+    const liveResponse = await fetch('/api/sheets/live-data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        scriptUrl: url,
-        method: 'GET',
-        queryParams: { action: 'getInspectionSystemData' },
+        sheetId: sheetId || DEFAULT_SHEET_ID,
       }),
     });
 
-    const result = await response.json();
-    if (response.ok && result.data) {
-      const data = result.data.data || result.data;
-      const items: Establishment[] = Array.isArray(data.establishments) ? data.establishments : [];
-      if (items.length > 0) {
+    if (liveResponse.ok) {
+      const liveData = await liveResponse.json();
+      if (liveData.success && Array.isArray(liveData.licenses) && liveData.licenses.length > 0) {
+        const estList: Establishment[] = liveData.licenses.map((lic: LicenseRecord, idx: number) => ({
+          id: `EST-${lic.id || idx}`,
+          code: lic.licenseNumber || `อม.1-69${idx + 1}`,
+          name: lic.businessName,
+          type: 'restaurant',
+          ownerName: lic.ownerName || 'ผู้ประกอบการ',
+          phone: lic.businessPhone || lic.ownerPhone || '081-000-0000',
+          address: `${lic.businessAddressNo} ม.${lic.businessMoo}`,
+          subdistrict: lic.businessSubdistrict || 'บางเป้า',
+          district: lic.businessDistrict || 'กันตัง',
+          province: lic.businessProvince || 'ตรัง',
+          status: lic.status === 'normal' ? 'passed' : lic.status === 'expiring' ? 'passed' : 'needs_reinspection',
+          latestScore: lic.status === 'normal' ? 95 : 75,
+          latestRating: lic.status === 'normal' ? 'excellent' : 'fair',
+          latestInspectionDate: lic.approvalDate || '01/07/2026',
+          nextInspectionDate: lic.expireDate || '01/07/2027',
+          certificateNo: lic.licenseNumber || `HYG-${idx}`,
+          inspectorName: 'น.ส. พิมลภัส ศรีสุข',
+          syncedToSheets: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
+
         return {
           success: true,
-          message: `ดึงข้อมูลสถานประกอบการสำเร็จ ${items.length} รายการ`,
-          establishments: items,
-          inspections: Array.isArray(data.inspections) ? data.inspections : [],
-          licenses: Array.isArray(data.licenses) ? data.licenses : [],
-          petitions: Array.isArray(data.petitions) ? data.petitions : [],
+          message: `ดึงข้อมูลปัจจุบันจาก Google Sheets สำเร็จ (${liveData.licenses.length} รายการ)`,
+          licenses: liveData.licenses,
+          establishments: estList,
         };
+      }
+    }
+
+    // 2. Secondary fallback: GAS proxy endpoint
+    if (url) {
+      const response = await fetch('/api/gas-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scriptUrl: url,
+          method: 'GET',
+          queryParams: { action: 'getInspectionSystemData' },
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok && result.data) {
+        const data = result.data.data || result.data;
+        const items: Establishment[] = Array.isArray(data.establishments) ? data.establishments : [];
+        if (items.length > 0) {
+          return {
+            success: true,
+            message: `ดึงข้อมูลสถานประกอบการสำเร็จ ${items.length} รายการ`,
+            establishments: items,
+            inspections: Array.isArray(data.inspections) ? data.inspections : [],
+            licenses: Array.isArray(data.licenses) ? data.licenses : [],
+            petitions: Array.isArray(data.petitions) ? data.petitions : [],
+          };
+        }
       }
     }
 

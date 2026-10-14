@@ -279,10 +279,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Brand & Municipal Identity Header */}
         <div className="h-18 px-4 flex items-center justify-between border-b border-emerald-700/40 bg-gradient-to-r from-[#063f31] to-[#084c3c] shrink-0 shadow-sm">
           <div className="flex items-center gap-3 overflow-hidden min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 p-0.5 shrink-0 shadow-md flex items-center justify-center">
-              <div className="w-full h-full bg-[#063f31] rounded-[14px] flex items-center justify-center">
-                <Shield className="w-5 h-5 text-emerald-300" />
-              </div>
+            <div className="w-11 h-11 rounded-full bg-white p-0.5 shrink-0 shadow-md flex items-center justify-center border border-emerald-300/40 overflow-hidden">
+              <img
+                src="/bangpao-logo.png"
+                alt="ตราเทศบาลตำบลบางเป้า จังหวัดตรัง"
+                className="w-full h-full object-contain"
+              />
             </div>
             {isOpen && (
               <div className="flex flex-col min-w-0">

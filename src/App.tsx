@@ -347,6 +347,32 @@ export default function App() {
     };
   }, []);
 
+  // Auto connect and pull latest live data from Google Sheets on load
+  useEffect(() => {
+    let isMounted = true;
+    fetchFromGoogleSheets(config.appsScriptUrl, config.sheetId)
+      .then((res) => {
+        if (isMounted && res.success && res.licenses && res.licenses.length > 0) {
+          setLicenses(res.licenses);
+          if (res.establishments && res.establishments.length > 0) {
+            setEstablishments(res.establishments);
+          }
+          setConfig((prev) => ({
+            ...prev,
+            lastSyncTime: new Date().toISOString(),
+            syncStatus: 'success',
+            syncMessage: `เชื่อมต่อและดึงข้อมูลปัจจุบันสำเร็จ (${res.licenses?.length} รายการ)`,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn('Initial live sync notice:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Auth Handlers
   const handleUserChange = (u: User) => {
     setCurrentUserState(u);
@@ -522,31 +548,21 @@ export default function App() {
 
   // Google Sheets Sync
   const handleQuickSync = async () => {
-    if (!config.appsScriptUrl) {
-      setSheetsModalOpen(true);
-      return;
-    }
     setIsSyncing(true);
     try {
-      const res = await syncToGoogleSheets(
-        config.appsScriptUrl,
-        establishments,
-        inspections,
-        hazardousBusinesses,
-        petitions,
-        loans,
-        licenses
-      );
-      if (res.success) {
+      const res = await fetchFromGoogleSheets(config.appsScriptUrl, config.sheetId);
+      if (res.success && res.licenses && res.licenses.length > 0) {
+        setLicenses(res.licenses);
+        if (res.establishments && res.establishments.length > 0) setEstablishments(res.establishments);
         setConfig((prev) => ({
           ...prev,
           lastSyncTime: new Date().toISOString(),
           syncStatus: 'success',
-          syncMessage: 'ซิงค์ข้อมูลสำเร็จ',
+          syncMessage: `ดึงข้อมูลปัจจุบันสำเร็จ (${res.licenses?.length} รายการ)`,
         }));
-        showToast('success', 'ส่งข้อมูลขึ้น Google Sheets สำเร็จเรียบร้อย');
+        showToast('success', res.message);
       } else {
-        showToast('error', res.message);
+        showToast('info', res.message || 'ไม่พบรายการข้อมูลใหม่');
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -557,14 +573,13 @@ export default function App() {
   };
 
   const handleSyncPull = async () => {
-    if (!config.appsScriptUrl) return;
     setIsSyncing(true);
     try {
-      const res = await fetchFromGoogleSheets(config.appsScriptUrl);
-      if (res.success && res.establishments && res.establishments.length > 0) {
-        setEstablishments(res.establishments);
+      const res = await fetchFromGoogleSheets(config.appsScriptUrl, config.sheetId);
+      if (res.success && res.licenses && res.licenses.length > 0) {
+        setLicenses(res.licenses);
+        if (res.establishments && res.establishments.length > 0) setEstablishments(res.establishments);
         if (res.inspections) setInspections(res.inspections);
-        if (res.licenses) setLicenses(res.licenses);
         if (res.petitions) setPetitions(res.petitions);
         showToast('success', res.message);
       } else {

@@ -2,7 +2,6 @@ import React from 'react';
 import {
   FileSpreadsheet,
   RefreshCw,
-  Shield,
   Settings,
   Menu,
   ExternalLink,
@@ -33,7 +32,6 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
-  currentSubTabLabel,
   config,
   currentUser,
   onOpenAuthModal,
@@ -47,27 +45,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   const officerName = currentUser?.fullName || 'น.ส. พิมลภัส ศรีสุข';
   const officerRole = currentUser?.roleTitle || 'นายตรวจ / เจ้าพนักงานสาธารณสุข';
 
-  const tabTitleMap: Record<MainNavTab, string> = {
-    overview: '1. 🏠 แดชบอร์ดหลักทุกระบบ',
-    hazardous: '2. 🛡️ กิจการอันตรายต่อสุขภาพ',
-    gas_app: '2. 🛡️ กิจการอันตรายต่อสุขภาพ (Apps Script)',
-    dashboard: '2. 🛡️ กิจการอันตรายต่อสุขภาพ (แดชบอร์ด)',
-    establishments: '2. 🛡️ กิจการอันตรายต่อสุขภาพ (ตรวจประเมิน)',
-    nhso_ltc: '3. 📦 ระบบแจกจ่ายโครงการ สปสช. & LTC',
-    nhso: '3. 📦 โครงการ สปสช.',
-    ltc: '3. 📦 การดูแลระยะยาว LTC',
-    equipment: '4. 🩺 ระบบบริการยืม-คืนอุปกรณ์ทางการแพทย์',
-    petitions: '5. 📋 ระบบยื่นคำร้องและบริการประชาชน',
-    reports: '5. 📋 พิมพ์เอกสารราชการเสนอผู้บริหาร',
-    inspections: '2. 🛡️ บันทึกการตรวจประเมิน',
-    settings: '6. ⚙️ ระบบตั้งค่าหน้าผู้ใช้งานทุกระบบ',
-  };
-
   return (
     <header className="bg-gradient-to-r from-[#063f31] via-[#074737] to-[#043327] text-white sticky top-0 z-40 shadow-md border-b border-emerald-600/40 backdrop-blur-md">
       <div className="w-full px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-18 gap-3">
-          {/* Left: Sidebar Toggle Button + Bangpao Title + Breadcrumb */}
+          {/* Left: Sidebar Toggle Button */}
           <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
             {onToggleSidebar && (
               <button
@@ -78,32 +60,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Menu className="w-5 h-5" />
               </button>
             )}
-
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 p-0.5 flex items-center justify-center shrink-0 shadow-md border border-emerald-300/40 hidden sm:flex">
-              <div className="w-full h-full rounded-[14px] bg-[#063f31] flex items-center justify-center text-emerald-200">
-                <Shield className="w-5 h-5 text-emerald-300" />
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-sm sm:text-base font-black tracking-tight text-white leading-tight truncate">
-                  ระบบงานสารสนเทศสาธารณสุขและจัดการเมืองอัจฉริยะ
-                </h1>
-                <span className="hidden xl:inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-800/90 text-emerald-200 border border-emerald-500/50">
-                  ทต.บางเป้า อ.กันตัง จ.ตรัง
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs sm:text-[13px] text-emerald-200/90 font-medium truncate mt-0.5">
-                <span className="text-emerald-300 font-bold">{tabTitleMap[currentTab] || 'ระบบสาธารณสุข'}</span>
-                {currentSubTabLabel && (
-                  <>
-                    <span className="text-emerald-400/60">/</span>
-                    <span className="text-white font-semibold truncate">{currentSubTabLabel}</span>
-                  </>
-                )}
-              </div>
-            </div>
           </div>
 
           {/* Right: [ตั้งค่าผู้ลงนาม] | [Google Sheets Online] | [เปิดแท็บใหม่] | [รีเฟรช] | โปรไฟล์เจ้าหน้าที่ */}
