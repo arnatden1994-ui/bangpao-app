@@ -1,0 +1,976 @@
+<script>
+let currentEditingRowIndex = null;
+let currentUser = { username: "", realName: "", position: "" };
+let loadedQuestions = [];
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof initSetupFormData === 'function') { initSetupFormData(); } 
+  else { loadInitialSetupData(); }
+  setupAutoClearZero(); 
+});
+
+function setupAutoClearZero() {
+  const targets = ['#animal_count', '#machine_count', '#machine_power', '#worker_male', '#worker_female'];
+  targets.forEach(selector => {
+    const input = document.querySelector(selector);
+    if (!input) return;
+    input.addEventListener('focus', function() { if (this.value === '0') this.value = ''; });
+    input.addEventListener('blur', function() {
+      if (this.value.trim() === '') {
+        this.value = '0';
+        if (this.id === 'worker_male' || this.id === 'worker_female') {
+          if (typeof calcTotalWorkers === 'function') calcTotalWorkers();
+        }
+      }
+    });
+  });
+}
+
+function addMaterialRow() {
+  const tbody = document.getElementById('materialsTableBody');
+  if (!tbody) return;
+  const rowCount = tbody.children.length + 1;
+  const tr = document.createElement('tr');
+  tr.className = "material-row";
+  tr.innerHTML = `
+    <td class="p-2 text-center text-slate-400 font-bold row-index">${rowCount}</td>
+    <td class="p-1"><input type="text" class="table-input mat-name" placeholder="ชื่อวัตถุดิบหรือสารเคมี..."></td>
+    <td class="p-1"><input type="text" class="table-input mat-qty" placeholder="เช่น 500 กก./ปี..."></td>
+    <td class="p-1 text-center"><button type="button" onclick="this.closest('tr').remove(); reindexMaterials();" class="text-rose-500 font-bold hover:text-rose-700 cursor-pointer">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+function reindexMaterials() {
+  document.querySelectorAll('.material-row').forEach((row, index) => {
+    let indexCell = row.querySelector('.row-index');
+    if (indexCell) indexCell.innerText = index + 1;
+  });
+}
+
+function loadInitialSetupData() {
+  google.script.run.withSuccessHandler((data) => { loadedQuestions = data.questions; }).getFormSetupData();
+}
+
+function showCustomModal(title, message, icon) {
+  const mTitle = document.getElementById('modalTitle');
+  const mMsg = document.getElementById('modalMessage');
+  const mIcon = document.getElementById('modalIcon');
+  const modal = document.getElementById('customModal');
+  if (mTitle) mTitle.innerText = title;
+  if (mMsg) mMsg.innerText = message;
+  if (mIcon) mIcon.innerText = icon;
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeCustomModal() {
+  document.getElementById('customModal').classList.add('hidden');
+}
+
+function submitLogin() {
+  const username = document.getElementById('login_username').value.trim();
+  const password = document.getElementById('login_password').value.trim();
+  const msg = document.getElementById('login_msg');
+  if (!username || !password) { msg.innerText = "กรุณากรอก Username และ Password"; return; }
+
+  google.script.run.withSuccessHandler(function(res) {
+    if (!res || !res.success) { msg.innerText = res && res.msg ? res.msg : "เข้าสู่ระบบไม่สำเร็จ"; return; }
+    currentUser.username = username;
+    currentUser.realName = res.name || "";
+    currentUser.position = res.position || "";
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    document.getElementById('inspector_name').value = currentUser.realName;
+    document.getElementById('inspector_position').value = currentUser.position;
+  }).checkLogin(username, password);
+}
+
+function initSetupFormData() {
+  google.script.run.withSuccessHandler(function(res) {
+    let bTypeContainer = document.getElementById('businessTypeContainer');
+    if (bTypeContainer && res.types) {
+      bTypeContainer.innerHTML = res.types.map(t => `
+        <label class="flex items-start gap-2 mb-1 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors border-b border-slate-100 last:border-0">
+          <input type="checkbox" class="mt-1 bus-type-cb accent-blue-600 w-4 h-4" value="${t}" onchange="updateBusinessType()">
+          <span class="leading-snug text-[13px]">${t}</span>
+        </label>
+      `).join('');
+    }
+    let bStyleSelect = document.getElementById('buildingStyle');
+    if (bStyleSelect && res.buildingStyles) bStyleSelect.innerHTML = res.buildingStyles.map(s => `<option value="${s}">${s}</option>`).join('');
+    let shopList = document.getElementById('shopNameList');
+    if (shopList && res.shops) shopList.innerHTML = res.shops.map(s => `<option value="${s}">`).join('');
+    
+    let qBody = document.getElementById('questionsTableBody');
+    if (res.questions && res.questions.length > 0) {
+      window.loadedQuestions = res.questions;
+      let qHtml = '';
+      res.questions.forEach(function(q, index) {
+        let dbNum = index + 1;    
+        let displayNum = q.num.toString().trim();
+        let isMainHeader = (displayNum === '8');
+
+        let evaluationOptions = isMainHeader ? 
+          `<span class="text-[11px] text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded">กรุณาประเมินในข้อย่อย</span><input type="hidden" name="r${dbNum}" value="ไม่เกี่ยวข้อง">` 
+          : 
+          `<div class="flex items-center justify-center gap-1.5">
+            <label class="flex items-center space-x-1 cursor-pointer font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200 text-[11px]">
+              <input type="radio" name="r${dbNum}" value="ใช่" class="w-3 h-3 accent-emerald-600"> <span>ใช่</span>
+            </label>
+            <label class="flex items-center space-x-1 cursor-pointer font-semibold text-rose-700 bg-rose-50 px-2 py-1 rounded-md border border-rose-200 text-[11px]">
+              <input type="radio" name="r${dbNum}" value="ไม่ใช่" class="w-3 h-3 accent-rose-600"> <span>ไม่ใช่</span>
+            </label>
+            <label class="flex items-center space-x-1 cursor-pointer font-semibold text-slate-600 bg-slate-100 px-2 py-1 rounded-md border border-slate-300 text-[11px]">
+              <input type="radio" name="r${dbNum}" value="ไม่เกี่ยวข้อง" class="w-3 h-3 accent-slate-600" > <span>N/A</span>
+            </label>
+          </div>`;
+
+        qHtml += `
+          <tr class="${isMainHeader ? 'bg-amber-50/30' : 'hover:bg-slate-50/50'} transition-all">
+            <td class="p-3 text-center font-bold text-slate-600 ${isMainHeader ? '' : 'bg-slate-50/30'}">${displayNum === '-' ? '' : 'ข้อ ' + displayNum}</td>
+            <td class="p-3 ${isMainHeader ? 'font-bold text-slate-900' : 'font-medium text-slate-700'} leading-relaxed">${q.text}</td>
+            <td class="p-3 text-center">${evaluationOptions}</td>
+            <td class="p-2"><input type="text" id="f${dbNum}" name="f${dbNum}" placeholder="พบอะไรหน้างาน..." class="table-input" ${isMainHeader ? 'disabled' : ''}></td>
+            <td class="p-2"><input type="text" id="c${dbNum}" name="c${dbNum}" placeholder="สั่งปรับปรุงอะไร..." class="table-input" ${isMainHeader ? 'disabled' : ''}></td>
+          </tr>
+        `;
+      });
+      qBody.innerHTML = qHtml;
+    } else {
+      qBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-bold">⚠️ ไม่พบฐานข้อมูลข้อคำถามประเมิน</td></tr>`;
+    }
+  }).getFormSetupData();
+}
+
+function changeMenuToggle(view) {
+  const btnAssess = document.getElementById('btn-menu-assess');
+  const btnDash = document.getElementById('btn-menu-dash');
+  const viewAssess = document.getElementById('view-assessment');
+  const viewDashboard = document.getElementById('view-dashboard');
+
+  if (view === 'assessment') {
+    viewAssess.classList.remove('hidden'); viewDashboard.classList.add('hidden');
+    btnAssess.className = "bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm cursor-pointer transition-all";
+    btnDash.className = "hover:text-white text-slate-400 px-4 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all";
+  } else {
+    viewAssess.classList.add('hidden'); viewDashboard.classList.remove('hidden');
+    btnDash.className = "bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm cursor-pointer transition-all";
+    btnAssess.className = "hover:text-white text-slate-400 px-4 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all";
+    loadLicenseData();
+  }
+}
+
+function autoCalcExpireDate() {
+  const startDateInput = document.getElementById('app_start_date').value;
+  if (!startDateInput) return;
+  let startDate = new Date(startDateInput);
+  startDate.setFullYear(startDate.getFullYear() + 1); startDate.setDate(startDate.getDate() - 1);
+  let yyyy = startDate.getFullYear();
+  let mm = String(startDate.getMonth() + 1).padStart(2, '0');
+  let dd = String(startDate.getDate()).padStart(2, '0');
+  document.getElementById('app_end_date').value = `${yyyy}-${mm}-${dd}`;
+}
+
+function renderDashboardTable(lists) {
+  const tbody = document.getElementById('licenseTableBody');
+  const yearSelect = document.getElementById('statYearSelect');
+  const selectedYear = yearSelect ? yearSelect.value : 'all';
+  
+  let stats = { all: 0, normal: 0, warning: 0, expired: 0, pending: 0 };
+  let html = ''; let matchCount = 0; 
+  lists.forEach(function(item) {
+    if (selectedYear !== 'all' && String(item.thaiYear).trim() !== String(selectedYear).trim()) return; 
+    
+    let badge = ''; let isEligibleForRenew = false; 
+    let daysLeft = "-"; let itemStatus = 'normal';
+    if (item.endDate && item.endDate !== '-') {
+      let parts = item.endDate.split('/');
+      let expDate = new Date(parts[2], parts[1] - 1, parts[0]);
+      let today = new Date(); today.setHours(0,0,0,0);
+      let timeDiff = expDate.getTime() - today.getTime();
+      daysLeft = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    }
+
+    if (item.licenseNo === '-') {
+      itemStatus = 'pending';
+      badge = `<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-bold text-[10px]">⏳ รออนุมัติ</span>`;
+      isEligibleForRenew = false; 
+    } else if (daysLeft <= 0) {
+      itemStatus = 'expired';
+      badge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md font-bold text-[10px]">🔴 หมดอายุคำขอ</span>`;
+      isEligibleForRenew = true;  
+    } else if (daysLeft <= 30) {
+      itemStatus = 'warning';
+      badge = `<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md font-bold text-[10px]">🟡 ใกล้หมดอายุ (${daysLeft} วัน)</span>`;
+      isEligibleForRenew = true;  
+    } else {
+      itemStatus = 'normal';
+      badge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md font-medium text-[10px]">🟢 ปกติ (เหลือ ${daysLeft} วัน)</span>`;
+      isEligibleForRenew = false; 
+    }
+    
+    stats.all++;
+    stats[itemStatus]++;
+    
+    if (typeof currentStatusFilter !== 'undefined' && currentStatusFilter !== 'all' && currentStatusFilter !== itemStatus) return;
+
+    matchCount++;  
+
+    let displayDate = item.importDate || item.startDate || "-";
+    let renewButton = '';
+    if (isEligibleForRenew && item.licenseNo !== '-') {
+      renewButton = `<button type="button" onclick="handleRenewClick('${item.shopName}')" class="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-bold px-2 py-1 rounded-md text-[11px] cursor-pointer transition-all">🔄 ต่ออายุ</button>`;
+    }
+
+    html += `
+      <tr class="hover:bg-slate-50/80 transition-all">
+        <td class="p-2.5 text-center font-medium">${matchCount}</td>
+        <td class="p-2.5">
+          <div class="font-bold text-slate-800">${item.shopName} <span class="text-emerald-600 font-normal text-xs">(รอบปี ${item.thaiYear})</span></div>
+          <div class="text-[10px] text-slate-400 font-medium italic mt-0.5">⏱️ บันทึกเมื่อ: ${displayDate}</div>
+        </td>
+        <td class="p-2.5 font-mono text-slate-600">${item.licenseNo}</td>
+        <td class="p-2.5 text-slate-500">${item.startDate || '-'}</td>
+        <td class="p-2.5 text-slate-500">${item.endDate || '-'}</td>
+        <td class="p-2.5 text-center">${badge}</td>
+        <td class="p-2.5 text-center space-x-1">
+          <button type="button" onclick="selectShopForApproval('${item.shopName}', '${item.licenseNo === '-' ? '' : item.licenseNo}', '${item.memo || ''}', '${item.startDate || ''}', '${item.endDate || ''}')" class="bg-teal-50 text-teal-600 hover:bg-teal-100 font-bold px-2 py-1 rounded-md text-[11px] cursor-pointer transition-all">🖊️ ใบอนุญาต</button>
+          <button type="button" onclick="handleEditClick('${item.shopName}')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold px-2 py-1 rounded-md text-[11px] cursor-pointer transition-all">✏️ แก้ไข</button>
+          ${renewButton}
+        </td>
+        <td class="p-2.5 text-center">
+          <div class="flex flex-col space-y-1 items-center">
+            <div class="flex space-x-1">
+              <button type="button" onclick="printReport('${item.shopName}')" class="bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold px-2 py-1 rounded-md text-[11px] cursor-pointer transition-all">🖨️ ประเมิน</button>
+              <button type="button" onclick="exportToWord('${item.shopName}')" class="bg-emerald-600 text-white hover:bg-emerald-700 font-bold px-2 py-1 rounded-md text-[11px] cursor-pointer transition-all">Word</button>
+            </div>
+            <button type="button" onclick="exportLicenseToWord('${item.shopName}')" class="bg-amber-100 text-amber-700 hover:bg-amber-200 font-bold px-2 py-1 rounded-md text-[11px] cursor-pointer transition-all w-full text-center" ${item.licenseNo === '-' ? 'disabled style="opacity:0.5;cursor:not-allowed;" title="ต้องอนุมัติก่อน"' : ''}>📄 พิมพ์ใบอนุญาต</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+  
+  if (html === '') tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400">📊 ไม่พบข้อมูลคำขอใบอนุญาตประจำรอบปี พ.ศ. ที่เลือก</td></tr>`;
+  else tbody.innerHTML = html;
+  
+  if (document.getElementById('count-all')) document.getElementById('count-all').innerText = stats.all;
+  if (document.getElementById('count-normal')) document.getElementById('count-normal').innerText = stats.normal;
+  if (document.getElementById('count-warning')) document.getElementById('count-warning').innerText = stats.warning;
+  if (document.getElementById('count-expired')) document.getElementById('count-expired').innerText = stats.expired;
+  if (document.getElementById('count-pending')) document.getElementById('count-pending').innerText = stats.pending;
+}
+
+function loadLicenseData() {
+  const tbody = document.getElementById('licenseTableBody');
+  tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400 animate-pulse">🔄 กำลังเชื่อมต่อฐานข้อมูลทะเบียน...</td></tr>`;
+  
+  google.script.run.withSuccessHandler(function(lists) {
+    if (!lists || lists.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400">📊 ยังไม่มีข้อมูลประวัติในขณะนี้</td></tr>`; return;
+    }
+    window.allLicenseData = lists;
+    if (typeof initYearDropdownAndStats === 'function') { initYearDropdownAndStats(lists); }
+    renderDashboardTable(lists);
+  }).fetchInspectionAndLicenses();
+}
+
+function initYearDropdownAndStats(list) {
+  window.allLicenseData = list; 
+  let yearSelect = document.getElementById('statYearSelect') || document.getElementById('yearFilter');
+  if (!yearSelect) return;
+  let currentSelected = yearSelect.value || "all";
+  yearSelect.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+  let years = [];
+  list.forEach(item => {
+    if (item.thaiYear) {
+      let year = String(item.thaiYear).trim();
+      if (!years.includes(year)) { years.push(year); }
+    }
+  });
+  years.sort((a, b) => b - a);
+  years.forEach(year => {
+    let option = document.createElement('option');
+    option.value = year; option.textContent = "ปี พ.ศ. " + year;
+    yearSelect.appendChild(option);
+  });
+  yearSelect.value = currentSelected;
+  yearSelect.onchange = function() { calculateYearlyStats(); if(window.allLicenseData) renderDashboardTable(window.allLicenseData); };
+  calculateYearlyStats();
+}
+
+let currentStatusFilter = 'all';
+
+function filterStatus(status) {
+  currentStatusFilter = status;
+  const cards = ['all', 'normal', 'warning', 'expired', 'pending'];
+  cards.forEach(c => {
+    const el = document.getElementById('card-' + c);
+    if (!el) return;
+    if (c === status) {
+      el.classList.remove('border-slate-200');
+      el.classList.add('border-2');
+      if(c==='all') el.classList.add('border-emerald-500');
+      if(c==='normal') el.classList.add('border-emerald-500', 'bg-emerald-50');
+      if(c==='warning') el.classList.add('border-orange-500', 'bg-orange-50');
+      if(c==='expired') el.classList.add('border-rose-500', 'bg-rose-50');
+      if(c==='pending') el.classList.add('border-amber-500', 'bg-amber-50');
+    } else {
+      el.classList.add('border-slate-200');
+      el.classList.remove('border-2', 'border-emerald-500', 'border-orange-500', 'border-rose-500', 'border-amber-500', 'bg-emerald-50', 'bg-orange-50', 'bg-rose-50', 'bg-amber-50');
+    }
+  });
+  
+  if (window.allLicenseData) {
+     renderDashboardTable(window.allLicenseData);
+  }
+}
+
+function calculateYearlyStats() {
+  let list = window.allLicenseData;
+  if (!list) return;
+  let yearSelect = document.getElementById('statYearSelect');
+  let selectedYear = yearSelect.value;
+  let count = 0;
+  list.forEach(item => {
+    if (selectedYear === 'all') { count++; } 
+    else { if (item.thaiYear && String(item.thaiYear).trim() === String(selectedYear).trim()) { count++; } }
+  });
+  let statDisplay = document.getElementById('statYearCount');
+  if (statDisplay) { statDisplay.innerText = count + " ราย"; }
+}
+
+function handleEditClick(shopName) {
+  showCustomModal('⏳ รอสักครู่', 'กำลังดึงข้อมูลร้าน ' + shopName, '⏳');
+  google.script.run.withSuccessHandler(function(res) {
+    if (!res || !res.general) { showCustomModal('❌', 'ไม่พบข้อมูลของร้านนี้', 'X'); return; }
+    
+    currentEditingRowIndex = res.evaluation ? res.evaluation.rowIndex : null;
+    if (document.getElementById('formRowIndex')) document.getElementById('formRowIndex').value = currentEditingRowIndex || "";
+    
+    let actionType = document.getElementById('formActionType');
+    if (!actionType) {
+      actionType = document.createElement('input'); actionType.type = 'hidden'; actionType.id = 'formActionType';
+      const form = document.getElementById('assessmentForm'); if (form) form.appendChild(actionType);
+    }
+    actionType.value = "edit"; 
+    
+    document.getElementById('customModal').classList.add('hidden');
+    changeMenuToggle('assessment');
+    
+    document.getElementById('shopName').value = res.general['ชื่อสถานประกอบกิจการ (ตัวเชื่อม)'] || res.general['ชื่อสถานประกอบกิจการ'] || '';
+    document.getElementById('businessType').value = res.general['ประเภทกิจการ'] || '';
+    syncBusinessTypeCheckboxes(res.general['ประเภทกิจการ'] || '');
+    document.getElementById('ownerName').value = res.general['ชื่อผู้ดำเนินกิจการ'] || '';
+    document.getElementById('phone_owner').value = res.general['โทรศัพท์ผู้ดำเนิน'] || '';
+    document.getElementById('phone_shop').value = res.general['โทรศัพท์ร้าน'] || '';
+    document.getElementById('address_no').value = res.general['ตั้งอยู่เลขที่'] || '';
+    document.getElementById('moo').value = res.general['หมู่ที่'] || '';
+    document.getElementById('street').value = res.general['ถนน'] || '';
+    document.getElementById('animal_type').value = res.general['ชนิดสัตว์'] || res.general['ชนิดสัตว์ '] || '';
+    document.getElementById('animal_count').value = res.general['จำนวนสัตว์'] || res.general['จำนวนสัตว์ '] || 0;
+    document.getElementById('buildingStyle').value = res.general['ลักษณะอาคาร'] || '';
+    document.getElementById('building_details').value = res.general['จำนวนชั้น/โรงเรือน/โกดัง'] || '';
+    document.getElementById('machine_count').value = res.general['จำนวนเครื่องจักร (ตัว)'] || 0;
+    document.getElementById('machine_power').value = res.general['รวมจำนวนแรงม้า'] || 0;
+    document.getElementById('worker_male').value = res.general['พนักงานชาย (คน)'] || 0;
+    document.getElementById('worker_female').value = res.general['พนักงานหญิง (คน)'] || 0;
+    if(typeof calcTotalWorkers === 'function') calcTotalWorkers();
+    
+    if(document.getElementById('work_days')) document.getElementById('work_days').value = res.general['ระยะเวลาการทำงาน (วัน/สัปดาห์)'] || '6';
+
+    function formatTimeInput(timeStr) {
+      if (!timeStr) return "";
+      let s = String(timeStr).trim();
+      if (s.includes("T")) { s = s.split("T")[1]; }
+      let parts = s.split(":");
+      if (parts.length >= 2) return parts[0].padStart(2, '0') + ":" + parts[1].padStart(2, '0');
+      return "";
+    }
+
+    if (document.getElementById('time_start')) document.getElementById('time_start').value = formatTimeInput(res.general['ตั้งแต่เวลา']) || "08:00";
+    if (document.getElementById('time_end')) document.getElementById('time_end').value = formatTimeInput(res.general['ถึงเวลา']) || "17:00";
+    
+    let complainVal = res.general['ประวัติการถูกร้องเรียน'] || '';
+    if (complainVal) {
+      if (complainVal.includes('ไม่เคย')) { if(document.getElementById('comp_no')) document.getElementById('comp_no').checked = true; } 
+      else if (complainVal.includes('เคย')) {
+        if(document.getElementById('comp_yes')) document.getElementById('comp_yes').checked = true;
+        let matchCount = complainVal.match(/\d+/);
+        if (matchCount && document.getElementById('complaint_count')) document.getElementById('complaint_count').value = matchCount[0];
+      }
+      if(typeof toggleComplaintBox === 'function') toggleComplaintBox();
+    }
+
+    const issueIds = ['c_sound', 'c_dust', 'c_smell', 'c_chem', 'c_water', 'c_waste'];
+    issueIds.forEach(id => { if(document.getElementById(id)) document.getElementById(id).checked = false; });
+    let issueStr = String(res.general['ประเด็นที่ถูกร้องเรียน'] || '');
+    if (issueStr) {
+      if (issueStr.includes('เสียงดัง')) { if(document.getElementById('c_sound')) document.getElementById('c_sound').checked = true; }
+      if (issueStr.includes('ฝุ่น') || issueStr.includes('ควัน')) { if(document.getElementById('c_dust')) document.getElementById('c_dust').checked = true; }
+      if (issueStr.includes('กลิ่น')) { if(document.getElementById('c_smell')) document.getElementById('c_smell').checked = true; }
+      if (issueStr.includes('สารเคมี')) { if(document.getElementById('c_chem')) document.getElementById('c_chem').checked = true; }
+      if (issueStr.includes('น้ำเสีย')) { if(document.getElementById('c_water')) document.getElementById('c_water').checked = true; }
+      if (issueStr.includes('ขยะ') || issueStr.includes('สิ่งปฏิกูล')) { if(document.getElementById('c_waste')) document.getElementById('c_waste').checked = true; }
+    }
+    
+    const tbody = document.getElementById('materialsTableBody'); 
+    if (tbody) {
+      tbody.innerHTML = ''; 
+      let rawMats = res.general['วัตถุดิบและสารเคมี'] || "";
+      if (rawMats && rawMats !== 'ไม่มีการระบุวัตถุดิบและสารเคมี' && rawMats !== '-') {
+        let lines = rawMats.split('\n');
+        lines.forEach((line, idx) => {
+          if(!line.trim()) return;
+          let cleanLine = line.replace(/^\d+\.\s*/, ''); 
+          let matName = cleanLine; let matQty = "";
+          if (cleanLine.includes('(') && cleanLine.endsWith(')')) {
+            let startIdx = cleanLine.lastIndexOf('(');
+            matName = cleanLine.substring(0, startIdx).trim();
+            matQty = cleanLine.substring(startIdx + 1, cleanLine.length - 1).trim();
+          }
+          const tr = document.createElement('tr'); tr.className = "material-row";
+          tr.innerHTML = `
+            <td class="p-2 text-center text-slate-400 font-bold row-index">${idx + 1}</td>
+            <td class="p-1"><input type="text" class="table-input mat-name" value="${matName}"></td>
+            <td class="p-1"><input type="text" class="table-input mat-qty" value="${matQty}"></td>
+            <td class="p-1 text-center"><button type="button" onclick="this.closest('tr').remove(); reindexMaterials();" class="text-rose-500 font-bold hover:text-rose-700 cursor-pointer">✕</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    }
+    
+    // 🎯 ดึงข้อมูลคำตอบแบบไดนามิก
+    let questionCount = window.loadedQuestions ? window.loadedQuestions.length : 29;
+    if (questionCount === 0) questionCount = 29;
+    for (let i = 1; i <= questionCount; i++) {
+      let rVal = res.evaluation['r' + i];
+      let radios = document.getElementsByName('r' + i); 
+      for(let r=0; r<radios.length; r++) { if(radios[r].value === rVal) { radios[r].checked = true; break; } }
+      if(document.getElementById('f' + i)) document.getElementById('f' + i).value = res.evaluation['f' + i] || '';
+      if(document.getElementById('c' + i)) document.getElementById('c' + i).value = res.evaluation['c' + i] || '';
+    }
+    
+    if(document.getElementById('comment_notes')) document.getElementById('comment_notes').value = res.evaluation['ข้อเสนอแนะเพิ่มเติม'] || '';
+    if(document.getElementById('summary_result')) document.getElementById('summary_result').value = res.evaluation['สรุปผลการตรวจ'] || 'ผ่านเกณฑ์การประเมินโครงสร้างพื้นฐาน';
+    if(document.getElementById('inspector_name')) document.getElementById('inspector_name').value = res.evaluation['ชื่อผู้ตรวจ'] || '';
+    if(document.getElementById('inspector_position')) document.getElementById('inspector_position').value = res.evaluation['ตำแหน่งผู้ตรวจ'] || '';
+    
+    const btn = document.getElementById('submitBtn');
+    if (btn) btn.innerText = "💾 บันทึกการเปลี่ยนแปลง (เขียนทับแถวเดิม)";
+    let dateLabel = document.getElementById('lastUpdateDisplay');
+    if (dateLabel && res.general) {
+      let keys = Object.keys(res.general);
+      let timestampKey = keys.find(k => k.includes("Timestamp") || k.includes("ประทับเวลา"));
+      dateLabel.innerText = "อัปเดตล่าสุด: " + (timestampKey ? res.general[timestampKey] : res.general[keys[0]]);
+    }
+    window.scrollTo(0, 0);
+  }).getCompleteReportData(shopName);
+}
+
+function selectShopForApproval(shopName, currentNo, currentMemo, currentStart, currentEnd) {
+  document.getElementById('targetShopName').innerText = shopName;
+  document.getElementById('app_license_no').value = currentNo || '';
+  document.getElementById('app_memo').value = currentMemo || '';
+  document.getElementById('app_start_date').value = toDateInputValue(currentStart);
+  document.getElementById('app_end_date').value = toDateInputValue(currentEnd);
+  document.getElementById('approvalActionBox').classList.remove('hidden');
+  document.getElementById('approvalActionBox').scrollIntoView({ behavior: 'smooth' });
+}
+
+function toDateInputValue(value) {
+  if (!value || value === '-') return '';
+  let s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return '';
+}
+
+function cancelApprovalUpdate() { document.getElementById('approvalActionBox').classList.add('hidden'); }
+
+function submitApprovalUpdate() {
+  const shopName = document.getElementById('targetShopName').innerText;
+  const licenseNo = document.getElementById('app_license_no').value;
+  const startDate = document.getElementById('app_start_date').value;
+  const endDate = document.getElementById('app_end_date').value;
+  const memo = document.getElementById('app_memo').value;
+
+  if (!licenseNo || !startDate || !endDate) { alert('⚠️ กรุณากรอกเลขที่ใบอนุญาต และเลือกวันที่เริ่มอนุมัติให้ระบบคำนวณวันหมดอายุด้วยครับ'); return; }
+
+  google.script.run.withSuccessHandler(function(responseMessage) {
+    document.getElementById('modalTitle').innerText = "บันทึกใบอนุญาตสำเร็จ";
+    document.getElementById('modalMessage').innerText = responseMessage;
+    document.getElementById('customModal').classList.remove('hidden');
+    cancelApprovalUpdate(); loadLicenseData();
+  }).updateLicenseRecord(shopName, licenseNo, startDate, endDate, memo);
+}
+
+function printReport(shopName) {
+  google.script.run.withSuccessHandler(function(trueUrl) {
+    let reportUrl = trueUrl + "?view=report&shopName=" + encodeURIComponent(shopName);
+    window.open(reportUrl, '_blank');
+  }).getWebAppUrl(); 
+}
+
+
+
+function syncBusinessTypeCheckboxes(val) {
+  let types = (val || '').split(' และ ');
+  document.querySelectorAll('.bus-type-cb').forEach(cb => {
+    cb.checked = types.includes(cb.value);
+  });
+}
+
+function updateBusinessType() {
+  let selected = [];
+  document.querySelectorAll('.bus-type-cb:checked').forEach(cb => selected.push(cb.value));
+  let val = selected.join(' และ ');
+  document.getElementById('businessType').value = val;
+  checkAnimalBusiness();
+}
+
+function checkAnimalBusiness() {
+  var bType = document.getElementById('businessType').value;
+  var animalBox = document.getElementById('animalBox');
+  if (bType.indexOf('เลี้ยงสัตว์') !== -1) { animalBox.classList.remove('hidden'); } 
+  else { animalBox.classList.add('hidden'); document.getElementById('animal_type').value = ''; document.getElementById('animal_count').value = '0'; }
+}
+
+function toggleComplaintBox() {
+  var isYes = document.getElementById('comp_yes').checked;
+  var box = document.getElementById('complaintDetailBox');
+  if (isYes) box.classList.remove('hidden'); else box.classList.add('hidden');
+}
+
+function calcTotalWorkers() {
+  var male = parseInt(document.getElementById('worker_male').value) || 0;
+  var female = parseInt(document.getElementById('worker_female').value) || 0;
+  document.getElementById('worker_total').value = male + female;
+}
+
+function submitForm(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  
+  let payload = {};
+  payload['rowIndex'] = currentEditingRowIndex; 
+  
+  // 🎯 กวาดข้อมูลคำตอบแบบไดนามิก
+  let questionCount = window.loadedQuestions ? window.loadedQuestions.length : 29;
+  if (questionCount === 0) questionCount = 29;
+  let totalArr = Array.from({length: questionCount}, (_, i) => i + 1);
+  totalArr.forEach(num => {
+    let numStr = num.toString();
+    let rad = document.querySelector(`input[name="r${numStr}"]:checked`);
+    payload['r' + numStr] = rad ? rad.value : 'ไม่เกี่ยวข้อง';
+    let txtFact = document.querySelector(`input[name="f${numStr}"]`);
+    payload['f' + numStr] = txtFact ? txtFact.value.trim() : "";
+    let txtAdv = document.querySelector(`input[name="c${numStr}"]`);
+    payload['c' + numStr] = txtAdv ? txtAdv.value.trim() : "";
+  });
+
+  const btn = document.getElementById('submitBtn');
+  if (btn) { btn.disabled = true; btn.innerText = "⏳ กำลังส่งข้อมูลขึ้นระบบคลาวด์..."; }
+  
+  const formElements = document.getElementById('assessmentForm').querySelectorAll('input, select, textarea');
+  formElements.forEach(i => {
+    if (i.name) { if (i.type === 'radio' && !i.checked) return; payload[i.name] = i.value; }
+  });
+  
+  let shopNameInput = document.getElementById('shopName');
+  payload['shopName'] = shopNameInput ? shopNameInput.value.replace('🔍', '').trim() : 'ร้านค้าไม่ระบุชื่อ';
+  
+  let workerTotalInput = document.getElementById('worker_total'); payload['worker_total'] = workerTotalInput ? workerTotalInput.value : "0";
+  let commentNotesInput = document.getElementById('comment_notes'); payload['comment_notes'] = commentNotesInput ? commentNotesInput.value.trim() : "";
+
+  let mats = [];
+  document.querySelectorAll('.material-row').forEach((row, i) => {
+    let nameInput = row.querySelector('.mat-name'); let qtyInput = row.querySelector('.mat-qty');
+    let nameVal = nameInput ? nameInput.value.trim() : ''; let qtyVal = qtyInput ? qtyInput.value.trim() : '';
+    if (nameVal) mats.push(`${i+1}. ${nameVal} (${qtyVal || 'ไม่ระบุปริมาณ'})`);
+  });
+  payload['materials'] = mats.length > 0 ? mats.join('\n') : 'ไม่มีการระบุวัตถุดิบและสารเคมี';
+
+  let compNo = document.getElementById('comp_no'); let compYes = document.getElementById('comp_yes'); let compCount = document.getElementById('complaint_count');
+  payload['complaint_no'] = compNo && compNo.checked ? "✓" : "";
+  payload['complaint_yes'] = compYes && compYes.checked ? "✓" : "";
+  payload['complaint_count'] = compCount ? compCount.value : "0";
+  
+  let issues = [];
+  const checks = ['c_sound', 'c_dust', 'c_smell', 'c_chem', 'c_water', 'c_waste'];
+  checks.forEach(id => {
+    let el = document.getElementById(id);
+    if (el && el.checked) { let labelText = el.nextElementSibling ? el.nextElementSibling.innerText : id; issues.push(labelText); }
+  });
+  payload['complaint_issues'] = issues.length > 0 ? issues.join(', ') : 'ไม่มีข้อร้องเรียน';
+
+  let summaryResultSelect = document.getElementById('summary_result'); payload['summary_result'] = summaryResultSelect ? summaryResultSelect.value : "ผ่านเกณฑ์มาตรฐาน";
+  let inspectorNameInput = document.getElementById('inspector_name'); payload['inspector_name'] = inspectorNameInput ? inspectorNameInput.value : "";
+  let inspectorPositionInput = document.getElementById('inspector_position'); payload['inspector_position'] = inspectorPositionInput ? inspectorPositionInput.value : "";
+
+  payload['currentUserRealName'] = currentUser.realName || (inspectorNameInput ? inspectorNameInput.value : "");
+  payload['currentUserPosition'] = currentUser.position || (inspectorPositionInput ? inspectorPositionInput.value : "");
+
+  google.script.run.withSuccessHandler((msg) => {
+    showCustomModal('🎉 บันทึกข้อมูลสำเร็จ', `อัปโหลดผลประเมินเรียบร้อยแล้วครับ`, '✅');
+    document.getElementById('assessmentForm').reset();
+    let matTbody = document.getElementById('materialsTableBody'); if (matTbody) matTbody.innerHTML = '';
+    let complaintBox = document.getElementById('complaintDetailBox'); if (complaintBox) complaintBox.className = 'hidden';
+    
+    currentEditingRowIndex = null; window.scrollTo(0, 0);
+    if (btn) { btn.disabled = false; btn.innerText = "💾 บันทึกและอัปโหลดขึ้นระบบคลาวด์"; }
+  }).withFailureHandler((err) => {
+    showCustomModal('❌ บันทึกไม่สำเร็จ', "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์คลาวด์: " + err, '❌');
+    if (btn) { btn.disabled = false; btn.innerText = "💾 บันทึกและอัปโหลดขึ้นระบบคลาวด์"; }
+  }).saveEHWAData(payload);
+}
+
+function handleRenewClick(shopName) {
+  Swal.fire({
+    title: 'ยืนยันการต่ออายุคำขอ?',
+    html: `คุณต้องการเปิดรอบประเมินปีใหม่สำหรับร้าน <br><b class="text-emerald-600 text-lg">"${shopName}"</b> ใช่หรือไม่?<br><span class="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded mt-2 inline-block">💡 ระบบจะดึงข้อมูลทั่วไปส่วนที่ 1 เดิมกลับมาให้ใช้งานอัตโนมัติ</span>`,
+    icon: 'question', showCancelButton: true, confirmButtonColor: '#2563eb', cancelButtonColor: '#64748b', confirmButtonText: '🔄 ใช่, ดึงข้อมูลต่ออายุ', cancelButtonText: 'ยกเลิก',
+    customClass: { popup: 'rounded-2xl font-sans shadow-xl', confirmButton: 'px-4 py-2 rounded-xl font-bold', cancelButton: 'px-4 py-2 rounded-xl font-bold' }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      Swal.fire({ title: 'กำลังดึงข้อมูลเดิม...', text: 'กรุณารอสักครู่ครับ', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+      google.script.run
+        .withSuccessHandler(function(info) {
+          const viewDashboard = document.getElementById('view-dashboard'); const viewAssessment = document.getElementById('view-assessment');
+          if (viewDashboard) viewDashboard.classList.add('hidden'); if (viewAssessment) viewAssessment.classList.remove('hidden'); 
+          
+          const form = document.getElementById('assessmentForm'); if (form) form.reset();
+          const shopInput = document.getElementById('shopName'); if (shopInput) shopInput.value = shopName;
+          const rowIndexInput = document.getElementById('formRowIndex'); if (rowIndexInput) rowIndexInput.value = ""; 
+          if (typeof currentEditingRowIndex !== 'undefined') currentEditingRowIndex = null;
+          
+          let actionType = document.getElementById('formActionType');
+          if (!actionType) {
+            actionType = document.createElement('input'); actionType.type = 'hidden'; actionType.id = 'formActionType';
+            if (form) form.appendChild(actionType);
+          }
+          actionType.value = "renew"; 
+          const btn = document.getElementById('submitBtn'); if (btn) btn.innerText = "💾 บันทึกการประเมิน (ขึ้นแถวใหม่รอบปีถัดไป)";
+
+          if (info) {
+            if (document.getElementById('businessType')) { 
+              document.getElementById('businessType').value = info.businessType; 
+              syncBusinessTypeCheckboxes(info.businessType); 
+            }
+            if (document.getElementById('ownerName')) document.getElementById('ownerName').value = info.ownerName;
+            if (document.getElementById('addressNo')) document.getElementById('address_no').value = info.addressNo;
+            if (document.getElementById('moo')) document.getElementById('moo').value = info.moo;
+            if (document.getElementById('street')) document.getElementById('street').value = info.road;
+            if (document.getElementById('phone_owner')) document.getElementById('phone_owner').value = info.phoneOwner;
+            if (document.getElementById('phone_shop')) document.getElementById('phone_shop').value = info.phoneShop;
+            if (document.getElementById('buildingStyle')) document.getElementById('buildingStyle').value = info.buildingType;
+            if (document.getElementById('building_details')) document.getElementById('building_details').value = info.buildingDetail;
+            if (document.getElementById('machine_count')) document.getElementById('machine_count').value = info.machineCount;
+            if (document.getElementById('machine_power')) document.getElementById('machine_power').value = info.machineHp;
+            if (document.getElementById('work_days')) document.getElementById('work_days').value = info.workDays;
+            if (document.getElementById('worker_male')) document.getElementById('worker_male').value = info.workerMale;
+            if (document.getElementById('worker_female')) document.getElementById('worker_female').value = info.workerFemale;
+            if (document.getElementById('worker_total')) document.getElementById('worker_total').value = info.workerTotal;
+            if (document.getElementById('time_start')) document.getElementById('time_start').value = info.startTime;
+            if (document.getElementById('time_end')) document.getElementById('time_end').value = info.endTime;
+          }
+
+          Swal.fire({
+            icon: 'success', title: 'ดึงข้อมูลเรียบร้อย!', html: `ระบบจำลองข้อมูลประวัติเดิมคืนฟอร์มให้แล้ว`,
+            confirmButtonText: 'เริ่มตรวจประเมิน', confirmButtonColor: '#10b981',
+            customClass: { popup: 'rounded-2xl font-sans', confirmButton: 'px-6 py-2.5 rounded-xl font-bold text-sm' }
+          });
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        })
+        .withFailureHandler(function(err) { Swal.fire({ icon: 'error', title: 'ดึงข้อมูลไม่สำเร็จ', text: err, confirmButtonColor: '#ef4444' }); })
+        .getShopGeneralInfo(shopName);
+    }
+  });
+}
+
+// =======================================================================================================
+// 🖨️📊 ฟังก์ชันส่งออก Word (บังคับฟอนต์ TH Sarabun PSK 100% ให้เหมือน PDF)
+// =======================================================================================================
+function exportToWord(shopName) {
+  if (!shopName) { showCustomModal('⚠️ แจ้งเตือน', 'กรุณาระบุหรือเลือกชื่อร้านค้าก่อนส่งออกครับ', '⚠️'); return; }
+  showCustomModal('⏳ รอสักครู่', 'กำลังแปลงข้อมูลลงในไฟล์ Word...', '⏳');
+
+  google.script.run.withSuccessHandler(function(res) {
+    if (!res || !res.general || Object.keys(res.general).length === 0) {
+      showCustomModal('❌ ไม่พบข้อมูล', `ไม่พบข้อมูลของร้าน "${shopName}" บนระบบคลาวด์ครับ`, '❌'); return;
+    }
+    closeCustomModal(); 
+
+    let g = res.general; let e = res.evaluation || {};
+    
+    // ตั้งค่า Inline CSS สไตล์ราชการสำหรับ Excel (ปรับขนาดให้พอดีกับกระดาษ)
+    let fTh = "font-family: 'TH Sarabun PSK', sans-serif; font-size: 14pt; color: #000; vertical-align: bottom; height: 22px;";
+    let fThB = "font-family: 'TH Sarabun PSK', sans-serif; font-size: 14pt; font-weight: bold; color: #000; vertical-align: bottom; height: 22px;";
+    let fThC = "font-family: 'TH Sarabun PSK', sans-serif; font-size: 14pt; color: #000; vertical-align: middle; text-align: center; height: 22px;";
+    
+    // ตรรกะติ๊กกล่องลักษณะอาคาร
+    let bldgType = g["ลักษณะอาคาร"] || "";
+    let b1 = bldgType.includes("อาคารโรงงาน") || bldgType.includes("เอกเทศ");
+    let b2 = bldgType.includes("พาณิชย์"); let b3 = bldgType.includes("สำนักงาน");
+    let b4 = bldgType.includes("โรงเรือน"); let b5 = bldgType.includes("โกดัง");
+    let bOther = (!b1 && !b2 && !b3 && !b4 && !b5 && bldgType !== "");
+
+    // ตรรกะติ๊กกล่องประวัติร้องเรียน
+    let compHistory = g["ประวัติการถูกร้องเรียน"] || "";
+    let compIssues = g["ประเด็นที่ถูกร้องเรียน"] || "";
+    let isCompNo = compHistory.includes("ไม่เคย");
+    let isCompYes = compHistory.includes("เคยถูกร้องเรียน") || compHistory.includes("เคย");
+    let compCount = compHistory.match(/\d+/) ? compHistory.match(/\d+/)[0] : "......";
+    let c1 = compIssues.includes("เสียงดัง"); let c2 = compIssues.includes("ฝุ่น") || compIssues.includes("ควัน");
+    let c3 = compIssues.includes("กลิ่น"); let c4 = compIssues.includes("สารเคมี");
+    let c5 = compIssues.includes("น้ำเสีย"); let c6 = compIssues.includes("ขยะ") || compIssues.includes("สิ่งปฏิกูล");
+
+    let chk = (cond) => cond ? "☑" : "☐";
+
+    let ministryQuestions = [
+      { type: "heading", text: "สถานที่ตั้งและลักษณะอาคาร" },
+      { num: "1", id: "1", text: "สถานที่ตั้งเหมาะสม ระยะห่างเป็นไปตามกฎหมาย" },
+      { num: "2", id: "2", text: "อาคารมีความมั่นคง แข็งแรง" },
+      { num: "3", id: "3", text: "มีทางหนีไฟ บันไดหนีไฟ หรือทางออกฉุกเฉิน ไม่มีสิ่งกีดขวาง มีป้ายหรือเครื่องหมายแสดงชัดเจน เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร" },
+      { num: "4", id: "4", text: "สถานประกอบกิจการมีการจัดแสงสว่างเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร" },
+      { num: "5", id: "5", text: "สถานประกอบกิจการมีการระบายอากาศเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร" },
+      { num: "6", id: "6", text: "สถานประกอบกิจการมีความสะอาด จัดวางสิ่งของเป็นระเบียบเรียบร้อย ปลอดภัย เป็นสัดส่วน และดูแลรักษาความสะอาดให้ถูกสุขลักษณะอย่างสม่ำเสมอ" },
+      { type: "heading", text: "การสุขาภิบาลสถานประกอบกิจการ" },
+      { num: "7", id: "7", text: "สถานประกอบกิจการมีห้องน้ำ ห้องส้วม อ่างหรือที่ล้างมือที่ สะอาด เพียงพอ ถูกสุขลักษณะ ดูแลรักษาความสะอาดเป็นประจำ" },
+      { num: "8", id: "8", text: "สถานประกอบกิจการมีการเก็บ รวบรวม กำจัดมูลฝอย และของเสียอันตรายที่ถูกสุขลักษณะ ดังนี้" },
+      { num: "(1)", id: "9", text: "มีภาชนะบรรจุหรือภาชนะรองรับมูลฝอย สะอาด มีฝาปิด ไม่แตกหรือรั่วซึม และเพียงพอกับประเภทและปริมาณของมูลฝอย" },
+      { num: "(2)", id: "10", text: "บริเวณที่เก็บวางภาชนะรองรับมูลฝอย หรือสถานที่พักรวมมูลฝอย สะอาด ไม่มีกลิ่นเหม็น ไม่มีน้ำขัง และไม่เป็นแหล่งเพาะพันธุ์สัตว์และแมลงนำโรค" },
+      { num: "(3)", id: "11", text: "มีการกำจัดมูลฝอยอย่างถูกต้อง และเป็นไปตามข้อบัญญัติของท้องถิ่น" },
+      { num: "(4)", id: "12", text: "กรณีที่มีของเสียอันตราย วัตถุอันตราย มูลฝอยปนเปื้อนสารพิษ มูลฝอยอันตราย หรือมูลฝอยปนเปื้อนเลือดหรือสารคัดหลั่ง ดำเนินการเป็นไปตามกฎหมาย" },
+      { num: "9", id: "13", text: "สถานประกอบกิจการมีการป้องกัน ควบคุม กำจัดแมลงและสัตว์พาหะนำโรค มิให้เป็นแหล่งเพาะพันธุ์และแพร่ระบาดของโรค" },
+      { num: "10", id: "14", text: "สถานประกอบกิจการมีการระบายน้ำที่เหมาะสม และดูแลมิให้มีน้ำท่วมขังบริเวณสถานประกอบกิจการ" },
+      { num: "11", id: "15", text: "สถานประกอบกิจการที่มีโรงอาหารหรือห้องครัวที่จัดไว้เพื่อการปรุงประกอบอาหารสำหรับผู้ปฏิบัติงาน มีการดำเนินการอย่างถูกต้องตามหลักสุขาภิบาลอาหาร" },
+      { num: "12", id: "16", text: "สถานประกอบกิจการมีน้ำดื่มที่สะอาด เพียงพอสำหรับผู้ปฏิบัติงาน และมีภาชนะรองรับน้ำดื่มที่สะอาด" },
+      { type: "heading", text: "การควบคุมมลพิษ" },
+      { num: "13", id: "17", text: "สถานประกอบกิจการมีการบำบัดหรือปรับปรุงคุณภาพน้ำเสีย เป็นไปตามกฎหมายว่าด้วยโรงงาน หรือกฎหมายว่าด้วยการส่งเสริมและรักษาคุณภาพสิ่งแวดล้อม" },
+      { num: "14", id: "18", text: "สถานประกอบกิจการมีการป้องกันควบคุมระดับเสียงรบกวน เป็นไปตามประกาศกระทรวงสาธารณสุข หรือกฎหมายว่าด้วยโรงงาน" },
+      { num: "15", id: "19", text: "สถานประกอบกิจการมีการป้องกันควบคุมฝุ่นละออง เป็นไปตามกฎหมายว่าด้วยโรงงาน หรือกฎหมายว่าด้วยการส่งเสริมและรักษาคุณภาพสิ่งแวดล้อม" },
+      { num: "16", id: "20", text: "สถานประกอบกิจการมีการป้องกันควบคุมกลิ่นหรือไอสารเคมี เป็นไปตามกฎหมายว่าด้วยโรงงาน" },
+      { type: "heading", text: "ความปลอดภัยและอาชีวอนามัย" },
+      { num: "17", id: "21", text: "อุปกรณ์ เครื่องมือ เครื่องจักร สายไฟ มีสภาพปลอดภัยต่อการใช้งาน มีการติดตั้งในลักษณะที่แข็งแรง มั่นคง ปลอดภัย โดยมีคำแนะนำในการป้องกันอันตราย และกรณีชำรุดต้องมีป้ายเตือน" },
+      { num: "18", id: "22", text: "มีการจัดวางหรือการจัดเก็บอุปกรณ์ เครื่องมือ เครื่องจักร หรือสายไฟ ต้องเป็นระเบียบ ไม่กีดขวางทางเดินและการปฏิบัติงาน และมีการดูแล ตรวจสอบ บำรุงรักษาให้อยู่ในสภาพดีตลอดเวลา" },
+      { num: "19", id: "23", text: "สถานประกอบกิจการมีการติดตั้งอุปกรณ์หรือเครื่องดับเพลิงอย่างเพียงพอ เหมาะสม สภาพดี พร้อมใช้งาน มีการฝึกซ้อมดับเพลิงและอพยพหนีไฟ หรือซ้อมแผนฉุกเฉิน" },
+      { num: "20", id: "24", text: "สถานประกอบกิจการที่มีสารเคมีหรือวัตถุอันตราย ต้องจัดสถานที่ที่ปลอดภัยสำหรับจัดเก็บสารเคมีหรือวัตถุอันตราย มีป้ายแสดงชนิดหรือประเภทของสารเคมีหรือวัตถุอันตราย และเอกสารข้อมูลความปลอดภัย" },
+      { num: "21", id: "25", text: "สถานประกอบกิจการที่มีความเสี่ยงจากการสัมผัสสารเคมี/วัตถุอันตราย ต้องจัดให้มีที่ชำระร่างกาย และที่ล้างตาฉุกเฉิน" },
+      { num: "22", id: "26", text: "สถานประกอบกิจการมีอุปกรณ์คุ้มครองความปลอดภัยส่วนบุคคลสำหรับผู้ปฏิบัติงานที่เพียงพอ เหมาะสมตามลักษณะงาน" },
+      { num: "23", id: "27", text: "สถานประกอบกิจการมีการตรวจสุขภาพผู้ปฏิบัติงาน ตามกฎหมายว่าด้วยความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน" },
+      { type: "heading", text: "การป้องกันเหตุรำคาญ" },
+      { num: "24", id: "28", text: "สถานประกอบกิจการมีมาตรการควบคุมและป้องกันปัญหาเหตุรำคาญแก่ชุมชนและประชาชนที่อยู่ใกล้เคียง" },
+      { type: "heading", text: "การป้องกันควบคุมโรค" },
+      { num: "25", id: "29", text: "สถานประกอบกิจการมีมาตรการป้องกันควบคุมโรคติดต่อตามหลักเกณฑ์ที่ราชการหรือกฎหมายกำหนด" }
+    ];
+
+    let htmlContent = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8">
+    <style>
+      @page { size: 21cm 29.7cm; margin: 1cm; }
+    </style>
+    </head>
+    <body style="font-family: 'TH Sarabun PSK', sans-serif; font-size: 16pt; color: #000;">
+      <div style="text-align: center; font-weight: bold; font-size: 18pt;">แบบประเมินมาตรฐานการจัดการอนามัยสิ่งแวดล้อมสำหรับสถานประกอบกิจการ</div>
+      <div style="text-align: center; font-weight: bold; margin-bottom: 15px; font-size: 16pt;">ที่เป็นอันตรายต่อสุขภาพ ตามกฎกระทรวงควบคุมสถานประกอบกิจการ</div>
+      
+      <div style="font-weight: bold; margin-bottom: 8px;">ส่วนที่ 1 ข้อมูลทั่วไป</div>
+      
+      <div style="margin-bottom: 8px;">
+        1. สถานประกอบกิจการประเภท: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ประเภทกิจการ"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        2. ชื่อ-สกุลผู้ดำเนินกิจการ: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ชื่อผู้ดำเนินกิจการ"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;โทรศัพท์: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["โทรศัพท์ผู้ดำเนิน"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ชื่อสถานประกอบกิจการ: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ชื่อสถานประกอบกิจการ"] || shopName}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ตั้งอยู่เลขที่: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ตั้งอยู่เลขที่"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        &nbsp;&nbsp;&nbsp;&nbsp;หมู่ที่: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["หมู่ที่"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        &nbsp;&nbsp;&nbsp;&nbsp;ถนน: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ถนน"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ตำบล: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ตำบล"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        &nbsp;&nbsp;&nbsp;&nbsp;อำเภอ: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["อำเภอ"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        &nbsp;&nbsp;&nbsp;&nbsp;จังหวัด: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["จังหวัด"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;โทรศัพท์ร้าน: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["โทรศัพท์ร้าน"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        3. กรณีประกอบกิจการเลี้ยงสัตว์ (ระบุ): ชนิดสัตว์: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ชนิดสัตว์"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;จำนวน: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["จำนวนสัตว์"] || "0"}&nbsp;&nbsp;&nbsp;&nbsp;</span> ตัว
+      </div>
+      
+      <div style="margin-bottom: 4px;">4. ลักษณะอาคารประกอบกิจการ</div>
+      <div style="margin-bottom: 8px;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(b1)}</span> อาคารโรงงาน/อาคารเอกเทศ จำนวน <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${b1 ? g["จำนวนชั้น/โรงเรือน/โกดัง"] : "..."}&nbsp;&nbsp;&nbsp;&nbsp;</span> ชั้น
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(b2)}</span> อาคารพาณิชย์/พาณิชย์-พักอาศัย จำนวน <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${b2 ? g["จำนวนชั้น/โรงเรือน/โกดัง"] : "..."}&nbsp;&nbsp;&nbsp;&nbsp;</span> ชั้น<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(b3)}</span> อาคารสำนักงาน จำนวน <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${b3 ? g["จำนวนชั้น/โรงเรือน/โกดัง"] : "..."}&nbsp;&nbsp;&nbsp;&nbsp;</span> ชั้น
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(b4)}</span> โรงเรือน จำนวน <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${b4 ? g["จำนวนชั้น/โรงเรือน/โกดัง"] : "..."}&nbsp;&nbsp;&nbsp;&nbsp;</span> โรงเรือน<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(b5)}</span> โกดัง จำนวน <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${b5 ? g["จำนวนชั้น/โรงเรือน/โกดัง"] : "..."}&nbsp;&nbsp;&nbsp;&nbsp;</span> โกดัง
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(bOther)}</span> อื่นๆ ระบุ <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${bOther ? g["ลักษณะอาคาร"] : "........................."}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        5. จำนวนเครื่องจักร: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["จำนวนเครื่องจักร (ตัว)"] || "0"}&nbsp;&nbsp;&nbsp;&nbsp;</span> ตัว
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;รวมจำนวนแรงม้า: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["รวมจำนวนแรงม้า"] || g["รวมกำลังแรงม้า"] || "0"}&nbsp;&nbsp;&nbsp;&nbsp;</span> แรงม้า
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        6. จำนวนพนักงานทั้งหมด: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["รวมพนักงาน (คน)"] || "0"}&nbsp;&nbsp;&nbsp;&nbsp;</span> คน
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ชาย: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["พนักงานชาย (คน)"] || "0"}&nbsp;&nbsp;&nbsp;&nbsp;</span> คน 
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;หญิง: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["พนักงานหญิง (คน)"] || "0"}&nbsp;&nbsp;&nbsp;&nbsp;</span> คน
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        7. ระยะเวลาการทำงาน: <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ระยะเวลาการทำงาน (วัน/สัปดาห์)"] || "0"}&nbsp;&nbsp;&nbsp;&nbsp;</span> วัน/สัปดาห์ 
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(ตั้งแต่เวลา <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ตั้งแต่เวลา"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span> น. ถึงเวลา <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${g["ถึงเวลา"] || "-"}&nbsp;&nbsp;&nbsp;&nbsp;</span> น.)
+      </div>
+      
+      <div style="margin-bottom: 4px;">8. ในรอบปีที่ผ่านมา สถานประกอบกิจการเคยถูกร้องเรียนก่อปัญหาเหตุรำคาญหรือมลพิษสิ่งแวดล้อม</div>
+      <div style="margin-bottom: 8px;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(isCompNo)}</span> ไม่เคย<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(isCompYes)}</span> เคย จำนวน <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${compCount}&nbsp;&nbsp;&nbsp;&nbsp;</span> ครั้ง ระบุเรื่องที่ร้องเรียน (เลือกได้หลายข้อ)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(c1)}</span> เสียงดัง &nbsp;&nbsp;&nbsp;&nbsp; <span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(c2)}</span> ฝุ่นละออง/เขม่า/เถ้า/ควัน &nbsp;&nbsp;&nbsp;&nbsp; <span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(c3)}</span> กลิ่น<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(c4)}</span> สารเคมี &nbsp;&nbsp;&nbsp;&nbsp; <span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(c5)}</span> น้ำเสีย &nbsp;&nbsp;&nbsp;&nbsp; <span style="font-family: 'Segoe UI Symbol', sans-serif;">${chk(c6)}</span> มูลฝอย/ของเสียอันตราย
+      </div>
+      
+      <div style="font-weight: bold; margin-top: 15px; margin-bottom: 8px;">ส่วนที่ 2 วัตถุดิบและสารเคมีที่ใช้ในกระบวนการผลิต (ระบุชนิดและปริมาณ/เดือน)</div>
+      <div style="margin-bottom: 15px;">`;
+
+    let materialsText = g['วัตถุดิบและสารเคมี'] || '';
+    let materialsArr = [];
+    if (materialsText && materialsText !== 'ไม่มีการระบุวัตถุดิบและสารเคมี') {
+      materialsArr = materialsText.split(/[\n,;]+/).map(item => item.trim()).filter(item => item !== "");
+    }
+    for (let i = 0; i < 5; i++) {
+      let val = materialsArr[i] || "";
+      htmlContent += `
+        <div style="margin-bottom: 6px;">
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${i+1}) <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;${val}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ปริมาณที่ใช้ (ต่อปี/เดือน) <span style="border-bottom: 1pt dotted #000;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        </div>
+      `;
+    }
+
+    htmlContent += `
+      </div>
+      
+      <div style="font-weight: bold; margin-bottom: 4px;">ส่วนที่ 3 รายการตรวจสอบสุขลักษณะสถานประกอบกิจการ</div>
+      <table style="width: 100%; border-collapse: collapse; border: 1pt solid black; font-family: 'TH Sarabun PSK', sans-serif; font-size: 16pt;" border="1">
+        <tr>
+          <th style="width: 6%; background-color: #f2f2f2; text-align: center; font-weight: bold;">ข้อที่</th>
+          <th style="width: 38%; background-color: #f2f2f2; text-align: center; font-weight: bold;">รายการตรวจสอบสุขลักษณะสถานประกอบกิจการ</th>
+          <th style="width: 5%; background-color: #f2f2f2; text-align: center; font-weight: bold;">ใช่</th>
+          <th style="width: 5%; background-color: #f2f2f2; text-align: center; font-weight: bold;">ไม่ใช่</th>
+          <th style="width: 7%; background-color: #f2f2f2; text-align: center; font-weight: bold;">ไม่เกี่ยว<br>ข้อง</th>
+          <th style="width: 19.5%; background-color: #f2f2f2; text-align: center; font-weight: bold;">ข้อเท็จจริงที่พบ</th>
+          <th style="width: 19.5%; background-color: #f2f2f2; text-align: center; font-weight: bold;">คำแนะนำ/ข้อเสนอแนะ</th>
+        </tr>`;
+
+    ministryQuestions.forEach(function(item) {
+      if (item.type === "heading") {
+        htmlContent += `<tr><td colspan="7" style="background-color: #f2f2f2; padding: 5px; font-weight: bold;">${item.text}</td></tr>`;
+      } else {
+        let rVal = e['r' + item.id] || ''; let fVal = e['f' + item.id] || ''; let cVal = e['c' + item.id] || '';
+        let chkYes = (rVal === 'ใช่' || rVal === '✓' || rVal === 'TRUE') ? "✓" : "";
+        let chkNo = (rVal === 'ไม่ใช่') ? "✓" : "";
+        let chkNa = (rVal === 'ไม่เกี่ยวข้อง' || rVal === 'ไม่เกี่ยว' || rVal === 'N/A') ? "✓" : "";
+        if (item.num === "8") { chkYes = ""; chkNo = ""; chkNa = ""; } 
+        
+        let cleanFact = fVal.trim() ? fVal : "-"; let cleanComment = cVal.trim() ? cVal : "-";
+        
+        htmlContent += `
+        <tr>
+          <td style="text-align: center;">${item.num}</td>
+          <td style="padding: 3px; ${item.num === '8' ? 'font-weight:bold;' : ''}">${item.text}</td>
+          <td style="text-align: center;">${chkYes}</td>
+          <td style="text-align: center;">${chkNo}</td>
+          <td style="text-align: center;">${chkNa}</td>
+          <td style="padding: 3px; ${cleanFact === '-' ? 'text-align: center;' : ''}">${cleanFact}</td>
+          <td style="padding: 3px; ${cleanComment === '-' ? 'text-align: center;' : ''}">${cleanComment}</td>
+        </tr>`;
+      }
+    });
+
+    htmlContent += `
+      </table>
+      
+      <div style="font-weight: bold; margin-top: 15px; font-family: 'TH Sarabun PSK', sans-serif; font-size: 16pt;">ข้อเสนอแนะ/สรุปผลการตรวจประเมิน:</div>
+      <div style="border-bottom: 1pt dotted #000; padding-left: 20px; margin-bottom: 25px; line-height: 2; font-family: 'TH Sarabun PSK', sans-serif; font-size: 16pt;">
+        ${e["ข้อเสนอแนะเพิ่มเติม"] || e["ข้อเสนอแนะ/สรุปผลการตรวจประเมิน"] || ""}
+        <br><br><br>
+      </div>
+      
+      <table style="width: 100%; border-collapse: collapse; margin-top: 40px; font-family: 'TH Sarabun PSK', sans-serif; font-size: 16pt;">
+        <tr>
+          <td style="width: 50%;"></td>
+          <td style="width: 50%; text-align: center;">ลงชื่อ ........................................................... ผู้ตรวจประเมิน</td>
+        </tr>
+        <tr>
+          <td style="width: 50%;"></td>
+          <td style="width: 50%; text-align: center;">( ${e["ชื่อผู้ตรวจ"] || "..........................................................."} )</td>
+        </tr>
+        <tr>
+          <td style="width: 50%;"></td>
+          <td style="width: 50%; text-align: center;">ตำแหน่ง ${e["ตำแหน่งผู้ตรวจ"] || "..........................................................."}</td>
+        </tr>
+        <tr>
+          <td style="width: 50%;"></td>
+          <td style="width: 50%; text-align: center;">วันที่ตรวจประเมิน ...........................................................</td>
+        </tr>
+      </table>
+    </body>
+    </html>`;
+
+    let bom = "\uFEFF";
+    let blob = new Blob([bom + htmlContent], { type: 'application/msword;charset=utf-8;' });
+    let link = document.createElement("a"); link.href = URL.createObjectURL(blob);
+    let safeName = shopName.replace(/[\\/:"*?<>|]/g, '');
+    link.setAttribute("download", "แบบพิมพ์รายงาน_" + safeName.trim() + ".doc");
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  }).getCompleteReportData(shopName);
+}
+
+function togglePasswordVisibility() {
+  const passwordInput = document.getElementById('login_password');
+  const eyeIcon = document.getElementById('eye-icon');
+  
+  if (passwordInput.type === 'password') {
+    passwordInput.type = 'text';
+    passwordInput.classList.remove('font-mono', 'tracking-widest');
+    passwordInput.classList.add('font-medium');
+    eyeIcon.innerHTML = `
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+    `;
+  } else {
+    passwordInput.type = 'password';
+    passwordInput.classList.add('font-mono', 'tracking-widest');
+    passwordInput.classList.remove('font-medium');
+    eyeIcon.innerHTML = `
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    `;
+  }
+}
+
+function exportLicenseToWord(shopName) {
+  if (!shopName) return;
+  google.script.run.withSuccessHandler(function(trueUrl) {
+    let reportUrl = trueUrl + "?view=license&shopName=" + encodeURIComponent(shopName);
+    window.open(reportUrl, '_blank');
+  }).getWebAppUrl(); 
+}
+</script>

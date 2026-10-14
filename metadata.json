@@ -1,0 +1,6 @@
+{
+  "name": "Bangpao app",
+  "description": "ระบบงานสารสนเทศสาธารณสุขและจัดการเมืองอัจฉริยะ เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง (Bangpao Public Health) 5 ระบบหลัก: กิจการอันตรายต่อสุขภาพ, ยืม-คืนอุปกรณ์การแพทย์, สปสช. LTC, คำร้องสิ่งปฏิกูล และแดชบอร์ดผู้บริหาร",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

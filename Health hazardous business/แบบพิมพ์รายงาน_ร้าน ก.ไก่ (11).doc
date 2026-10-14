@@ -1,0 +1,463 @@
+﻿
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+    <meta charset="utf-8">
+    <title>แบบประเมินมาตรฐานสุขลักษณะ</title>
+    <style>
+      @page WordSection1 { size: 21cm 29.7cm; margin: 1cm 1.5cm 1cm 1.5cm; mso-page-orientation: portrait; }
+      div.WordSection1 { page: WordSection1; }
+      body, p, table, tr, td, th, span, div {
+        font-family: 'TH SarabunPSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
+        font-size: 16pt;
+        color: #000000;
+        line-height: 1.1;
+      }
+      p { margin: 0 0 4pt 0; text-align: left; }
+      .chk { font-family: 'Segoe UI Symbol', 'Arial Unicode MS', sans-serif !important; }
+      .u { border-bottom: 1pt dotted #000; display: inline-block; padding: 0 5px; }
+      .bold { font-weight: bold; }
+    </style>
+    </head>
+    <body>
+    <div class="WordSection1">
+      <p style="text-align: center; font-weight: bold; font-size: 18pt;">แบบประเมินมาตรฐานการจัดการอนามัยสิ่งแวดล้อมสำหรับสถานประกอบกิจการ</p>
+      <p style="text-align: center; font-weight: bold; font-size: 16pt; margin-bottom: 12pt;">ที่เป็นอันตรายต่อสุขภาพ ตามกฎกระทรวงควบคุมสถานประกอบกิจการ</p>
+      
+      <p class="bold">ส่วนที่ 1 ข้อมูลทั่วไป</p>
+      
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
+<tr>
+<td width="30%" valign="top">1. สถานประกอบกิจการประเภท</td>
+<td class="u" width="70%" valign="top">4. กิจการที่เกี่ยวกับยา เวชภัณฑ์ อุปกรณ์การแพทย์ เครื่องสำอาง ผลิตภัณฑ์ทำความสะอาด</td>
+</tr>
+</table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
+        <tr>
+          <td width="22%">2. ชื่อ-สกุลผู้ดำเนินกิจการ</td>
+          <td class="u" width="45%" align="center">นายจอน โทนี่</td>
+          <td width="10%">โทรศัพท์</td>
+          <td class="u" width="23%" align="center">0638475404</td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
+        <tr>
+          <td width="20%">ชื่อสถานประกอบกิจการ</td>
+          <td class="u" width="80%" align="center">ร้าน ก.ไก่</td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
+        <tr>
+          <td width="12%">ตั้งอยู่เลขที่</td><td class="u" width="25%" align="center">1</td>
+          <td width="8%">หมู่ที่</td><td class="u" width="20%" align="center">5</td>
+          <td width="8%">ถนน</td><td class="u" width="27%" align="center">-</td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
+        <tr>
+          <td width="12%">ตำบล</td><td class="u" width="25%" align="center">บางเป้า</td>
+          <td width="8%">อำเภอ</td><td class="u" width="20%" align="center">กันตัง</td>
+          <td width="10%">จังหวัด</td><td class="u" width="25%" align="center">ตรัง</td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px; margin-bottom: 6pt;">
+        <tr>
+          <td width="15%">โทรศัพท์ร้าน</td>
+          <td class="u" width="85%" align="center">0980721178</td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px; margin-bottom: 6pt;">
+        <tr>
+          <td width="42%">3. กรณีประกอบกิจการเลี้ยงสัตว์ (ระบุ) ชนิดสัตว์</td><td class="u" width="30%" align="center">-</td>
+          <td width="8%">จำนวน</td><td class="u" width="12%" align="center">0</td>
+          <td width="8%">ตัว</td>
+        </tr>
+      </table>
+
+      <p>4. ลักษณะอาคารประกอบกิจการ</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 20px;">
+        <tr>
+          <td width="50%"><span class="chk">☑</u> อาคารโรงงาน/อาคารเอกเทศ จำนวน <span class="u">1</u> ชั้น</td>
+          <td width="50%"><span class="chk">☐</u> อาคารพาณิชย์/พาณิชย์-พักอาศัย จำนวน <span class="u">...</u> ชั้น</td>
+        </tr>
+        <tr>
+          <td width="50%"><span class="chk">☐</u> อาคารสำนักงาน จำนวน <span class="u">...</u> ชั้น</td>
+          <td width="50%"><span class="chk">☐</u> โรงเรือน จำนวน <span class="u">...</u> โรงเรือน</td>
+        </tr>
+        <tr>
+          <td width="50%"><span class="chk">☐</u> โกดัง จำนวน <span class="u">...</u> โกดัง</td>
+          <td width="50%"><span class="chk">☐</u> อื่นๆ ระบุ <span class="u">.........................</u></td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px; margin-top: 6pt;">
+        <tr>
+          <td width="15%">5. จำนวนเครื่องจักร</td><td class="u" width="15%" align="center">1</td><td width="8%">ตัว</td>
+          <td width="20%">รวมจำนวนแรงม้า</td><td class="u" width="15%" align="center">100</td><td width="15%">แรงม้า</td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px; margin-top: 2pt;">
+        <tr>
+          <td width="22%">6. จำนวนพนักงานทั้งหมด</td><td class="u" width="15%" align="center">6</td><td width="8%">คน</td>
+          <td width="8%">ชาย</td><td class="u" width="15%" align="center">1</td><td width="8%">คน</td>
+          <td width="8%">หญิง</td><td class="u" width="15%" align="center">5</td><td width="8%">คน</td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px; margin-top: 2pt;">
+        <tr>
+          <td width="18%">7. ระยะเวลาการทำงาน</td><td class="u" width="10%" align="center">7</td><td width="18%">วัน/สัปดาห์ ตั้งแต่เวลา</td>
+          <td class="u" width="15%" align="center">8:00</td><td width="10%">น. ถึงเวลา</td>
+          <td class="u" width="15%" align="center">17:00</td><td width="10%">น.</td>
+        </tr>
+      </table>
+
+      <p style="margin-top: 6pt;">8. ในรอบปีที่ผ่านมา สถานประกอบกิจการเคยถูกร้องเรียนก่อปัญหาเหตุรำคาญหรือมลพิษสิ่งแวดล้อม</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 20px;">
+        <tr><td colspan="3"><span class="chk">☐</u> ไม่เคย</td></tr>
+        <tr><td colspan="3"><span class="chk">☑</u> เคย จำนวน <span class="u">1</u> ครั้ง ระบุเรื่อง/ประเด็นที่ถูกร้องเรียน</td></tr>
+        <tr>
+<td colspan="3">
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 25px;">
+    <tr>
+      <td width="33%"><span class="chk">☐</u> เสียงดัง</td>
+      <td width="33%"><span class="chk">☑</u> ฝุ่นละออง/เขม่า/เถ้า/ควัน</td>
+      <td width="33%"><span class="chk">☐</u> กลิ่น</td>
+    </tr>
+    <tr>
+      <td width="33%"><span class="chk">☐</u> สารเคมี</td>
+      <td width="33%"><span class="chk">☑</u> น้ำเสีย</td>
+      <td width="33%"><span class="chk">☐</u> มูลฝอย/ของเสียอันตราย</td>
+    </tr>
+    <tr>
+      <td colspan="3"><span class="chk">☐</u> สัตว์หรือแมลงพาหะนำโรค ระบุชนิด <span class="u">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> &nbsp;&nbsp;&nbsp; <span class="chk">☐</u> อื่น ๆ ระบุ <span class="u">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u></td>
+    </tr>
+  </table>
+</td>
+</tr>
+      </table>
+
+      <p class="bold" style="margin-top: 12pt;">ส่วนที่ 2 วัตถุดิบและสารเคมีที่ใช้ในกระบวนการผลิต (ระบุชนิดและปริมาณ/เดือน)</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 20px; margin-bottom: 12pt;">
+
+<tr>
+<td width="5%">1)</td>
+<td class="u" width="32%" align="center">สารเคมี</td>
+<td width="28%" align="right">ปริมาณที่ใช้ (ต่อปี/เดือน)&nbsp;&nbsp;</td>
+<td class="u" width="35%" align="center">1000/เดือน</td>
+</tr>
+
+<tr>
+<td width="5%">2)</td>
+<td class="u" width="32%" align="center"></td>
+<td width="28%" align="right">ปริมาณที่ใช้ (ต่อปี/เดือน)&nbsp;&nbsp;</td>
+<td class="u" width="35%" align="center"></td>
+</tr>
+
+<tr>
+<td width="5%">3)</td>
+<td class="u" width="32%" align="center"></td>
+<td width="28%" align="right">ปริมาณที่ใช้ (ต่อปี/เดือน)&nbsp;&nbsp;</td>
+<td class="u" width="35%" align="center"></td>
+</tr>
+
+<tr>
+<td width="5%">4)</td>
+<td class="u" width="32%" align="center"></td>
+<td width="28%" align="right">ปริมาณที่ใช้ (ต่อปี/เดือน)&nbsp;&nbsp;</td>
+<td class="u" width="35%" align="center"></td>
+</tr>
+
+</table>
+      
+      <p class="bold">ส่วนที่ 3 รายการตรวจสอบสุขลักษณะสถานประกอบกิจการ</p>
+      <table border="1" cellpadding="3" cellspacing="0" width="100%" style="border-collapse: collapse; margin-top: 6pt;">
+        <tr>
+          <th rowspan="2" width="50%" style="background:#f2f2f2; text-align:center;">รายการตรวจสอบสุขลักษณะ</th>
+          <th colspan="3" width="20%" style="background:#f2f2f2; text-align:center;">ผลการตรวจสอบ</th>
+          <th rowspan="2" width="15%" style="background:#f2f2f2; text-align:center;">ข้อเท็จจริงที่พบ</th>
+          <th rowspan="2" width="15%" style="background:#f2f2f2; text-align:center;">คำแนะนำ</th>
+        </tr>
+        <tr>
+          <th width="6%" style="background:#f2f2f2; text-align:center;">ใช่</th>
+          <th width="7%" style="background:#f2f2f2; text-align:center;">ไม่ใช่</th>
+          <th width="7%" style="background:#f2f2f2; text-align:center; font-size:12pt;">ไม่เกี่ยวข้อง</th>
+        </tr>
+    <tr><td colspan="6" style="background:#fafafa; font-weight:bold;">สถานที่ตั้งและลักษณะอาคาร</td></tr>
+        <tr>
+          <td valign="top">1. สถานที่ตั้งเหมาะสม ระยะห่างเป็นไปตามกฎหมาย</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">2. อาคารมีความมั่นคง แข็งแรง</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">3. มีทางหนีไฟ บันไดหนีไฟ หรือทางออกฉุกเฉิน ไม่มีสิ่งกีดขวาง มีป้ายหรือเครื่องหมายแสดงชัดเจน เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">4. สถานประกอบกิจการมีการจัดแสงสว่างเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">5. สถานประกอบกิจการมีการระบายอากาศเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">6. สถานประกอบกิจการมีความสะอาด จัดวางสิ่งของเป็นระเบียบเรียบร้อย ปลอดภัย เป็นสัดส่วน และดูแลรักษาความสะอาดให้ถูกสุขลักษณะอย่างสม่ำเสมอ</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr><tr><td colspan="6" style="background:#fafafa; font-weight:bold;">การสุขาภิบาลสถานประกอบกิจการ</td></tr>
+        <tr>
+          <td valign="top">7. สถานประกอบกิจการมีห้องน้ำ ห้องส้วม อ่างหรือที่ล้างมือที่ สะอาด เพียงพอ ถูกสุขลักษณะ ดูแลรักษาความสะอาดเป็นประจำ</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top">2ห้อง</td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">8. สถานประกอบกิจการมีการเก็บ รวบรวม กำจัดมูลฝอย และของเสียอันตรายที่ถูกสุขลักษณะ ดังนี้</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">(1). มีภาชนะบรรจุหรือภาชนะรองรับมูลฝอย สะอาด มีฝาปิด ไม่แตกหรือรั่วซึม และเพียงพอกับประเภทและปริมาณของมูลฝอย</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">(2). บริเวณที่เก็บวางภาชนะรองรับมูลฝอย หรือสถานที่พักรวมมูลฝอย สะอาด ไม่มีกลิ่นเหม็น ไม่มีน้ำขัง และไม่เป็นแหล่งเพาะพันธุ์สัตว์และแมลงนำโรค</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">(3). มีการกำจัดมูลฝอยอย่างถูกต้อง และเป็นไปตามข้อบัญญัติของท้องถิ่น</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top">เทศบาลจัดเก็บ</td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">(4). กรณีที่มีของเสียอันตราย วัตถุอันตราย มูลฝอยปนเปื้อนสารพิษ มูลฝอยอันตราย หรือมูลฝอยปนเปื้อนเลือดหรือสารคัดหลั่ง ดำเนินการเป็นไปตามกฎหมาย</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">9. สถานประกอบกิจการมีการป้องกัน ควบคุม กำจัดแมลงและสัตว์พาหะนำโรค มิให้เป็นแหล่งเพาะพันธุ์และแพร่ระบาดของโรค</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">10. สถานประกอบกิจการมีการระบายน้ำที่เหมาะสม และดูแลมิให้มีน้ำท่วมขังบริเวณสถานประกอบกิจการ</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">11. สถานประกอบกิจการที่มีโรงอาหารหรือห้องครัวที่จัดไว้เพื่อการปรุงประกอบอาหารสำหรับผู้ปฏิบัติงาน มีการดำเนินการอย่างถูกต้องตามหลักสุขาภิบาลอาหาร</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">12. สถานประกอบกิจการมีน้ำดื่มที่สะอาด เพียงพอสำหรับผู้ปฏิบัติงาน และมีภาชนะรองรับน้ำดื่มที่สะอาด</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr><tr><td colspan="6" style="background:#fafafa; font-weight:bold;">การควบคุมมลพิษ</td></tr>
+        <tr>
+          <td valign="top">13. สถานประกอบกิจการมีระบบบำบัดน้ำเสียที่เหมาะสม สภาพใช้งานได้ดี และมีการจัดการน้ำเสียที่ถูกสุขลักษณะ หรือได้มาตรฐานตามที่กฎหมายกำหนด</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">14. สถานประกอบกิจการมีการป้องกันควบคุมระดับเสียงรบกวน เป็นไปตามประกาศกระทรวงสาธารณสุข หรือกฎหมายว่าด้วยโรงงาน</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">15. สถานประกอบกิจการมีการป้องกันควบคุมฝุ่นละออง เป็นไปตามกฎหมายว่าด้วยโรงงาน หรือกฎหมายว่าด้วยการส่งเสริมและรักษาคุณภาพสิ่งแวดล้อม</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">16. สถานประกอบกิจการมีการป้องกันควบคุมกลิ่นหรือไอสารเคมี เป็นไปตามกฎหมายว่าด้วยโรงงาน</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr><tr><td colspan="6" style="background:#fafafa; font-weight:bold;">ความปลอดภัยและอาชีวอนามัย</td></tr>
+        <tr>
+          <td valign="top">17. อุปกรณ์ เครื่องมือ เครื่องจักร สายไฟ มีสภาพปลอดภัยต่อการใช้งาน มีการติดตั้งในลักษณะที่แข็งแรง มั่นคง ปลอดภัย โดยมีคำแนะนำในการป้องกันอันตราย และกรณีชำรุดต้องมีป้ายเตือน</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">18. มีการจัดวางหรือการจัดเก็บอุปกรณ์ เครื่องมือ เครื่องจักร หรือสายไฟ ต้องเป็นระเบียบ ไม่กีดขวางทางเดินและการปฏิบัติงาน และมีการดูแล ตรวจสอบ บำรุงรักษาให้อยู่ในสภาพดีตลอดเวลา</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">19. สถานประกอบกิจการมีการติดตั้งอุปกรณ์หรือเครื่องดับเพลิงอย่างเพียงพอ เหมาะสม สภาพดี พร้อมใช้งาน มีการฝึกซ้อมดับเพลิงและอพยพหนีไฟ หรือซ้อมแผนฉุกเฉิน</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">20. สถานประกอบกิจการที่มีสารเคมีหรือวัตถุอันตราย ต้องจัดสถานที่ที่ปลอดภัยสำหรับจัดเก็บสารเคมีหรือวัตถุอันตราย มีป้ายแสดงชนิดหรือประเภทของสารเคมีหรือวัตถุอันตราย และเอกสารข้อมูลความปลอดภัย</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">21. สถานประกอบกิจการที่มีความเสี่ยงจากการสัมผัสสารเคมี/วัตถุอันตราย ต้องจัดให้มีที่ชำระร่างกาย และที่ล้างตาฉุกเฉิน</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">22. สถานประกอบกิจการมีอุปกรณ์คุ้มครองความปลอดภัยส่วนบุคคลสำหรับผู้ปฏิบัติงานที่เพียงพอ เหมาะสมตามลักษณะงาน</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+        <tr>
+          <td valign="top">23. สถานประกอบกิจการมีการตรวจสุขภาพผู้ปฏิบัติงาน ตามกฎหมายว่าด้วยความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr><tr><td colspan="6" style="background:#fafafa; font-weight:bold;">การป้องกันเหตุรำคาญ</td></tr>
+        <tr>
+          <td valign="top">24. สถานประกอบกิจการมีมาตรการควบคุมและป้องกันปัญหาเหตุรำคาญแก่ชุมชนและประชาชนที่อยู่ใกล้เคียง</td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr><tr><td colspan="6" style="background:#fafafa; font-weight:bold;">การป้องกันควบคุมโรค</td></tr>
+        <tr>
+          <td valign="top">25. สถานประกอบกิจการมีมาตรการป้องกันควบคุมโรคติดต่อตามหลักเกณฑ์ที่ราชการหรือกฎหมายกำหนด</td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"></td>
+          <td valign="middle" align="center"><span class="chk">✓</u></td>
+          <td valign="top"></td>
+          <td valign="top"></td>
+        </tr>
+      </table>
+
+      <p class="bold" style="margin-top: 15pt;">ข้อเสนอแนะ/สรุปผลการตรวจประเมิน:</p>
+<div class="u" style="width: 100%; min-height: 40pt;">ทดสอบ</div>
+      
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 40pt;">
+<tr>
+<td width="50%"></td>
+<td width="50%">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+    <td width="25%" align="left">ลงชื่อ</td>
+    <td class="u" width="55%" align="center"></td>
+    <td width="20%" align="left">&nbsp;ผู้ตรวจประเมิน</td>
+    </tr>
+    <tr>
+    <td></td>
+    <td align="center" style="padding-top: 5pt;">( อานัส เด็นหมาด )</td>
+    <td></td>
+    </tr>
+    <tr>
+    <td align="left" style="padding-top: 5pt;">ตำแหน่ง</td>
+    <td align="center" style="padding-top: 5pt;">เจ้าพนักงานสาธารณสุข</td>
+    <td></td>
+    </tr>
+    <tr>
+    <td align="left" style="padding-top: 5pt;">วันที่ตรวจ</td>
+    <td class="u" align="center" style="padding-top: 5pt;"></td>
+    <td></td>
+    </tr>
+  </table>
+</td>
+</tr>
+</table>
+
+    </div>
+    </body>
+    </html>
