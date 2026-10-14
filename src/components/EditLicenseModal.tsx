@@ -2,12 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, FileText, FileSpreadsheet, Calculator, Calendar, UserCheck, ShieldAlert, FileDown, CheckCircle2 } from 'lucide-react';
 import { LicenseRecord, SignerSettings, DEFAULT_SIGNER_SETTINGS } from '../types/index.ts';
 import { generateLicenseHtml, exportHtmlAsWord, printHtmlInNewWindow } from '../services/officialDocGenerator.ts';
+import {
+  exportLicenseSheetViaGas,
+  exportLicensePdfViaGas,
+  updateLicenseRecordInGas,
+} from '../services/gasExportService.ts';
+import { DEFAULT_GAS_URL } from '../services/sheetsSync.ts';
 
 interface EditLicenseModalProps {
   license: LicenseRecord | null;
   isOpen: boolean;
   onClose: () => void;
   signerSettings?: SignerSettings;
+  gasUrl?: string;
   onSaveOnly: (updated: LicenseRecord) => void;
   onSaveAndExportPdf: (updated: LicenseRecord) => void;
   onSaveAndOpenGoogleSheet: (updated: LicenseRecord) => void;
@@ -124,11 +131,16 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
   isOpen,
   onClose,
   signerSettings,
+  gasUrl,
   onSaveOnly,
   onSaveAndExportPdf,
   onSaveAndOpenGoogleSheet,
 }) => {
   if (!isOpen || !license) return null;
+
+  const effectiveGasUrl = gasUrl || DEFAULT_GAS_URL;
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processMessage, setProcessMessage] = useState('กรุณารอสักครู่ ระบบกำลังนำข้อมูลไปใส่ในแบบฟอร์ม');
 
   // 1. ข้อมูลควบคุมใบอนุญาต
   const [bookNo, setBookNo] = useState(license.licenseBookNo || '-');
@@ -316,16 +328,42 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
     };
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const updated = getUpdatedRecord();
     onSaveOnly(updated);
-    onClose();
+    setIsProcessing(true);
+    setProcessMessage('กำลังบันทึกข้อมูลใบอนุญาตลงฐานข้อมูล...');
+    try {
+      await updateLicenseRecordInGas(updated, effectiveGasUrl);
+    } catch (e) {
+      console.warn('Sync license warning:', e);
+    } finally {
+      setIsProcessing(false);
+      onClose();
+    }
   };
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     const updated = getUpdatedRecord();
-    onSaveAndExportPdf(updated);
-    onClose();
+    onSaveOnly(updated);
+    setIsProcessing(true);
+    setProcessMessage('กรุณารอสักครู่ ระบบกำลังนำข้อมูลไปใส่ในแบบฟอร์มใบอนุญาต (PDF)...');
+    try {
+      await updateLicenseRecordInGas(updated, effectiveGasUrl);
+      const res = await exportLicensePdfViaGas(updated.businessName, effectiveGasUrl);
+      if (res.success && res.pdfUrl) {
+        window.open(res.pdfUrl, '_blank');
+      } else {
+        const html = generateLicenseHtml(updated, signerSettings || DEFAULT_SIGNER_SETTINGS);
+        printHtmlInNewWindow(html);
+      }
+    } catch {
+      const html = generateLicenseHtml(updated, signerSettings || DEFAULT_SIGNER_SETTINGS);
+      printHtmlInNewWindow(html);
+    } finally {
+      setIsProcessing(false);
+      onClose();
+    }
   };
 
   const handleExportWord = () => {
@@ -336,15 +374,52 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
     onClose();
   };
 
-  const handleOpenSheet = () => {
+  const handleOpenSheet = async () => {
     const updated = getUpdatedRecord();
-    onSaveAndOpenGoogleSheet(updated);
-    onClose();
+    onSaveOnly(updated);
+    setIsProcessing(true);
+    setProcessMessage('กรุณารอสักครู่ ระบบกำลังนำข้อมูลไปใส่ในแบบฟอร์มใบอนุญาต (Google Sheet)...');
+    try {
+      await updateLicenseRecordInGas(updated, effectiveGasUrl);
+      const res = await exportLicenseSheetViaGas(updated.businessName, effectiveGasUrl);
+      if (res.success && (res.excelUrl || res.sheetUrl)) {
+        window.open(res.excelUrl || res.sheetUrl, '_blank');
+      } else {
+        const redirectUrl = `${effectiveGasUrl}?action=exportLicenseSheet&shopName=${encodeURIComponent(
+          updated.businessName
+        )}&redirect=true`;
+        window.open(redirectUrl, '_blank');
+      }
+    } catch {
+      const redirectUrl = `${effectiveGasUrl}?action=exportLicenseSheet&shopName=${encodeURIComponent(
+        updated.businessName
+      )}&redirect=true`;
+      window.open(redirectUrl, '_blank');
+    } finally {
+      setIsProcessing(false);
+      onClose();
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100">
+      {/* Loading Overlay (ตรงตาม Image 2 ใน GAS เป๊ะ 100%) */}
+      {isProcessing && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7 text-center transform transition-all animate-in zoom-in-95 duration-150">
+            <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200 shadow-inner">
+              <span className="text-3xl animate-bounce">⏳</span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">กำลังสร้างไฟล์...</h3>
+            <p className="text-xs text-slate-500 mb-6 leading-relaxed">{processMessage}</p>
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div className="bg-emerald-600 h-full rounded-full animate-pulse w-3/4"></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100 relative">
         
         {/* Header (Matching GAS Index.html line 536) */}
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl shrink-0">

@@ -82,6 +82,11 @@ import { PrintReportOptionsModal } from './components/PrintReportOptionsModal.ts
 import { PrintLicenseOptionsModal } from './components/PrintLicenseOptionsModal.tsx';
 import { EditLicenseModal } from './components/EditLicenseModal.tsx';
 import { generateLicenseHtml, printHtmlInNewWindow } from './services/officialDocGenerator.ts';
+import {
+  exportLicenseSheetViaGas,
+  exportLicensePdfViaGas,
+  updateLicenseRecordInGas,
+} from './services/gasExportService.ts';
 
 import { HazardousModuleView } from './components/HazardousModuleView.tsx';
 // Extended Public Health ERP Components
@@ -508,23 +513,56 @@ export default function App() {
   };
 
   // Edit License Modal Handlers
-  const handleSaveLicenseOnly = (updated: LicenseRecord) => {
+  const handleSaveLicenseOnly = async (updated: LicenseRecord) => {
     setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
     showToast('success', `บันทึกข้อมูลใบอนุญาต ${updated.businessName} สำเร็จ`);
+    try {
+      await updateLicenseRecordInGas(updated, config.appsScriptUrl || DEFAULT_GAS_URL);
+    } catch (e) {
+      console.warn('Sync license warning:', e);
+    }
   };
 
-  const handleSaveAndExportPdf = (updated: LicenseRecord) => {
+  const handleSaveAndExportPdf = async (updated: LicenseRecord) => {
     setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
-    showToast('success', `บันทึกข้อมูล ${updated.businessName} เรียบร้อย กำลังเปิดหน้าพิมพ์ PDF (ตราครุฑ 2 หน้า A4)...`);
-    const html = generateLicenseHtml(updated, signerSettings);
-    printHtmlInNewWindow(html);
+    showToast('info', `กำลังส่งข้อมูลและสร้าง PDF ใบอนุญาตแบบทางการของ ${updated.businessName}...`);
+    try {
+      await updateLicenseRecordInGas(updated, config.appsScriptUrl || DEFAULT_GAS_URL);
+      const res = await exportLicensePdfViaGas(updated.businessName, config.appsScriptUrl || DEFAULT_GAS_URL);
+      if (res.success && res.pdfUrl) {
+        showToast('success', `สร้าง PDF ใบอนุญาต ${updated.businessName} สำเร็จ!`);
+        window.open(res.pdfUrl, '_blank');
+      } else {
+        const html = generateLicenseHtml(updated, signerSettings);
+        printHtmlInNewWindow(html);
+      }
+    } catch {
+      const html = generateLicenseHtml(updated, signerSettings);
+      printHtmlInNewWindow(html);
+    }
   };
 
   const handleSaveAndOpenGoogleSheet = async (updated: LicenseRecord) => {
     setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
-    showToast('success', `บันทึกข้อมูล ${updated.businessName} เรียบร้อย กำลังเปิด Google Sheet...`);
-    const sheetId = config.sheetId || DEFAULT_SHEET_ID;
-    window.open(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`, '_blank');
+    showToast('info', `กำลังสร้าง Google Sheet ใบอนุญาต (สร้างสำเนาเฉพาะร้านค้า) ของ ${updated.businessName}...`);
+    try {
+      await updateLicenseRecordInGas(updated, config.appsScriptUrl || DEFAULT_GAS_URL);
+      const res = await exportLicenseSheetViaGas(updated.businessName, config.appsScriptUrl || DEFAULT_GAS_URL);
+      if (res.success && (res.excelUrl || res.sheetUrl)) {
+        showToast('success', `สร้าง Google Sheet ใบอนุญาต ${updated.businessName} สำเร็จ!`);
+        window.open(res.excelUrl || res.sheetUrl, '_blank');
+      } else {
+        const redirectUrl = `${config.appsScriptUrl || DEFAULT_GAS_URL}?action=exportLicenseSheet&shopName=${encodeURIComponent(
+          updated.businessName
+        )}&redirect=true`;
+        window.open(redirectUrl, '_blank');
+      }
+    } catch {
+      const redirectUrl = `${config.appsScriptUrl || DEFAULT_GAS_URL}?action=exportLicenseSheet&shopName=${encodeURIComponent(
+        updated.businessName
+      )}&redirect=true`;
+      window.open(redirectUrl, '_blank');
+    }
   };
 
   // Google Sheets Sync
@@ -979,9 +1017,29 @@ export default function App() {
         onClose={() => setLicenseOptionsModalOpen(false)}
         signerSettings={signerSettings}
         gasUrl={config.appsScriptUrl || DEFAULT_GAS_URL}
-        onOpenGoogleSheet={() => {
-          const sheetId = config.sheetId || DEFAULT_SHEET_ID;
-          window.open(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`, '_blank');
+        onOpenGoogleSheet={async () => {
+          if (!selectedLicenseForOfficialDoc) return;
+          showToast('info', `กำลังสร้าง Google Sheet ใบอนุญาตของ ${selectedLicenseForOfficialDoc.businessName}...`);
+          try {
+            const res = await exportLicenseSheetViaGas(
+              selectedLicenseForOfficialDoc.businessName,
+              config.appsScriptUrl || DEFAULT_GAS_URL
+            );
+            if (res.success && (res.excelUrl || res.sheetUrl)) {
+              showToast('success', `สร้าง Google Sheet สำเร็จ!`);
+              window.open(res.excelUrl || res.sheetUrl, '_blank');
+            } else {
+              const redirectUrl = `${config.appsScriptUrl || DEFAULT_GAS_URL}?action=exportLicenseSheet&shopName=${encodeURIComponent(
+                selectedLicenseForOfficialDoc.businessName
+              )}&redirect=true`;
+              window.open(redirectUrl, '_blank');
+            }
+          } catch {
+            const redirectUrl = `${config.appsScriptUrl || DEFAULT_GAS_URL}?action=exportLicenseSheet&shopName=${encodeURIComponent(
+              selectedLicenseForOfficialDoc.businessName
+            )}&redirect=true`;
+            window.open(redirectUrl, '_blank');
+          }
         }}
         onEditBeforePrint={() => {
           if (selectedLicenseForOfficialDoc) {
@@ -997,6 +1055,7 @@ export default function App() {
         isOpen={editLicenseModalOpen}
         onClose={() => setEditLicenseModalOpen(false)}
         signerSettings={signerSettings}
+        gasUrl={config.appsScriptUrl || DEFAULT_GAS_URL}
         onSaveOnly={handleSaveLicenseOnly}
         onSaveAndExportPdf={handleSaveAndExportPdf}
         onSaveAndOpenGoogleSheet={handleSaveAndOpenGoogleSheet}
