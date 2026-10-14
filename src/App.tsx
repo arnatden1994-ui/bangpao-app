@@ -217,6 +217,7 @@ export default function App() {
 
   const [editLicenseModalOpen, setEditLicenseModalOpen] = useState(false);
   const [selectedLicenseForEdit, setSelectedLicenseForEdit] = useState<LicenseRecord | null>(null);
+  const [selectedLicenseForInspectionEdit, setSelectedLicenseForInspectionEdit] = useState<LicenseRecord | null>(null);
 
   // Certificate / Report print modals
   const [certificateModalOpen, setCertificateModalOpen] = useState(false);
@@ -449,22 +450,28 @@ export default function App() {
   };
 
   // Dashboard License Actions
+  // 1. ปุ่มแก้ไข (✏️ แก้ไข): ดึงข้อมูลเดิมเข้าฟอร์มตรวจประเมินสุขลักษณะ 3 ขั้นตอน
   const handleEditLicense = (lic: LicenseRecord) => {
-    setSelectedLicenseForEdit(lic);
-    setEditLicenseModalOpen(true);
+    setSelectedLicenseForInspectionEdit(lic);
+    setCurrentTab('hazardous');
+    setHazardousSubTab('form');
+    showToast('info', `กำลังเปิดฟอร์มตรวจประเมินสุขลักษณะของ "${lic.businessName}" เพื่อแก้ไขข้อมูลเดิม`);
   };
 
+  // 2. พิมพ์รายงานตรวจ (🖨️ รายงานตรวจ): เปิด modal เลือกพิมพ์ PDF, Google Sheet, Word
   const handlePrintInspectionReport = (lic: LicenseRecord) => {
     setSelectedLicenseForPrint(lic);
     setSelectedLicenseForOfficialReport(lic);
     setPrintOptionsModalOpen(true);
   };
 
+  // 3. ออกใบอนุญาต (🖊️ ออกใบอนุญาต): เปิด modal ตรวจสอบและแก้ไขข้อมูลใบอนุญาต อภ.2
   const handleIssueLicense = (lic: LicenseRecord) => {
-    setSelectedLicenseForOfficialDoc(lic);
-    setLicenseOptionsModalOpen(true);
+    setSelectedLicenseForEdit(lic);
+    setEditLicenseModalOpen(true);
   };
 
+  // 4. ต่ออายุ (🔄 ต่ออายุ): อัปเดตอายุใบอนุญาต +365 วัน และเปิดหน้าใบอนุญาตฉบับต่ออายุ
   const handleRenewLicense = (lic: LicenseRecord) => {
     if (!perms.canEdit) {
       showToast('error', 'สิทธิ์ของคุณไม่สามารถต่ออายุใบอนุญาตได้');
@@ -496,8 +503,8 @@ export default function App() {
     setLicenses(updated);
     showToast('success', `ต่ออายุใบอนุญาต ${lic.businessName} สำเร็จ (รอบปี พ.ศ. ${thaiCurrentYear}, คงเหลือ 365 วัน)`);
     const renewed = updated.find((l) => l.id === lic.id) || lic;
-    setSelectedLicenseForOfficialDoc(renewed);
-    setLicenseOptionsModalOpen(true);
+    setSelectedLicenseForEdit(renewed);
+    setEditLicenseModalOpen(true);
   };
 
   // Edit License Modal Handlers
@@ -712,6 +719,8 @@ export default function App() {
                 }}
                 activeSubTab={hazardousSubTab}
                 onSubTabChange={(tab) => setHazardousSubTab(tab as any)}
+                selectedLicenseForInspectionEdit={selectedLicenseForInspectionEdit}
+                onClearInspectionEdit={() => setSelectedLicenseForInspectionEdit(null)}
                 gasUrl={config.appsScriptUrl || DEFAULT_GAS_URL}
                 sheetId={config.sheetId || DEFAULT_SHEET_ID}
               />

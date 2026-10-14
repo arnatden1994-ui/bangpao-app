@@ -1357,6 +1357,14 @@ export function printHtmlInNewWindow(html: string) {
     win.document.open();
     win.document.write(html);
     win.document.close();
+    win.focus();
+    setTimeout(() => {
+      try {
+        win.print();
+      } catch (e) {
+        console.warn('Auto print trigger note:', e);
+      }
+    }, 700);
   }
 }
 

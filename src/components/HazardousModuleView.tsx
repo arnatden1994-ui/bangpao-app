@@ -29,6 +29,8 @@ interface HazardousModuleViewProps {
   onDeleteBusiness: (b: HazardousBusiness) => void;
   activeSubTab?: 'gas_app' | 'dashboard' | 'form' | 'directory';
   onSubTabChange?: (tab: 'gas_app' | 'dashboard' | 'form' | 'directory') => void;
+  selectedLicenseForInspectionEdit?: LicenseRecord | null;
+  onClearInspectionEdit?: () => void;
   gasUrl?: string;
   sheetId?: string;
 }
@@ -49,6 +51,8 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
   onDeleteBusiness,
   activeSubTab: controlledSubTab,
   onSubTabChange,
+  selectedLicenseForInspectionEdit,
+  onClearInspectionEdit,
   gasUrl,
   sheetId,
 }) => {
@@ -145,14 +149,16 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
       {subTab === 'form' && (
         <OfficialInspectionForm
           existingLicenses={licenses}
-          initialLicense={editingLicenseForForm}
+          initialLicense={selectedLicenseForInspectionEdit || editingLicenseForForm}
           onSave={(rec, lic) => {
             onSaveOfficialInspection(rec, lic);
             setEditingLicenseForForm(null);
+            if (onClearInspectionEdit) onClearInspectionEdit();
             handleSubTabClick('dashboard');
           }}
           onGoToDashboard={() => {
             setEditingLicenseForForm(null);
+            if (onClearInspectionEdit) onClearInspectionEdit();
             handleSubTabClick('dashboard');
           }}
         />
