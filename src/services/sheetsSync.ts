@@ -37,7 +37,7 @@ const STORAGE_KEYS = {
 
 // A Web App URL is deliberately not hard-coded.  Each deployment has its own
 // permission boundary and must belong to the spreadsheet used by this system.
-export const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbylNXKtc6ldvAA6BnxUHmosX4hxhLM_a3uXw_A6xn-f18yar0RF_uZaj-ns6Yrlgax8/exec';
+export const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbylXgoGf29KGky_izyoeq3Gx3nyJwFyPJM7u5ZSRyXGAXNndM1PCu6gy4SMhCssCJY/exec';
 export const DEFAULT_SHEET_ID = '1uyFaL2xxUouBM5CV-_WdWlNHWHZWQQ9XhrVldvV3DEY';
 
 export function getStoredConfig(): GoogleSheetsConfig {
@@ -46,7 +46,7 @@ export function getStoredConfig(): GoogleSheetsConfig {
     if (raw) {
       const cfg = JSON.parse(raw);
       // Auto upgrade if config was using old default URL
-      if (!cfg.appsScriptUrl || cfg.appsScriptUrl.includes('AKfycbw8')) {
+      if (!cfg.appsScriptUrl || cfg.appsScriptUrl.includes('AKfycbw8') || cfg.appsScriptUrl.includes('AKfycbylNXKt')) {
         cfg.appsScriptUrl = DEFAULT_GAS_URL;
         cfg.sheetId = DEFAULT_SHEET_ID;
         localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cfg));
