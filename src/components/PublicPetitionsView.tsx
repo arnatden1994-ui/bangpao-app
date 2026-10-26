@@ -56,6 +56,7 @@ import {
   PetitionFormData,
   SewageZone,
   PetitionFormType,
+  User as UserType,
 } from '../types/index.ts';
 import {
   BANGPAO_COORDS,
@@ -83,6 +84,7 @@ import {
 
 interface PublicPetitionsViewProps {
   petitions: PublicPetition[];
+  currentUser?: UserType;
   userRole: UserRole;
   onAddNew?: () => void;
   onUpdateStatus: (id: string, status: PublicPetition['status'], notes?: string) => void;
@@ -186,6 +188,7 @@ const createPetitionPinIcon = (
 
 export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
   petitions,
+  currentUser,
   userRole,
   onAddNew,
   onUpdateStatus,
@@ -294,10 +297,21 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
   const [sewageLng, setSewageLng] = useState<number>(BANGPAO_COORDS['1'].lng);
   const [isFetchingGps, setIsFetchingGps] = useState(false);
 
-  // Officer Intake Notes
-  const [receivingOfficerName, setReceivingOfficerName] = useState('นางสาวอรัญญา สุขสวัสดิ์');
-  const [receivingOfficerPosition, setReceivingOfficerPosition] = useState('เจ้าพนักงานธุรการชำนาญงาน');
+  // Officer Intake Notes (ดึงข้อมูลเจ้าหน้าที่ที่ล็อกอินอยู่จริง ไม่ใช้ชื่อตัวอย่าง)
+  const [receivingOfficerName, setReceivingOfficerName] = useState(() => currentUser?.fullName || '');
+  const [receivingOfficerPosition, setReceivingOfficerPosition] = useState(() => currentUser?.roleTitle || '');
   const [receivingOfficerNote, setReceivingOfficerNote] = useState('ตรวจสอบหลักฐานและสถานที่แล้ว ข้อเท็จจริงถูกต้อง เห็นควรเสนอผู้บังคับบัญชา');
+
+  useEffect(() => {
+    if (currentUser?.fullName) {
+      if (!receivingOfficerName || receivingOfficerName === 'นางสาวอรัญญา สุขสวัสดิ์') {
+        setReceivingOfficerName(currentUser.fullName);
+      }
+      if (!receivingOfficerPosition || receivingOfficerPosition === 'เจ้าพนักงานธุรการชำนาญงาน') {
+        setReceivingOfficerPosition(currentUser.roleTitle || '');
+      }
+    }
+  }, [currentUser]);
 
   // Feedback Messages
   const [formSuccessMsg, setFormSuccessMsg] = useState('');
@@ -2485,36 +2499,39 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-600 font-semibold mb-1">
+                    <label className="block text-slate-700 font-semibold mb-1 text-sm">
                       เจ้าหน้าที่ผู้รับคำขอ
                     </label>
                     <input
                       type="text"
+                      placeholder="กรอกชื่อเจ้าหน้าที่ผู้รับคำขอ"
                       value={receivingOfficerName}
                       onChange={(e) => setReceivingOfficerName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:bg-white focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none transition"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-600 font-semibold mb-1">ตำแหน่ง</label>
+                    <label className="block text-slate-700 font-semibold mb-1 text-sm">ตำแหน่ง</label>
                     <input
                       type="text"
+                      placeholder="กรอกตำแหน่งเจ้าหน้าที่"
                       value={receivingOfficerPosition}
                       onChange={(e) => setReceivingOfficerPosition(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:bg-white focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none transition"
                     />
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-600 font-semibold mb-1">
+                    <label className="block text-slate-700 font-semibold mb-1 text-sm">
                       ความเห็นเบื้องต้นของเจ้าหน้าที่ผู้รับเรื่อง
                     </label>
                     <input
                       type="text"
+                      placeholder="ระบุความเห็นเบื้องต้น (ถ้ามี)"
                       value={receivingOfficerNote}
                       onChange={(e) => setReceivingOfficerNote(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:bg-white focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none transition"
                     />
                   </div>
                 </div>

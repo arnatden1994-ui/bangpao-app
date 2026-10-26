@@ -1139,6 +1139,7 @@ unsubLicenses();
               <PublicPetitionsView
                 petitions={petitions}
                 userRole={currentUser.role}
+                currentUser={currentUser}
                 activeSubTab={petitionsSubTab}
                 onSubTabChange={(st) => setPetitionsSubTab(st)}
                 signerSettings={signerSettings}

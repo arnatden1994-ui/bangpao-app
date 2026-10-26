@@ -306,7 +306,7 @@ function generateSewageDocx(
   const feeDigits = rawFee ? toThaiDigits(rawFee) : '...............';
   const receiptBook = form.receipt?.bookNo ? toThaiDigits(form.receipt.bookNo) : '...............';
   const receiptNumber = form.receipt?.receiptNo ? toThaiDigits(form.receipt.receiptNo) : '...............';
-  const intakeOfficer = form.officerNote?.officerName || 'นางสาวอรัญญา สุขสวัสดิ์';
+  const intakeOfficer = form.officerNote?.officerName || '';
 
   xml = xml.replace(
     /เมื่อวันที่\.\.\.\.\.\.\.\.\.\.\.เดือน\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.พ\.ศ\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\./,
@@ -315,7 +315,7 @@ function generateSewageDocx(
 
   xml = xml.replace(
     /\(นางสาวอรัญญา สุขสวัสดิ์\)/g,
-    `(${esc(intakeOfficer)})`
+    intakeOfficer ? `(${esc(intakeOfficer)})` : '(..................................................)'
   );
 
   xml = xml.replace(
@@ -498,7 +498,7 @@ export function generatePetitionHtml(
   const feeAmount = form.feeAmount || getSewageFee(zone);
   const receiptBook = form.receipt?.bookNo || '.......';
   const receiptNumber = form.receipt?.receiptNo || '.......';
-  const intakeOfficer = form.officerNote?.officerName || 'นางสาวอรัญญา สุขสวัสดิ์';
+  const intakeOfficer = form.officerNote?.officerName || '..................................................';
 
   const chk = (on: boolean) =>
     `<span style="display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;border:1.3px solid #000;margin:0 4px 0 2px;font-size:10px;font-weight:bold;line-height:1;vertical-align:middle;box-sizing:border-box;">${
