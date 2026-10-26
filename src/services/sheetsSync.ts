@@ -650,7 +650,7 @@ function getInspectionSystemData() {
         'ร้องเรียน: ' + complaint,
         'ประเด็น: ' + text(row['ประเด็นที่ถูกร้องเรียน']),
         'วัตถุดิบ/สารเคมี: ' + text(row['วัตถุดิบและสารเคมี'])
-      ].join('\n'),
+      ].join('\\n'),
       syncedToSheets: true,
       createdAt: text(row['Timestamp (ตัวเชื่อม)']),
       updatedAt: text(row['Timestamp (ตัวเชื่อม)'])
