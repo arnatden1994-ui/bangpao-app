@@ -343,27 +343,22 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
     }
   };
 
-  const handleExportPdf = async () => {
+  const handleExportPdf = () => {
     const updated = getUpdatedRecord();
     onSaveOnly(updated);
-    setIsProcessing(true);
-    setProcessMessage('กรุณารอสักครู่ ระบบกำลังนำข้อมูลไปใส่ในแบบฟอร์มใบอนุญาต (PDF)...');
+    
+    // 1. Generate exact official HTML and open print window immediately (synchronous = no popup blocker)
+    const html = generateLicenseHtml(updated, signerSettings || DEFAULT_SIGNER_SETTINGS);
+    printHtmlInNewWindow(html);
+    
+    // 2. Sync updated license data to GAS in background
     try {
-      await updateLicenseRecordInGas(updated, effectiveGasUrl);
-      const res = await exportLicensePdfViaGas(updated.businessName, effectiveGasUrl);
-      if (res.success && res.pdfUrl) {
-        window.open(res.pdfUrl, '_blank');
-      } else {
-        const html = generateLicenseHtml(updated, signerSettings || DEFAULT_SIGNER_SETTINGS);
-        printHtmlInNewWindow(html);
-      }
-    } catch {
-      const html = generateLicenseHtml(updated, signerSettings || DEFAULT_SIGNER_SETTINGS);
-      printHtmlInNewWindow(html);
-    } finally {
-      setIsProcessing(false);
-      onClose();
+      updateLicenseRecordInGas(updated, effectiveGasUrl);
+    } catch (e) {
+      console.warn('Background GAS update note:', e);
     }
+    
+    onClose();
   };
 
   const handleExportWord = () => {
@@ -371,6 +366,14 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
     onSaveOnly(updated);
     const html = generateLicenseHtml(updated, signerSettings || DEFAULT_SIGNER_SETTINGS);
     exportHtmlAsWord(html, `ใบอนุญาต_${businessName.replace(/\s+/g, '_')}`);
+    
+    // Sync updated license data to GAS in background
+    try {
+      updateLicenseRecordInGas(updated, effectiveGasUrl);
+    } catch (e) {
+      console.warn('Background GAS update note:', e);
+    }
+    
     onClose();
   };
 

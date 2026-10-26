@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Shield,
   LayoutDashboard,
   ClipboardCheck,
-  Building2,
-  Globe,
-  ExternalLink,
 } from 'lucide-react';
-import { LicenseRecord, HazardousBusiness, UserRole, OfficialInspectionFormState } from '../types/index.ts';
+import {
+  LicenseRecord,
+  HazardousBusiness,
+  UserRole,
+  OfficialInspectionFormState,
+  SignerSettings,
+} from '../types/index.ts';
 import { LicensePostApprovalDashboard } from './LicensePostApprovalDashboard.tsx';
 import { OfficialInspectionForm } from './OfficialInspectionForm.tsx';
-import { HazardousBusinessView } from './HazardousBusinessView.tsx';
-import { OriginalGasAppView } from './OriginalGasAppView.tsx';
 
 interface HazardousModuleViewProps {
   licenses: LicenseRecord[];
@@ -27,10 +27,13 @@ interface HazardousModuleViewProps {
   onInspectBusiness: (b: HazardousBusiness) => void;
   onPrintBusinessLicense: (b: HazardousBusiness) => void;
   onDeleteBusiness: (b: HazardousBusiness) => void;
-  activeSubTab?: 'gas_app' | 'dashboard' | 'form' | 'directory';
-  onSubTabChange?: (tab: 'gas_app' | 'dashboard' | 'form' | 'directory') => void;
+  activeSubTab?: 'dashboard' | 'form' | 'directory';
+  onSubTabChange?: (tab: 'dashboard' | 'form' | 'directory') => void;
   selectedLicenseForInspectionEdit?: LicenseRecord | null;
   onClearInspectionEdit?: () => void;
+  formResetKey?: number;
+  signerSettings?: SignerSettings;
+  onOpenSignerSettings?: () => void;
   gasUrl?: string;
   sheetId?: string;
 }
@@ -53,15 +56,23 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
   onSubTabChange,
   selectedLicenseForInspectionEdit,
   onClearInspectionEdit,
-  gasUrl,
-  sheetId,
+  formResetKey = 0,
+  signerSettings,
+  onOpenSignerSettings,
 }) => {
-  const [internalSubTab, setInternalSubTab] = useState<'dashboard' | 'form' | 'gas_app'>('dashboard');
+  const [internalSubTab, setInternalSubTab] = useState<'dashboard' | 'form'>('dashboard');
   const [editingLicenseForForm, setEditingLicenseForForm] = useState<LicenseRecord | null>(null);
-  const rawSubTab = controlledSubTab || internalSubTab;
-  const subTab = rawSubTab === 'directory' ? 'dashboard' : rawSubTab;
+  const [localFormResetKey, setLocalFormResetKey] = useState(0);
 
-  const handleSubTabClick = (tab: 'dashboard' | 'form' | 'gas_app') => {
+  useEffect(() => {
+    if (formResetKey > 0) {
+      setEditingLicenseForForm(null);
+    }
+  }, [formResetKey]);
+  const rawSubTab = controlledSubTab || internalSubTab;
+  const subTab = rawSubTab === 'directory' || rawSubTab === ('gas_app' as any) ? 'dashboard' : rawSubTab;
+
+  const handleSubTabClick = (tab: 'dashboard' | 'form') => {
     if (onSubTabChange) {
       onSubTabChange(tab as any);
     } else {
@@ -76,11 +87,13 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
 
   const handleNewInspection = () => {
     setEditingLicenseForForm(null);
+    if (onClearInspectionEdit) onClearInspectionEdit();
+    setLocalFormResetKey((prev) => prev + 1);
     handleSubTabClick('form');
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
+    <div className="space-y-4 animate-in fade-in duration-200 w-full">
       {/* Top Tab Switcher */}
       <div className="bg-white p-2.5 rounded-2xl border border-slate-200/90 shadow-xs flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
@@ -106,17 +119,6 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
             <ClipboardCheck className="w-4 h-4" />
             <span>📝 แบบฟอร์มตรวจประเมินสุขลักษณะ (3 ขั้นตอน)</span>
           </button>
-          <button
-            onClick={() => handleSubTabClick('gas_app')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              subTab === 'gas_app'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/60'
-            }`}
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Google Apps Script ต้นฉบับ</span>
-          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -138,7 +140,7 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
           licenses={licenses}
           onRefreshData={onRefreshData}
           onEditInspection={handleEditInspection}
-          onEditLicense={handleEditInspection}
+          onEditLicense={onEditLicense}
           onPrintInspectionReport={onPrintInspectionReport}
           onIssueLicense={onIssueLicense}
           onRenewLicense={onRenewLicense}
@@ -148,28 +150,25 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
 
       {subTab === 'form' && (
         <OfficialInspectionForm
+          key={`form-${formResetKey}-${localFormResetKey}-${(selectedLicenseForInspectionEdit || editingLicenseForForm)?.id || 'blank'}`}
           existingLicenses={licenses}
           initialLicense={selectedLicenseForInspectionEdit || editingLicenseForForm}
+          signerSettings={signerSettings}
+          onOpenSignerSettings={onOpenSignerSettings}
           onSave={(rec, lic) => {
             onSaveOfficialInspection(rec, lic);
+          }}
+          onPrintReportImmediately={(lic) => {
             setEditingLicenseForForm(null);
             if (onClearInspectionEdit) onClearInspectionEdit();
             handleSubTabClick('dashboard');
+            onPrintInspectionReport(lic);
           }}
           onGoToDashboard={() => {
             setEditingLicenseForForm(null);
             if (onClearInspectionEdit) onClearInspectionEdit();
             handleSubTabClick('dashboard');
           }}
-        />
-      )}
-
-      {subTab === 'gas_app' && (
-        <OriginalGasAppView
-          gasUrl={gasUrl || ''}
-          sheetId={sheetId || ''}
-          hazardousBusinesses={hazardousBusinesses}
-          onAddNewBusiness={onAddNewBusiness}
         />
       )}
     </div>

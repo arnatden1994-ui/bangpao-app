@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   ClipboardCheck,
@@ -21,7 +21,24 @@ import {
   AlertCircle,
   MapPin,
   ChevronRight,
+  Eye,
+  X,
+  Wind,
+  ThermometerSun,
+  Maximize2,
+  HeartHandshake,
+  UtensilsCrossed,
+  Shield,
+  Package,
+  Settings,
 } from 'lucide-react';
+import { GoogleCalendarModal } from './GoogleCalendarModal.tsx';
+import {
+  MunicipalCalendarPanel,
+  CalendarEventItem,
+  INITIAL_CALENDAR_EVENTS,
+} from './MunicipalCalendarPanel.tsx';
+import { saveToFirestore, deleteFromFirestore, COLLECTIONS } from '../services/firebaseService.ts';
 import {
   Establishment,
   HazardousBusiness,
@@ -141,45 +158,319 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
     },
   ];
 
+  const [isArtworkModalOpen, setIsArtworkModalOpen] = useState(false);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  // Shared Calendar Events State
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('bangpao_calendar_events_v2');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse local calendar events', e);
+    }
+    return INITIAL_CALENDAR_EVENTS;
+  });
+
+  const handleAddCalendarEvent = (newEvent: CalendarEventItem) => {
+    setCalendarEvents((prev) => [newEvent, ...prev]);
+    saveToFirestore(COLLECTIONS.CALENDAR_EVENTS, newEvent).catch(() => {});
+  };
+
+  const handleUpdateCalendarEvent = (updatedEvent: CalendarEventItem) => {
+    setCalendarEvents((prev) => prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
+    saveToFirestore(COLLECTIONS.CALENDAR_EVENTS, updatedEvent).catch(() => {});
+  };
+
+  const handleDeleteCalendarEvent = (id: string) => {
+    setCalendarEvents((prev) => prev.filter((e) => e.id !== id));
+    deleteFromFirestore(COLLECTIONS.CALENDAR_EVENTS, id).catch(() => {});
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bangpao_calendar_events_v2', JSON.stringify(calendarEvents));
+    } catch (e) {
+      console.warn('Failed to save calendar events', e);
+    }
+  }, [calendarEvents]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const hours = String(currentTime.getHours()).padStart(2, '0');
+  const minutes = String(currentTime.getMinutes()).padStart(2, '0');
+  const seconds = String(currentTime.getSeconds()).padStart(2, '0');
+  const timeString = `${hours}:${minutes}:${seconds}`;
+
+  const thaiDays = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+  const thaiMonths = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  ];
+  const dayName = thaiDays[currentTime.getDay()];
+  const dateNum = currentTime.getDate();
+  const monthName = thaiMonths[currentTime.getMonth()];
+  const buddhistYear = currentTime.getFullYear() + 543;
+  const thaiDateString = `${dayName}ที่ ${dateNum} ${monthName} ${buddhistYear}`;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* Hero Executive Banner */}
-      <div className="bg-gradient-to-br from-[#063326] via-[#084c3c] to-[#0d5947] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-emerald-600/30">
-        <div className="absolute -right-16 -bottom-16 w-80 h-80 bg-emerald-400/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -left-10 -top-10 w-60 h-60 bg-teal-300/10 rounded-full blur-2xl pointer-events-none" />
+      {/* ========================================== */}
+      {/* HERO COMMAND BANNER (Smart Command HUD) */}
+      {/* ========================================== */}
+      <div className="relative w-full rounded-[28px] overflow-hidden shadow-2xl border border-emerald-800/40 bg-[#022c22] text-white select-none">
         
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs sm:text-[13px] font-bold border border-emerald-400/30 shadow-xs">
-              <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>ระบบศูนย์บริการสาธารณสุขและจัดการเมืองอัจฉริยะ (Smart Portal)</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-black tracking-tight text-white leading-tight">
-              ศูนย์สั่งการภาพรวมบริหาร (Executive Command Center)
-            </h1>
-            <p className="text-sm sm:text-[15px] text-emerald-100/95 leading-relaxed font-normal">
-              เทศบาลตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง • บูรณาการงานบริการครบ 4 มิติ
-              เพื่อการบริหารงานสาธารณสุขที่โปร่งใส แม่นยำ และรวดเร็ว
-            </p>
-          </div>
+        {/* 1. ชั้นภาพกราฟิกพื้นหลังด้านขวา (ใช้ CSS Mask เกลี่ยขอบซ้ายให้เนียนกริบ ไร้รอยต่อเส้นตรง) */}
+        <div className="absolute inset-y-0 right-0 w-full lg:w-[62%] overflow-hidden pointer-events-none">
+          <div
+            className="w-full h-full bg-cover bg-center transition-all duration-500 scale-105"
+            style={{
+              backgroundImage: "url('/bangpao_health_banner.jpg')",
+              maskImage: 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 18%, rgba(0,0,0,0.85) 45%, black 75%)',
+              WebkitMaskImage: 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 18%, rgba(0,0,0,0.85) 45%, black 75%)',
+            }}
+          />
+        </div>
 
-          {/* Quick Date Badge */}
-          <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-2 shrink-0">
-            <div className="px-5 py-3 rounded-2xl bg-black/30 backdrop-blur-md border border-white/15 text-left md:text-right shadow-md">
-              <div className="text-xs text-emerald-300 font-semibold flex items-center gap-1.5 md:justify-end">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>ข้อมูลอัปเดตเรียลไทม์</span>
+        {/* 2. ชั้น Gradient Overlay เกลี่ยแสงสีเขียวมรกตจากซ้ายไปขวา เพื่อให้อ่านตัวหนังสือชัดเจน 100% และกลมกลืนกับภาพ */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(90deg, #022c22 0%, #053b2f 42%, rgba(6, 78, 59, 0.82) 62%, rgba(6, 78, 59, 0.35) 100%)',
+          }}
+        />
+
+        {/* 3. ชั้นตาราง Cyber Grid และแสง Ambient Glow เพิ่มมิติความล้ำสมัย */}
+        <div className="absolute inset-0 bg-cyber-grid pointer-events-none opacity-80" />
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 left-1/3 w-80 h-80 bg-teal-400/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* 4. เนื้อหาหลักภายใน Banner (จัดองค์ประกอบใหม่ให้สมส่วน สวยงาม กะทัดรัด และไม่บดบังภาพกราฟิก) */}
+        <div className="relative z-10 p-6 sm:p-8 lg:p-9 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          
+          {/* ฝั่งซ้าย: ข้อมูลหน่วยงาน (ขยายใหญ่ขึ้นตามข้อ 2), หัวข้อระบบ, HUD แถบนาฬิกาแบบกะทัดรัดสมส่วน และ มิติบริการ 2-7 */}
+          <div className="w-full lg:max-w-2xl xl:max-w-[50%] space-y-4 sm:space-y-4.5">
+            
+            {/* 1. ส่วนภาพ 2: แถบป้ายกำกับหน่วยงานหลัก (จัดให้อยู่กึ่งกลางของข้อมูลรวมตามภาพ 1) */}
+            <div className="w-full flex justify-center">
+              <div className="inline-flex items-center gap-3.5 sm:gap-4 px-4.5 sm:px-6 py-3 sm:py-3.5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-emerald-950/95 via-teal-950/90 to-emerald-900/95 border-2 border-emerald-400/70 backdrop-blur-md shadow-2xl shadow-emerald-950/80">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full bg-white/20 p-1 sm:p-1.5 flex items-center justify-center shrink-0 border-2 border-emerald-300/60 shadow-lg shadow-emerald-950/60">
+                  <img
+                    src="/images-Photoroom.png"
+                    alt="ตราเทศบาลตำบลบางเป้า"
+                    className="w-full h-full object-contain rounded-full"
+                    onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                  />
+                </div>
+                <div className="flex flex-col justify-center">
+                  <span className="text-base sm:text-lg lg:text-xl font-black tracking-wide text-white drop-shadow-sm leading-snug">
+                    กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า
+                  </span>
+                  <span className="text-xs sm:text-[13px] text-emerald-300 font-semibold flex items-center gap-2 mt-0.5">
+                    <span>อำเภอกันตัง จังหวัดตรัง</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="text-amber-300 font-bold">ศูนย์บัญชาการข้อมูลและบริการดิจิทัล</span>
+                  </span>
+                </div>
               </div>
-              <div className="text-base sm:text-lg font-black text-white flex items-center gap-2 mt-1">
-                <Calendar className="w-5 h-5 text-amber-400" />
-                <span>
-                  {new Date().toLocaleDateString('th-TH', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
+            </div>
+
+            {/* 2. ชื่อระบบและพันธกิจ (จัดกึ่งกลางให้สมส่วนกับข้อมูลรวมตามภาพ 1) */}
+            <div className="space-y-2 text-center w-full">
+              <h2 className="text-2xl sm:text-3xl lg:text-[34px] font-black tracking-tight text-white leading-tight drop-shadow-sm text-center">
+                ศูนย์สั่งการภาพรวมบริหาร
+              </h2>
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                <p className="text-lg sm:text-xl font-black bg-gradient-to-r from-amber-300 via-yellow-200 to-emerald-300 bg-clip-text text-transparent">
+                  Executive Command Center
+                </p>
+                <span className="hidden sm:inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300/90 bg-emerald-950/70 px-2.5 py-0.5 rounded-md border border-emerald-700/60">
+                  <Activity className="w-3 h-3 text-emerald-400" /> บูรณาการ 4 มิติ
                 </span>
               </div>
+              <p className="text-xs sm:text-[13px] text-emerald-100/90 leading-relaxed font-light text-center max-w-xl mx-auto">
+                เทศบาลตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง • บูรณาการระบบสารสนเทศเพื่อการบริหารงานสาธารณสุขครบ 4 มิติ โปร่งใส แม่นยำ และรวดเร็ว เพื่อคุณภาพชีวิตของประชาชน
+              </p>
+            </div>
+
+            {/* 3. แผงนาฬิกาและสถานะเมืองแบบกะทัดรัด สมส่วน (Sleek Low-Profile HUD Strip - แก้ปัญหากล่องใหญ่เกินไป) */}
+            <div className="backdrop-blur-xl bg-emerald-950/85 border border-emerald-400/35 rounded-2xl px-3.5 sm:px-4 py-2 sm:py-2.5 shadow-xl flex flex-wrap items-center justify-between gap-2.5">
+              {/* ส่วนนาฬิกา และสถานะ LIVE */}
+              <div className="flex items-center gap-2 sm:gap-2.5">
+                <span className="relative w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-dot shrink-0" />
+                <span className="text-[10px] font-black tracking-wider uppercase text-emerald-300 bg-emerald-900/70 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0">
+                  LIVE COMMAND
+                </span>
+                <div className="flex items-baseline gap-1 font-mono-clock">
+                  <span className="text-lg sm:text-xl font-black text-white clock-glow tracking-wider">
+                    {timeString}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-300 uppercase">น.</span>
+                </div>
+              </div>
+
+              {/* วันที่ภาษาไทย (คลิกเปิดปฏิทิน) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('calendar-panel-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  else setIsCalendarModalOpen(true);
+                }}
+                className="group inline-flex items-center gap-1.5 text-xs text-emerald-100 hover:text-amber-200 font-medium transition-colors cursor-pointer"
+                title="คลิกเพื่อเลื่อนไปดูแผงปฏิทิน (bangpaohealthy@gmail.com)"
+              >
+                <Calendar className="w-3.5 h-3.5 text-amber-300 group-hover:scale-110 transition-transform shrink-0" />
+                <span className="underline decoration-dotted decoration-emerald-400/50 underline-offset-2">
+                  {thaiDateString}
+                </span>
+                <span className="text-[9px] text-amber-300 bg-amber-400/15 px-1.5 py-0.2 rounded border border-amber-400/30 shrink-0">
+                  Gmail Sync
+                </span>
+              </button>
+
+              {/* มินิดัชนีสิ่งแวดล้อม และปุ่ม Google Calendar */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-900/60 px-2 py-1 rounded-lg border border-emerald-500/25">
+                    <Wind className="w-3 h-3 text-emerald-400" />
+                    <span>22 AQI</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-900/60 px-2 py-1 rounded-lg border border-emerald-500/25">
+                    <ThermometerSun className="w-3 h-3 text-amber-400" />
+                    <span>29.4°C</span>
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('calendar-panel-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    else setIsCalendarModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 hover:text-white border border-emerald-400/30 text-[11px] font-semibold transition-all shadow-xs cursor-pointer group"
+                  title="เปิดดูแผงปฏิทิน Google Calendar"
+                >
+                  <Calendar className="w-3 h-3 text-amber-300 group-hover:scale-110 transition-transform" />
+                  <span>Google Cal</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. หมวดหมู่ระบบงานบริการหลัก (หัวข้อ 1 - 6): จัด 3 คอลัมน์ x 2 บรรทัด สมส่วนพอดีเป๊ะ */}
+            <div className="pt-0.5 space-y-2">
+              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                <span>มิติงานบริการหลัก (หัวข้อ 1 - 6):</span>
+              </div>
+
+              {/* Grid 3 คอลัมน์ต่อบรรทัด (รวม 2 บรรทัด พอดี 6 หัวข้อ) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5">
+                {/* บรรทัด 1 - ข้อ 1 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('hazardous')}
+                  className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/85 hover:bg-emerald-900 border border-emerald-500/35 hover:border-emerald-300 backdrop-blur-md text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 shadow-xs cursor-pointer truncate"
+                  title="1. กิจการอันตรายต่อสุขภาพ (ตรวจประเมิน & ออกใบอนุญาต อภ.2)"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 group-hover:scale-125 transition-transform" />
+                  <Shield className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                  <span className="truncate">1. กิจการอันตรายต่อสุขภาพ</span>
+                </button>
+
+                {/* บรรทัด 1 - ข้อ 2 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('nhso_ltc')}
+                  className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/85 hover:bg-emerald-900 border border-emerald-500/35 hover:border-rose-400 backdrop-blur-md text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 shadow-xs cursor-pointer truncate"
+                  title="2. ระบบแจกจ่าย สปสช. & LTC (ดูแลระยะยาว & ติดตามพิกัด)"
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0 group-hover:scale-125 transition-transform" />
+                  <Package className="w-3.5 h-3.5 text-rose-300 shrink-0" />
+                  <span className="truncate">2. ระบบแจกจ่าย สปสช. & LTC</span>
+                </button>
+
+                {/* บรรทัด 1 - ข้อ 3 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('equipment')}
+                  className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/85 hover:bg-emerald-900 border border-emerald-500/35 hover:border-indigo-400 backdrop-blur-md text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 shadow-xs cursor-pointer truncate"
+                  title="3. ระบบบริการยืม-คืนอุปกรณ์ (อุปกรณ์ทางการแพทย์ & สัญญาขอยืม)"
+                >
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 shrink-0 group-hover:scale-125 transition-transform" />
+                  <Stethoscope className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+                  <span className="truncate">3. ระบบบริการยืม-คืนอุปกรณ์</span>
+                </button>
+
+                {/* บรรทัด 2 - ข้อ 4 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('petitions')}
+                  className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/85 hover:bg-emerald-900 border border-emerald-500/35 hover:border-amber-400 backdrop-blur-md text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 shadow-xs cursor-pointer truncate"
+                  title="4. ระบบยื่นคำร้อง & บริการประชาชน (เหตุรำคาญ & สูบสิ่งปฏิกูล ทต.บางเป้า)"
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 group-hover:scale-125 transition-transform" />
+                  <MessageSquareWarning className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                  <span className="truncate">4. ระบบยื่นคำร้อง & บริการ</span>
+                </button>
+
+                {/* บรรทัด 2 - ข้อ 5 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('nhso')}
+                  className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/85 hover:bg-emerald-900 border border-emerald-500/35 hover:border-sky-400 backdrop-blur-md text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 shadow-xs cursor-pointer truncate"
+                  title="5. โครงการ สปสช. (กองทุน) (เอกสารแนบ 6 & มติคณะกรรมการ กปท.)"
+                >
+                  <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0 group-hover:scale-125 transition-transform" />
+                  <Building2 className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                  <span className="truncate">5. โครงการ สปสช. (กองทุน)</span>
+                </button>
+
+                {/* บรรทัด 2 - ข้อ 6 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('settings')}
+                  className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-950/85 hover:bg-emerald-900 border border-emerald-500/35 hover:border-purple-400 backdrop-blur-md text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 shadow-xs cursor-pointer truncate"
+                  title="6. ระบบตั้งค่าผู้ใช้งานทุกระบบ (ผู้ลงนาม, สิทธิ์, ผังอนุมัติ & Cloud)"
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0 group-hover:scale-125 transition-transform" />
+                  <Settings className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                  <span className="truncate">6. ระบบตั้งค่าผู้ใช้งาน</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ฝั่งขวา: พื้นที่เปิดโล่งโชว์ภาพวิสัยทัศน์งานสาธารณสุขและสิ่งแวดล้อมอย่างสง่างาม พร้อมปุ่มดูภาพเต็ม */}
+          <div className="w-full lg:w-auto flex flex-col items-start lg:items-end justify-between self-stretch gap-4 ml-auto pt-2 lg:pt-0">
+            {/* ป้ายวิสัยทัศน์ลอยตัวด้านบนขวา */}
+            <div className="hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-950/70 border border-emerald-400/30 backdrop-blur-md text-xs font-semibold text-emerald-200 shadow-xl">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>เมืองน่าอยู่ ชุมชนสุขภาพดี ทต.บางเป้า</span>
+            </div>
+
+            {/* ปุ่มกดดูภาพขนาดใหญ่ด้านล่างขวา */}
+            <div className="flex items-center gap-2 mt-auto">
+              <button
+                type="button"
+                onClick={() => setIsArtworkModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-400/40 backdrop-blur-md text-xs font-bold text-white transition-all shadow-xl hover:scale-105 cursor-pointer"
+                title="คลิกเพื่อดูภาพวิสัยทัศน์งานสาธารณสุขและสิ่งแวดล้อมขนาดใหญ่"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-amber-300" />
+                <span>ดูภาพวิสัยทัศน์เต็ม</span>
+              </button>
             </div>
           </div>
         </div>
@@ -302,6 +593,17 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
             </span>
           </div>
         </div>
+      </div>
+
+      {/* แผงปฏิทินกิจกรรมสาธารณสุข & รายการแจ้งเตือนนัดหมาย (เชื่อมต่อ Google Calendar: bangpaohealthy@gmail.com) */}
+      <div id="calendar-panel-section">
+        <MunicipalCalendarPanel
+          events={calendarEvents}
+          onAddEvent={handleAddCalendarEvent}
+          onUpdateEvent={handleUpdateCalendarEvent}
+          onDeleteEvent={handleDeleteCalendarEvent}
+          onOpenCreateEventModal={() => setIsCalendarModalOpen(true)}
+        />
       </div>
 
       {/* Quick Action Bar (ปุ่มลัดไปยังงานเร่งด่วน) */}
@@ -537,6 +839,53 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
           </div>
         </div>
       </div>
+
+      {/* Modal: Full Size Artwork */}
+      {isArtworkModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-slate-900/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-800 to-teal-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black leading-tight">
+                    วิสัยทัศน์งานบริการ กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า
+                  </h3>
+                  <p className="text-xs text-emerald-200">
+                    บูรณาการงานบริการครบวงจรเพื่อสุขภาพและสิ่งแวดล้อมที่ดีของประชาชน
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsArtworkModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto bg-slate-50 flex flex-col items-center">
+              <img
+                src="/bangpao_health_banner.jpg"
+                alt="วิสัยทัศน์กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า"
+                className="w-full max-h-[65vh] object-contain rounded-2xl shadow-md border border-slate-200"
+              />
+              <div className="mt-3 text-center text-xs text-slate-600 font-medium">
+                🏛️ กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง • ศูนย์บริการสาธารณสุขและจัดการเมืองอัจฉริยะ (Smart Portal)
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal: Google Calendar & Gmail Integration */}
+      <GoogleCalendarModal
+        isOpen={isCalendarModalOpen}
+        onClose={() => setIsCalendarModalOpen(false)}
+        onAddEvent={handleAddCalendarEvent}
+      />
     </div>
   );
 };

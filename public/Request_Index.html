@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบคำร้องและบริการสาธารณะ</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet CSS for Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; }
+    
+    /* Leaflet Map Styles */
+    .map-container {
+      height: 300px;
+      width: 100%;
+      border-radius: 0.5rem;
+      z-index: 10;
+    }
+    
+    /* Print Styles */
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area {
+        position: absolute;
+        left: 0; top: 0;
+        width: 100%; height: 100%;
+        background-color: white;
+      }
+      .no-print { display: none !important; }
+    }
+    
+    .a4-paper {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 20mm;
+      margin: 0 auto;
+      background: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      font-size: 16pt;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body x-data="requestApp()">
+
+  <!-- Toast Notification -->
+  <div x-show="toast.show" x-transition.opacity.duration.300ms class="fixed top-4 right-4 z-[100] max-w-sm w-full bg-white rounded-lg shadow-lg border border-gray-200 p-4 flex items-start gap-3">
+    <div class="flex-shrink-0 mt-0.5" :class="toast.type === 'success' ? 'text-green-500' : 'text-red-500'">
+      <i class="fa-solid" :class="toast.type === 'success' ? 'fa-check-circle' : 'fa-circle-exclamation'"></i>
+    </div>
+    <div class="flex-1">
+      <h3 class="text-sm font-bold text-gray-900" x-text="toast.title"></h3>
+      <p class="text-sm text-gray-500 mt-1" x-text="toast.message"></p>
+    </div>
+    <button @click="toast.show = false" class="text-gray-400 hover:text-gray-600">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div x-show="isLoading" class="fixed inset-0 bg-white/80 z-[110] flex flex-col items-center justify-center">
+    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-yellow-500 mb-4"></i>
+    <p class="text-lg font-bold text-gray-700">กำลังประมวลผล...</p>
+  </div>
+
+  <div class="flex h-screen overflow-hidden">
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-white">
+      
+      <!-- Top Header -->
+      <header class="bg-white border-b border-gray-100 p-4 flex items-center justify-between sticky top-0 z-20">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-600">
+            <i class="fa-solid fa-comment-dots"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-800">ระบบยื่นคำร้อง & บริการสาธารณะ</h1>
+            <p class="text-xs text-gray-500" x-text="getViewTitle()"></p>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Scrollable Area -->
+      <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
+        
+        <!-- DASHBOARD VIEW -->
+        <div x-show="activeView === 'dashboard'" x-transition.opacity>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs text-gray-500 font-bold mb-1">คำร้องทั้งหมด</p><h3 class="text-2xl font-bold text-gray-800" x-text="db.septic.length + db.general.length"></h3></div>
+              <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><i class="fa-solid fa-folder-open"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-4 border-b-4 border-yellow-400 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs text-gray-500 font-bold mb-1">รอดำเนินการ</p><h3 class="text-2xl font-bold text-gray-800" x-text="getPendingCount()"></h3></div>
+              <div class="w-10 h-10 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-500"><i class="fa-solid fa-clock"></i></div>
+            </div>
+            <div class="bg-white rounded-xl p-4 border-b-4 border-green-400 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs text-gray-500 font-bold mb-1">เสร็จสิ้น</p><h3 class="text-2xl font-bold text-gray-800" x-text="getCompletedCount()"></h3></div>
+              <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500"><i class="fa-solid fa-check-circle"></i></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Septic List -->
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-[500px]">
+              <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 class="font-bold text-blue-700 flex items-center gap-2"><i class="fa-solid fa-truck-droplet"></i> คำร้องสูบสิ่งปฏิกูล</h3>
+                <button @click="activeView = 'new_septic'" class="px-3 py-1 bg-blue-600 text-white text-xs rounded-full hover:bg-blue-700"><i class="fa-solid fa-plus mr-1"></i> เพิ่มคำร้อง</button>
+              </div>
+              <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                <template x-for="item in db.septic" :key="item.Req_ID">
+                  <div class="border border-gray-100 rounded-lg p-3 hover:shadow-md cursor-pointer transition-shadow" @click="openDetails(item, 'septic')">
+                    <div class="flex justify-between items-start mb-2">
+                      <div class="font-bold text-sm text-gray-800" x-text="item.Applicant_Name"></div>
+                      <span class="text-[10px] px-2 py-0.5 rounded-full font-bold" :class="getStatusClass(item.Status)" x-text="item.Status"></span>
+                    </div>
+                    <div class="text-xs text-gray-500 flex items-start gap-1 mb-1">
+                      <i class="fa-solid fa-location-dot mt-0.5 w-3 text-center"></i> <span x-text="item.Service_Address"></span>
+                    </div>
+                    <div class="text-xs text-gray-500 flex items-center gap-1">
+                      <i class="fa-regular fa-calendar w-3 text-center"></i> <span x-text="item.Date"></span>
+                    </div>
+                  </div>
+                </template>
+                <div x-show="db.septic.length === 0" class="text-center py-10 text-gray-400">ไม่มีข้อมูลคำร้อง</div>
+              </div>
+            </div>
+
+            <!-- General List -->
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-[500px]">
+              <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 class="font-bold text-purple-700 flex items-center gap-2"><i class="fa-solid fa-file-lines"></i> คำร้องทั่วไป</h3>
+                <button @click="activeView = 'new_general'" class="px-3 py-1 bg-purple-600 text-white text-xs rounded-full hover:bg-purple-700"><i class="fa-solid fa-plus mr-1"></i> เพิ่มคำร้อง</button>
+              </div>
+              <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                <template x-for="item in db.general" :key="item.Req_ID">
+                  <div class="border border-gray-100 rounded-lg p-3 hover:shadow-md cursor-pointer transition-shadow" @click="openDetails(item, 'general')">
+                    <div class="flex justify-between items-start mb-2">
+                      <div class="font-bold text-sm text-gray-800" x-text="item.Subject"></div>
+                      <span class="text-[10px] px-2 py-0.5 rounded-full font-bold" :class="getStatusClass(item.Status)" x-text="item.Status"></span>
+                    </div>
+                    <div class="text-xs text-gray-500 flex items-start gap-1 mb-1">
+                      <i class="fa-solid fa-user mt-0.5 w-3 text-center"></i> <span x-text="item.Applicant_Name"></span>
+                    </div>
+                    <div class="text-xs text-gray-500 flex items-center gap-1">
+                      <i class="fa-regular fa-calendar w-3 text-center"></i> <span x-text="item.Date"></span>
+                    </div>
+                  </div>
+                </template>
+                <div x-show="db.general.length === 0" class="text-center py-10 text-gray-400">ไม่มีข้อมูลคำร้อง</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NEW SEPTIC FORM VIEW -->
+        <div x-show="activeView === 'new_septic'" x-transition.opacity style="display:none;">
+          <div class="max-w-4xl mx-auto bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-gray-100 bg-blue-50 flex justify-between items-center">
+              <h2 class="text-lg font-bold text-blue-800 flex items-center gap-2"><i class="fa-solid fa-truck-droplet"></i> ฟอร์มรับคำร้องขอสูบสิ่งปฏิกูล</h2>
+              <button @click="activeView = 'dashboard'" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            
+            <form @submit.prevent="submitSepticForm" class="p-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">วันที่รับคำร้อง</label>
+                  <input type="date" x-model="septicForm.Date" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                </div>
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">ชื่อผู้รับเรื่อง (เจ้าหน้าที่)</label>
+                  <input type="text" x-model="septicForm.Receiver_Name" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                </div>
+              </div>
+              
+              <h3 class="font-bold text-gray-800 mb-4 pb-2 border-b">ข้อมูลผู้ยื่นคำร้อง</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">ชื่อ-สกุล (นาย/นาง/นางสาว)</label>
+                  <input type="text" x-model="septicForm.Applicant_Name" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                </div>
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">เบอร์โทรศัพท์</label>
+                  <input type="text" x-model="septicForm.Applicant_Phone" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-bold text-gray-700 mb-1">ที่อยู่ผู้ยื่นคำร้อง (บ้านเลขที่ หมู่ที่ ตำบล อำเภอ จังหวัด)</label>
+                  <input type="text" x-model="septicForm.Applicant_Address" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                </div>
+              </div>
+
+              <h3 class="font-bold text-gray-800 mb-4 pb-2 border-b">ข้อมูลสถานที่รับบริการ & ค่าธรรมเนียม</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-bold text-gray-700 mb-1">ที่อยู่สถานที่รับบริการกำจัดสิ่งปฏิกูล</label>
+                  <input type="text" x-model="septicForm.Service_Address" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                </div>
+                
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-bold text-gray-700 mb-2">ปักหมุดพิกัดสถานที่รับบริการ (เพื่อความสะดวกของคนขับรถ)</label>
+                  <div class="mb-2 flex gap-2">
+                    <button type="button" @click="getCurrentLocation('septic')" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200"><i class="fa-solid fa-location-crosshairs mr-1"></i> ดึงตำแหน่งปัจจุบัน</button>
+                    <span class="text-sm text-gray-500 self-center" x-text="septicForm.Lat ? `พิกัด: ${septicForm.Lat}, ${septicForm.Lng}` : 'ยังไม่ได้ปักหมุด'"></span>
+                  </div>
+                  <div id="septicMap" class="map-container border border-gray-300"></div>
+                </div>
+
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-bold text-gray-700 mb-3">อัตราค่าธรรมเนียม (ตามบัญญัติเทศบาล)</label>
+                  <div class="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" x-model="septicForm.Fee_Type" value="ในเขตเทศบาลตำบลบางเป้า" @change="septicForm.Fee_Amount = 250" class="mt-1">
+                      <div>
+                        <div class="font-bold text-sm text-gray-800">ในเขตเทศบาลตำบลบางเป้า</div>
+                        <div class="text-xs text-gray-500">เหมาจ่าย ครั้งละ 250 บาท / บ่อ</div>
+                      </div>
+                    </label>
+                    <label class="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" x-model="septicForm.Fee_Type" value="นอกเขตเทศบาลตำบลบางเป้า (ไม่เกิน 10 กม.)" @change="septicForm.Fee_Amount = 700" class="mt-1">
+                      <div>
+                        <div class="font-bold text-sm text-gray-800">นอกเขตเทศบาลตำบลบางเป้า (ไม่เกิน 10 กม.)</div>
+                        <div class="text-xs text-gray-500">ครั้งละ 700 บาท / 1 บ่อ</div>
+                      </div>
+                    </label>
+                    <label class="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" x-model="septicForm.Fee_Type" value="นอกเขตเทศบาลตำบลบางเป้า (เกิน 10-20 กม.)" @change="septicForm.Fee_Amount = 1000" class="mt-1">
+                      <div>
+                        <div class="font-bold text-sm text-gray-800">นอกเขตเทศบาลตำบลบางเป้า (เกิน 10 กิโลเมตร แต่ไม่เกิน 20 กิโลเมตร)</div>
+                        <div class="text-xs text-gray-500">ครั้งละ 1,000 บาท / 1 บ่อ</div>
+                      </div>
+                    </label>
+                    <label class="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" x-model="septicForm.Fee_Type" value="นอกเขตเทศบาลตำบลบางเป้า (เกิน 20-30 กม.)" @change="septicForm.Fee_Amount = 1300" class="mt-1">
+                      <div>
+                        <div class="font-bold text-sm text-gray-800">นอกเขตเทศบาลตำบลบางเป้า (เกิน 20 กิโลเมตร แต่ไม่เกิน 30 กิโลเมตร)</div>
+                        <div class="text-xs text-gray-500">ครั้งละ 1,300 บาท / 1 บ่อ</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-8 flex justify-end gap-3">
+                <button type="button" @click="activeView = 'dashboard'" class="px-5 py-2.5 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-colors">ยกเลิก</button>
+                <button type="submit" class="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors"><i class="fa-solid fa-save mr-2"></i> บันทึกคำร้อง</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- NEW GENERAL FORM VIEW -->
+        <div x-show="activeView === 'new_general'" x-transition.opacity style="display:none;">
+          <div class="max-w-4xl mx-auto bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-gray-100 bg-purple-50 flex justify-between items-center">
+              <h2 class="text-lg font-bold text-purple-800 flex items-center gap-2"><i class="fa-solid fa-file-lines"></i> ฟอร์มรับคำร้องทั่วไป</h2>
+              <button @click="activeView = 'dashboard'" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            
+            <form @submit.prevent="submitGeneralForm" class="p-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">เรื่องที่ร้องเรียน/คำร้อง</label>
+                  <input type="text" x-model="generalForm.Subject" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" required>
+                </div>
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">วันที่รับคำร้อง</label>
+                  <input type="date" x-model="generalForm.Date" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" required>
+                </div>
+              </div>
+              
+              <h3 class="font-bold text-gray-800 mb-4 pb-2 border-b">ข้อมูลผู้ยื่นคำร้อง</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">ชื่อ-สกุล (นาย/นาง/นางสาว)</label>
+                  <input type="text" x-model="generalForm.Applicant_Name" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" required>
+                </div>
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">เบอร์โทรศัพท์</label>
+                  <input type="text" x-model="generalForm.Applicant_Phone" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" required>
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-sm font-bold text-gray-700 mb-1">ที่อยู่ผู้ยื่นคำร้อง</label>
+                  <input type="text" x-model="generalForm.Applicant_Address" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" required>
+                </div>
+              </div>
+
+              <h3 class="font-bold text-gray-800 mb-4 pb-2 border-b">รายละเอียดความประสงค์</h3>
+              <div class="grid grid-cols-1 gap-6 mb-6">
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-1">ข้าพเจ้ามีความประสงค์... (ระบุรายละเอียด)</label>
+                  <textarea x-model="generalForm.Description" rows="4" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none" required></textarea>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-bold text-gray-700 mb-2">ปักหมุดพิกัดสถานที่เกิดเหตุ/ที่เกี่ยวข้อง (ถ้ามี)</label>
+                  <div class="mb-2 flex gap-2">
+                    <button type="button" @click="getCurrentLocation('general')" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200"><i class="fa-solid fa-location-crosshairs mr-1"></i> ดึงตำแหน่งปัจจุบัน</button>
+                    <span class="text-sm text-gray-500 self-center" x-text="generalForm.Lat ? `พิกัด: ${generalForm.Lat}, ${generalForm.Lng}` : 'ยังไม่ได้ปักหมุด'"></span>
+                  </div>
+                  <div id="generalMap" class="map-container border border-gray-300"></div>
+                </div>
+              </div>
+
+              <div class="mt-8 flex justify-end gap-3">
+                <button type="button" @click="activeView = 'dashboard'" class="px-5 py-2.5 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-colors">ยกเลิก</button>
+                <button type="submit" class="px-5 py-2.5 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 transition-colors"><i class="fa-solid fa-save mr-2"></i> บันทึกคำร้อง</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- SETTINGS VIEW -->
+        <div x-show="activeView === 'settings'" x-transition.opacity style="display:none;">
+          <div class="max-w-4xl mx-auto bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2"><i class="fa-solid fa-users-gear"></i> ตั้งค่าผู้ลงนาม</h2>
+              <button @click="activeView = 'dashboard'" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            
+            <div class="p-6">
+              <div class="mb-6 flex justify-between items-center">
+                <p class="text-sm text-gray-500">จัดการรายชื่อผู้บริหารและเจ้าหน้าที่สำหรับใช้ลงนามในแบบฟอร์มปริ้นท์</p>
+                <button @click="editingExecutive = {ID: '', Name: '', Position: '', Is_Active: 'Yes'}" class="px-4 py-2 bg-gray-800 text-white text-sm font-bold rounded-lg hover:bg-gray-900"><i class="fa-solid fa-plus mr-1"></i> เพิ่มผู้ลงนาม</button>
+              </div>
+              
+              <!-- Form -->
+              <div x-show="editingExecutive !== null" class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
+                <form @submit.prevent="saveExecutive" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">ชื่อ-สกุล</label>
+                    <input type="text" x-model="editingExecutive.Name" class="w-full border border-gray-300 rounded p-2 text-sm" required>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">ตำแหน่ง (ระบุให้ครบถ้วน)</label>
+                    <input type="text" x-model="editingExecutive.Position" class="w-full border border-gray-300 rounded p-2 text-sm" required>
+                  </div>
+                  <div class="md:col-span-2 flex justify-end gap-2 mt-2">
+                    <button type="button" @click="editingExecutive = null" class="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded">ยกเลิก</button>
+                    <button type="submit" class="px-3 py-1.5 bg-green-600 text-white text-sm font-bold rounded">บันทึก</button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- List -->
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                  <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                    <tr>
+                      <th class="px-4 py-3">ชื่อ-สกุล</th>
+                      <th class="px-4 py-3">ตำแหน่ง</th>
+                      <th class="px-4 py-3 w-20 text-center">สถานะ</th>
+                      <th class="px-4 py-3 w-20 text-center">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="ex in db.executives" :key="ex.ID">
+                      <tr class="border-b">
+                        <td class="px-4 py-3 font-bold" x-text="ex.Name"></td>
+                        <td class="px-4 py-3 text-gray-600" x-text="ex.Position"></td>
+                        <td class="px-4 py-3 text-center">
+                          <span class="px-2 py-1 text-[10px] font-bold rounded-full" :class="ex.Is_Active === 'Yes' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="ex.Is_Active"></span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                          <button @click="editingExecutive = JSON.parse(JSON.stringify(ex))" class="text-blue-600 hover:text-blue-800"><i class="fa-solid fa-edit"></i></button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DETAILS / PRINT MODAL -->
+        <div x-show="activeView === 'details'" x-transition.opacity style="display:none;">
+          <div class="max-w-5xl mx-auto bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[80vh]">
+            <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">รายละเอียดคำร้อง <span class="text-sm font-normal text-gray-500" x-text="selectedItem ? selectedItem.Req_ID : ''"></span></h2>
+              <button @click="activeView = 'dashboard'" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-6 flex gap-6" x-if="selectedItem">
+              <div class="flex-1 space-y-6">
+                <!-- Data display -->
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 class="font-bold text-gray-800 mb-3 border-b pb-2">ข้อมูลคำร้อง</h3>
+                  <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><span class="text-gray-500">วันที่:</span> <span class="font-bold" x-text="selectedItem?.Date"></span></div>
+                    <div x-show="selectedItemType === 'general'"><span class="text-gray-500">เรื่อง:</span> <span class="font-bold" x-text="selectedItem?.Subject"></span></div>
+                    <div><span class="text-gray-500">ผู้ยื่นคำร้อง:</span> <span class="font-bold" x-text="selectedItem?.Applicant_Name"></span></div>
+                    <div><span class="text-gray-500">เบอร์โทรศัพท์:</span> <span class="font-bold" x-text="selectedItem?.Applicant_Phone"></span></div>
+                    <div class="col-span-2"><span class="text-gray-500">ที่อยู่ผู้ยื่น:</span> <span class="font-bold" x-text="selectedItem?.Applicant_Address"></span></div>
+                    <div class="col-span-2" x-show="selectedItemType === 'septic'"><span class="text-gray-500">สถานที่รับบริการ:</span> <span class="font-bold text-blue-600" x-text="selectedItem?.Service_Address"></span></div>
+                    <div class="col-span-2" x-show="selectedItemType === 'septic'"><span class="text-gray-500">อัตราค่าธรรมเนียม:</span> <span class="font-bold text-red-600" x-text="selectedItem?.Fee_Type + ' (' + selectedItem?.Fee_Amount + ' บาท)'"></span></div>
+                    <div class="col-span-2" x-show="selectedItemType === 'general'"><span class="text-gray-500">ความประสงค์:</span> <p class="font-bold mt-1 bg-white p-2 border rounded" x-text="selectedItem?.Description"></p></div>
+                    <div class="col-span-2" x-show="selectedItem?.Lat"><span class="text-gray-500">พิกัด GPS:</span> <a :href="'https://maps.google.com/?q=' + selectedItem?.Lat + ',' + selectedItem?.Lng" target="_blank" class="font-bold text-blue-500 underline"><i class="fa-solid fa-map-location-dot"></i> ดูบน Google Maps (<span x-text="selectedItem?.Lat + ',' + selectedItem?.Lng"></span>)</a></div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Action Sidebar -->
+              <div class="w-80 space-y-4">
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                  <h3 class="font-bold text-blue-800 mb-3"><i class="fa-solid fa-print"></i> พิมพ์แบบฟอร์มกระดาษ</h3>
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-xs font-bold text-gray-700 mb-1">ผอ.กองสาธารณสุขฯ</label>
+                      <select x-model="printConfig.director" class="w-full border border-gray-300 rounded p-2 text-sm bg-white">
+                        <option value="">-- เลือกผู้ลงนาม --</option>
+                        <template x-for="ex in db.executives.filter(e => e.Is_Active === 'Yes')" :key="ex.ID">
+                          <option :value="ex.Name" x-text="ex.Name + ' (' + ex.Position + ')'"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-gray-700 mb-1">ปลัดเทศบาล</label>
+                      <select x-model="printConfig.clerk" class="w-full border border-gray-300 rounded p-2 text-sm bg-white">
+                        <option value="">-- เลือกผู้ลงนาม --</option>
+                        <template x-for="ex in db.executives.filter(e => e.Is_Active === 'Yes')" :key="ex.ID">
+                          <option :value="ex.Name" x-text="ex.Name + ' (' + ex.Position + ')'"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-gray-700 mb-1">นายกเทศมนตรี / ผู้รับมอบอำนาจ</label>
+                      <select x-model="printConfig.mayor" class="w-full border border-gray-300 rounded p-2 text-sm bg-white">
+                        <option value="">-- เลือกผู้ลงนาม --</option>
+                        <template x-for="ex in db.executives.filter(e => e.Is_Active === 'Yes')" :key="ex.ID">
+                          <option :value="ex.Name" x-text="ex.Name + ' (' + ex.Position + ')'"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <button @click="openPrintPreview()" class="w-full py-2 bg-blue-600 text-white font-bold rounded shadow hover:bg-blue-700"><i class="fa-solid fa-print mr-1"></i> ปริ้นท์ฟอร์ม</button>
+                    <button @click="exportToWord()" class="w-full py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700 mt-2"><i class="fa-solid fa-file-word mr-1"></i> ส่งออกเป็นไฟล์ Word</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+  
+  <script>
+    // Include main app logic here
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('requestApp', () => ({
+        isLoading: true,
+        activeView: 'dashboard', // dashboard, new_septic, new_general, details, print
+        db: { septic: [], general: [], executives: [] },
+        
+        toast: { show: false, title: '', message: '', type: 'success' },
+        
+        // Maps instances
+        septicMapInstance: null,
+        septicMarker: null,
+        generalMapInstance: null,
+        generalMarker: null,
+        
+        septicForm: {
+          Date: '', Receiver_Name: '', Applicant_Name: '', Applicant_Phone: '', Applicant_Address: '', Service_Address: '', Fee_Type: 'ในเขตเทศบาลตำบลบางเป้า', Fee_Amount: 250, Lat: '', Lng: ''
+        },
+        
+        generalForm: {
+          Subject: '', Date: '', Receiver_Name: '', Applicant_Name: '', Applicant_Phone: '', Applicant_Address: '', Description: '', Lat: '', Lng: ''
+        },
+        
+        init() {
+          this.loadData();
+          
+          // Watch for tab changes from dashboard
+          window.addEventListener('storage', (e) => {
+            if (e.key === 'service_tab_action') {
+              const action = e.newValue.split('_')[0];
+              if (action === 'new') {
+                this.activeView = e.newValue.split('_')[0] + '_' + e.newValue.split('_')[1];
+              } else {
+                this.activeView = action;
+              }
+            }
+          });
+          
+          this.$watch('activeView', (value) => {
+            if (value === 'new_septic') {
+              setTimeout(() => this.initMap('septic'), 100);
+            } else if (value === 'new_general') {
+              setTimeout(() => this.initMap('general'), 100);
+            }
+          });
+        },
+        
+        loadData() {
+          this.isLoading = true;
+          google.script.run
+            .withSuccessHandler(data => {
+              this.db = data;
+              this.isLoading = false;
+            })
+            .withFailureHandler(err => {
+              this.showToast('ข้อผิดพลาด', err.message, 'error');
+              this.isLoading = false;
+            })
+            .req_getInitialData();
+        },
+        
+        selectedItem: null,
+        selectedItemType: '',
+        editingExecutive: null,
+        printConfig: { director: '', clerk: '', mayor: '' },
+        
+        openDetails(item, type) {
+          this.selectedItem = item;
+          this.selectedItemType = type;
+          this.activeView = 'details';
+          
+          if (this.db.executives.length > 0) {
+            const getEx = (pos) => this.db.executives.find(e => e.Position.includes(pos) && e.Is_Active === 'Yes');
+            const dir = getEx('ผู้อำนวย');
+            const clerk = getEx('ปลัด');
+            const mayor = getEx('นายก');
+            this.printConfig.director = dir ? dir.Name : '';
+            this.printConfig.clerk = clerk ? clerk.Name : '';
+            this.printConfig.mayor = mayor ? mayor.Name : '';
+          }
+        },
+        
+        saveExecutive() {
+          this.isLoading = true;
+          google.script.run
+            .withSuccessHandler(res => {
+              this.db = res.data;
+              this.showToast('สำเร็จ', res.message, 'success');
+              this.editingExecutive = null;
+              this.isLoading = false;
+            })
+            .withFailureHandler(err => {
+              this.showToast('ข้อผิดพลาด', err.message, 'error');
+              this.isLoading = false;
+            })
+            .req_saveExecutive(this.editingExecutive);
+        },
+        
+        openPrintPreview() {
+          alert('ฟังก์ชันสร้างเอกสารหน้าตาเหมือน A4 เพื่อพิมพ์ (Phase 2) จะเปิดในหน้าต่างใหม่พร้อม Layout ที่จัดเรียงเหมือนกระดาษทุกประการครับ');
+        },
+        
+        exportToWord() {
+          alert('ฟังก์ชันส่งออกเป็นไฟล์ Word (Phase 2) อยู่ในระหว่างการพัฒนาครับ');
+        },
+        
+        showToast(title, message, type = 'success') {
+          this.toast = { show: true, title, message, type };
+          setTimeout(() => this.toast.show = false, 3000);
+        },
+        
+        getViewTitle() {
+          switch(this.activeView) {
+            case 'dashboard': return 'แดชบอร์ดภาพรวม';
+            case 'new_septic': return 'สร้างคำร้องขอสูบสิ่งปฏิกูล';
+            case 'new_general': return 'สร้างคำร้องทั่วไป';
+            default: return '';
+          }
+        },
+        
+        getPendingCount() {
+          return this.db.septic.filter(x => x.Status === 'Pending').length + 
+                 this.db.general.filter(x => x.Status === 'Pending').length;
+        },
+        
+        getCompletedCount() {
+          return this.db.septic.filter(x => x.Status === 'Completed').length + 
+                 this.db.general.filter(x => x.Status === 'Completed').length;
+        },
+        
+        getStatusClass(status) {
+          if (status === 'Pending') return 'bg-yellow-100 text-yellow-800';
+          if (status === 'Completed') return 'bg-green-100 text-green-800';
+          return 'bg-gray-100 text-gray-800';
+        },
+        
+        // Map Functions
+        initMap(type) {
+          const mapId = type + 'Map';
+          const defaultPos = [7.4045, 99.5215]; // Kantang area roughly
+          
+          if (type === 'septic') {
+            if (!this.septicMapInstance) {
+              this.septicMapInstance = L.map(mapId).setView(defaultPos, 13);
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.septicMapInstance);
+              this.septicMapInstance.on('click', (e) => {
+                const {lat, lng} = e.latlng;
+                this.setMarker('septic', lat, lng);
+              });
+            } else {
+              this.septicMapInstance.invalidateSize();
+            }
+          } else {
+            if (!this.generalMapInstance) {
+              this.generalMapInstance = L.map(mapId).setView(defaultPos, 13);
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.generalMapInstance);
+              this.generalMapInstance.on('click', (e) => {
+                const {lat, lng} = e.latlng;
+                this.setMarker('general', lat, lng);
+              });
+            } else {
+              this.generalMapInstance.invalidateSize();
+            }
+          }
+        },
+        
+        setMarker(type, lat, lng) {
+          if (type === 'septic') {
+            if (this.septicMarker) this.septicMapInstance.removeLayer(this.septicMarker);
+            this.septicMarker = L.marker([lat, lng]).addTo(this.septicMapInstance);
+            this.septicForm.Lat = lat.toFixed(6);
+            this.septicForm.Lng = lng.toFixed(6);
+          } else {
+            if (this.generalMarker) this.generalMapInstance.removeLayer(this.generalMarker);
+            this.generalMarker = L.marker([lat, lng]).addTo(this.generalMapInstance);
+            this.generalForm.Lat = lat.toFixed(6);
+            this.generalForm.Lng = lng.toFixed(6);
+          }
+        },
+        
+        getCurrentLocation(type) {
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                this.setMarker(type, lat, lng);
+                if (type === 'septic') {
+                  this.septicMapInstance.setView([lat, lng], 16);
+                } else {
+                  this.generalMapInstance.setView([lat, lng], 16);
+                }
+              },
+              (error) => {
+                this.showToast('ข้อผิดพลาด', 'ไม่สามารถดึงตำแหน่งได้ กรุณาปักหมุดเองบนแผนที่', 'error');
+              },
+              { enableHighAccuracy: true }
+            );
+          }
+        },
+        
+        // Submissions
+        submitSepticForm() {
+          this.isLoading = true;
+          google.script.run
+            .withSuccessHandler(res => {
+              this.db = res.data;
+              this.showToast('สำเร็จ', res.message, 'success');
+              this.activeView = 'dashboard';
+              this.isLoading = false;
+              // Reset form
+              this.septicForm = { Date: '', Receiver_Name: '', Applicant_Name: '', Applicant_Phone: '', Applicant_Address: '', Service_Address: '', Fee_Type: 'ในเขตเทศบาลตำบลบางเป้า', Fee_Amount: 250, Lat: '', Lng: '' };
+              if (this.septicMarker) this.septicMapInstance.removeLayer(this.septicMarker);
+            })
+            .withFailureHandler(err => {
+              this.showToast('ข้อผิดพลาด', err.message, 'error');
+              this.isLoading = false;
+            })
+            .req_saveSepticRequest(this.septicForm);
+        },
+        
+        submitGeneralForm() {
+          this.isLoading = true;
+          google.script.run
+            .withSuccessHandler(res => {
+              this.db = res.data;
+              this.showToast('สำเร็จ', res.message, 'success');
+              this.activeView = 'dashboard';
+              this.isLoading = false;
+              // Reset form
+              this.generalForm = { Subject: '', Date: '', Receiver_Name: '', Applicant_Name: '', Applicant_Phone: '', Applicant_Address: '', Description: '', Lat: '', Lng: '' };
+              if (this.generalMarker) this.generalMapInstance.removeLayer(this.generalMarker);
+            })
+            .withFailureHandler(err => {
+              this.showToast('ข้อผิดพลาด', err.message, 'error');
+              this.isLoading = false;
+            })
+            .req_saveGeneralRequest(this.generalForm);
+        }
+        
+      }));
+    });
+  </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ export const firebaseConfig = {
   apiKey: "AIzaSyB6Z6Z_sE4eH6tszOhwT_YPP_SjjyYsfk8",
   authDomain: "bangpao-public-health.firebaseapp.com",
   projectId: "bangpao-public-health",
-  storageBucket: "bangpao-public-health.firebasestorage.app",
+  storageBucket: "bangpao-firebasestorage.app",
   messagingSenderId: "720645763738",
   appId: "1:720645763738:web:09b1c21c715bc54187a523",
   measurementId: "G-0EHF4B50PK"

@@ -172,7 +172,21 @@ export function getStoredLtc(): LtcPatient[] {
     const raw = localStorage.getItem(STORAGE_KEYS.LTC);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure standard patients like LTC-6900 (นายเอกชัย สุขเกษม / นายเอ) are always available
+        const existingIds = new Set(parsed.map((p: LtcPatient) => p.id));
+        const missingDefaults = INITIAL_LTC_PATIENTS.filter((p) => !existingIds.has(p.id));
+        const combined = missingDefaults.length > 0 ? [...missingDefaults, ...parsed] : parsed;
+        const normalized = combined.map((p: LtcPatient) => {
+          const matched = INITIAL_LTC_PATIENTS.find((init) => init.id === p.id);
+          return {
+            ...p,
+            createdAt: p.createdAt || matched?.createdAt || p.lastVisitDate || '2026-10-01',
+          };
+        });
+        localStorage.setItem(STORAGE_KEYS.LTC, JSON.stringify(normalized));
+        return normalized;
+      }
     }
   } catch (e) {
     console.error(e);

@@ -1,13 +1,37 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Prompt', 'Sarabun', 'Noto Sans Thai', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 @layer base {
   @font-face {
     font-family: 'TH Sarabun PSK';
-    src: local('TH Sarabun PSK'), local('THSarabunPSK');
+    src: local('TH Sarabun PSK'), local('THSarabunPSK'), local('TH Sarabun New'), local('THSarabunNew'),
+         url('https://cdn.jsdelivr.net/gh/lazywasabi/thai-web-fonts@7/fonts/THSarabunNew/THSarabunNew.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'TH Sarabun PSK';
+    src: local('TH Sarabun PSK Bold'), local('THSarabunPSK-Bold'), local('TH Sarabun New Bold'), local('THSarabunNew-Bold'),
+         url('https://cdn.jsdelivr.net/gh/lazywasabi/thai-web-fonts@7/fonts/THSarabunNew/THSarabunNew-Bold.woff2') format('woff2');
+    font-weight: bold;
+    font-style: normal;
   }
   @font-face {
     font-family: 'TH Sarabun New';
-    src: local('TH Sarabun New'), local('THSarabunNew');
+    src: local('TH Sarabun New'), local('THSarabunNew'), local('TH Sarabun PSK'), local('THSarabunPSK'),
+         url('https://cdn.jsdelivr.net/gh/lazywasabi/thai-web-fonts@7/fonts/THSarabunNew/THSarabunNew.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'TH Sarabun New';
+    src: local('TH Sarabun New Bold'), local('THSarabunNew-Bold'), local('TH Sarabun PSK Bold'), local('THSarabunPSK-Bold'),
+         url('https://cdn.jsdelivr.net/gh/lazywasabi/thai-web-fonts@7/fonts/THSarabunNew/THSarabunNew-Bold.woff2') format('woff2');
+    font-weight: bold;
+    font-style: normal;
   }
 
   body {
@@ -30,6 +54,39 @@
   width: 6px;
   height: 6px;
 }
+
+/* Fix Tailwind v4 Preflight overriding Leaflet map tiles & markers */
+.leaflet-container img,
+.leaflet-pane img,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+  max-width: none !important;
+  max-height: none !important;
+}
+.leaflet-container .leaflet-tile {
+  width: 256px !important;
+  height: 256px !important;
+}
+.leaflet-tile-loaded {
+  opacity: 1 !important;
+  visibility: inherit !important;
+}
+.leaflet-tooltip.ltc-pin-tooltip {
+  background: rgba(15, 23, 42, 0.92);
+  color: #ffffff;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 8px;
+  padding: 2px 7px;
+  font-family: 'Prompt', 'Sarabun', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+.leaflet-tooltip.ltc-pin-tooltip::before {
+  border-top-color: rgba(15, 23, 42, 0.92);
+}
 ::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -43,23 +100,286 @@
 
 @media print {
   @page {
-    margin: 8mm;
-    size: auto;
+    size: A4 portrait;
+    margin: 0;
   }
 
   body {
     background: white !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
     font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  header, footer, nav, button {
+  header, footer, nav, button, .no-print {
     display: none !important;
   }
 
   .print\:hidden {
     display: none !important;
   }
+
+  .a4-sheet {
+    margin: 0 !important;
+    box-shadow: none !important;
+    width: 21cm !important;
+    height: 29.7cm !important;
+    min-height: 29.7cm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    box-sizing: border-box !important;
+  }
 }
+
+/* Official Government Document Styling (แบบฟอร์มใบอนุญาตมาตรฐาน) */
+.a4-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  height: 297mm;
+  background-color: #ffffff;
+  color: #000000;
+  font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif;
+  font-size: 16pt;
+  line-height: 6.45mm;
+  padding: 15.0mm 17.5mm 9.0mm 25.4mm;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15);
+}
+
+.a4-sheet-back {
+  padding: 28.5mm 10.9mm 10mm 14.1mm !important;
+}
+
+.form-row {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  height: 6.45mm;
+  line-height: 6.45mm;
+  white-space: nowrap;
+}
+
+.form-row span {
+  flex-shrink: 0;
+}
+
+.form-label {
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif;
+  color: #000;
+}
+
+.dot-field {
+  display: inline-block;
+  border-bottom: 1.5px dotted #1e293b;
+  text-align: center;
+  padding: 0 4px;
+  height: 5.5mm;
+  line-height: 5.5mm;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif;
+  color: #000;
+}
+
+.dot-field-left {
+  display: inline-block;
+  border-bottom: 1.5px dotted #1e293b;
+  text-align: left;
+  padding: 0 4px;
+  height: 5.5mm;
+  line-height: 5.5mm;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif;
+  color: #000;
+}
+
+.dot-flex {
+  flex: 1 1 0% !important;
+  min-width: 5mm;
+  flex-shrink: 1 !important;
+}
+
+.fee-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 16pt;
+  line-height: 1.15;
+  font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif;
+}
+
+.fee-table th, .fee-table td {
+  border: 1px solid #000;
+  padding: 0 3px;
+  text-align: center;
+  height: 6.5mm;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.dot-field:empty::after,
+.dot-field-left:empty::after {
+  content: "\00a0";
+  visibility: hidden;
+}
+
+/* ================= GAS Version 336 Official Typography ================= */
+.fill {
+  border-bottom: 1.5px dotted #1e293b;
+  display: inline-block;
+  text-align: center;
+  padding: 0 4px;
+  font-weight: normal;
+  vertical-align: bottom;
+  margin-bottom: -2px;
+}
+.indent {
+  text-indent: 1.5cm;
+}
+/* ================= Official Image 2 Exact Typography ================= */
+.official-row {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  min-height: 7.0mm;
+  line-height: 7.0mm;
+}
+.official-row > span {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.fill-dot {
+  border-bottom: 1.5px dotted #1e293b;
+  display: inline-block;
+  text-align: center;
+  padding: 0 5px;
+  font-weight: bold;
+  vertical-align: bottom;
+  height: 6.0mm;
+  line-height: 6.0mm;
+  outline: none;
+  white-space: nowrap;
+}
+.fill-dot:empty::after {
+  content: "\00a0";
+  visibility: hidden;
+}
+.fill-dot:focus, .fill-dot-left:focus {
+  background-color: #fef9c3;
+  border-bottom: 1.5px solid #2563eb !important;
+}
+.fill-dot-left {
+  border-bottom: 1.5px dotted #1e293b;
+  display: inline-block;
+  text-align: left;
+  padding: 0 5px;
+  font-weight: bold;
+  vertical-align: bottom;
+  height: 6.0mm;
+  line-height: 6.0mm;
+  outline: none;
+  white-space: nowrap;
+}
+.fill-dot-left:empty::after {
+  content: "\00a0";
+  visibility: hidden;
+}
+.fill-grow {
+  flex: 1 1 0% !important;
+  flex-shrink: 1 !important;
+}
+
+/* Underline style modifiers */
+.underline-dotted .fill-dot,
+.underline-dotted .fill-dot-left {
+  border-bottom: 1.5px dotted #1e293b;
+}
+.underline-dashed .fill-dot,
+.underline-dashed .fill-dot-left {
+  border-bottom: 1.2px dashed #334155;
+}
+.underline-solid .fill-dot,
+.underline-solid .fill-dot-left {
+  border-bottom: 1px solid #000000;
+}
+.underline-none .fill-dot,
+.underline-none .fill-dot-left {
+  border-bottom: 1px solid transparent;
+}
+
+.data-weight-normal .fill-dot,
+.data-weight-normal .fill-dot-left {
+  font-weight: normal !important;
+}
+
+/* MS Word-like Editable Canvas Styling */
+[contenteditable="true"] {
+  outline: none;
+  transition: background-color 0.15s, outline 0.15s;
+}
+.word-edit-mode [contenteditable="true"]:hover {
+  outline: 1px dashed rgba(59, 130, 246, 0.45);
+  outline-offset: 1px;
+  cursor: text;
+}
+.word-edit-mode [contenteditable="true"]:focus {
+  outline: 1.5px solid #2563eb !important;
+  outline-offset: 1px;
+  background-color: #eff6ff !important;
+}
+
+@media print {
+  .word-edit-mode [contenteditable="true"]:hover,
+  .word-edit-mode [contenteditable="true"]:focus {
+    outline: none !important;
+    background-color: transparent !important;
+  }
+}
+
+/* Smart Command HUD & Digital Clock Utilities */
+.font-mono-clock {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.bg-cyber-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(16, 185, 129, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(16, 185, 129, 0.07) 1px, transparent 1px);
+}
+.clock-glow {
+  text-shadow: 0 0 20px rgba(52, 211, 153, 0.45), 0 0 8px rgba(16, 185, 129, 0.3);
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  80%, 100% { transform: scale(2.2); opacity: 0; }
+}
+.pulse-dot::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background-color: #10b981;
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+.animate-float {
+  animation: float-slow 5s ease-in-out infinite;
+}
+
+
+
+
+

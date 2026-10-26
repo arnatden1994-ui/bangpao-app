@@ -146,13 +146,13 @@ export const PrintCertificateModal: React.FC<PrintCertificateModalProps> = ({
               {/* Right Signature */}
               <div className="text-center space-y-1 w-56">
                 <div className="font-serif italic text-base text-slate-800 border-b border-slate-400 pb-1 w-44 mx-auto">
-                  {establishment.inspectorName ? establishment.inspectorName.split(' ')[0] : 'พิมลภัส ศรีสุข'}
+                  {establishment.inspectorName ? establishment.inspectorName.split(' ')[0] : 'อานัส เด่นหมาด'}
                 </div>
                 <div className="text-[11px] font-bold text-slate-800">
-                  ( {establishment.inspectorName || 'น.ส. พิมลภัส ศรีสุข'} )
+                  ( {establishment.inspectorName || 'พันจ่าเอกอานัส เด่นหมาด'} )
                 </div>
                 <div className="text-[10px] text-slate-500">
-                  นายตรวจสุขาภิบาล / เจ้าพนักงานสาธารณสุข
+                  นายตรวจ / เจ้าพนักงานสาธารณสุขชำนาญงาน
                 </div>
               </div>
             </div>

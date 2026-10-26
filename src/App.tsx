@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -80,6 +80,7 @@ import { OfficialInspectionForm } from './components/OfficialInspectionForm.tsx'
 import { LicensePostApprovalDashboard } from './components/LicensePostApprovalDashboard.tsx';
 import { PrintReportOptionsModal } from './components/PrintReportOptionsModal.tsx';
 import { PrintLicenseOptionsModal } from './components/PrintLicenseOptionsModal.tsx';
+import { PrintOfficialLicenseModal } from './components/PrintOfficialLicenseModal.tsx';
 import { EditLicenseModal } from './components/EditLicenseModal.tsx';
 import { generateLicenseHtml, printHtmlInNewWindow } from './services/officialDocGenerator.ts';
 import {
@@ -112,27 +113,21 @@ import {
   NewEquipmentLoanModal,
 } from './components/PublicHealthModals.tsx';
 import { FirebaseSyncModal } from './components/FirebaseSyncModal.tsx';
-import { subscribeCollection, COLLECTIONS } from './services/firebaseService.ts';
+import {
+  subscribeCollection,
+  COLLECTIONS,
+  saveToFirestore,
+  deleteFromFirestore,
+  saveSignerSettingsToFirestore,
+  loadSignerSettingsFromFirestore,
+} from './services/firebaseService.ts';
 
 import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 
 export default function App() {
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
-  // Current logged in officer (Default: น.ส. พิมลภัส ศรีสุข / นายตรวจ ตามคำสั่งผู้ใช้งาน)
-  const [currentUser, setCurrentUserState] = useState<User>(() => {
-    return {
-      id: 'USR-002',
-      username: 'inspector',
-      fullName: 'น.ส. พิมลภัส ศรีสุข',
-      email: 'pimonpat.sanitation@gov.th',
-      role: 'inspector',
-      roleTitle: 'นายตรวจ / เจ้าพนักงานสาธารณสุข',
-      department: 'กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า',
-      phone: '086-444-3322',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      createdAt: '2026-01-05T09:00:00Z',
-    };
-  });
+  // Current logged in officer (Default: พันจ่าเอกอานัส เด่นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
+  const [currentUser, setCurrentUserState] = useState<User>(() => getCurrentUser());
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   // Licenses matching Image 6 (36 items)
@@ -172,18 +167,28 @@ export default function App() {
 
   // Sub-tabs for each of the 6 modules
   const [hazardousSubTab, setHazardousSubTab] = useState<'dashboard' | 'form'>('dashboard');
+  const [inspectionFormResetKey, setInspectionFormResetKey] = useState(0);
   const [nhsoLtcSubTab, setNhsoLtcSubTab] = useState<'route' | 'register' | 'inventory' | 'nhso'>('route');
-  const [equipmentSubTab, setEquipmentSubTab] = useState<'loans' | 'register' | 'inventory'>('loans');
-  const [petitionsSubTab, setPetitionsSubTab] = useState<'general' | 'sewage' | 'print' | 'tracking'>('general');
+  const [equipmentSubTab, setEquipmentSubTab] = useState<'route' | 'register' | 'inventory' | 'loans' | 'map'>('route');
+  const [petitionsSubTab, setPetitionsSubTab] = useState<'dashboard' | 'form'>('dashboard');
   const [settingsSubTab, setSettingsSubTab] = useState<'signers' | 'users' | 'approvers' | 'sheets'>('signers');
 
   const handleSidebarNavigate = (tab: MainNavTab, sub?: string) => {
     setCurrentTab(tab);
     if (sub) {
-      if (tab === 'hazardous') setHazardousSubTab((sub as 'dashboard' | 'form') || 'dashboard');
+      if (tab === 'hazardous') {
+        setHazardousSubTab((sub as 'dashboard' | 'form') || 'dashboard');
+        if (sub === 'form') {
+          setSelectedLicenseForInspectionEdit(null);
+          setInspectionFormResetKey((prev) => prev + 1);
+        }
+      }
       else if (tab === 'nhso_ltc') setNhsoLtcSubTab(sub as any);
       else if (tab === 'equipment') setEquipmentSubTab(sub as any);
-      else if (tab === 'petitions') setPetitionsSubTab(sub as any);
+      else if (tab === 'petitions') {
+        const normSub = (sub === 'form' || sub === 'sewage' || sub === 'print') ? 'form' : 'dashboard';
+        setPetitionsSubTab(normSub as any);
+      }
       else if (tab === 'settings') setSettingsSubTab(sub as any);
     }
   };
@@ -193,19 +198,20 @@ export default function App() {
       if (hazardousSubTab === 'dashboard') return '📊 แดชบอร์ดติดตามผลอนุมัติ (Post-Approval)';
       if (hazardousSubTab === 'form') return '📝 แบบฟอร์มตรวจประเมินสุขลักษณะ (3 ขั้นตอน)';
     } else if (currentTab === 'nhso_ltc') {
-      if (nhsoLtcSubTab === 'route') return '🗺️ ระบบนำทางแจกจ่ายของ';
-      if (nhsoLtcSubTab === 'register') return '📝 ลงทะเบียนผู้ป่วย LTC';
-      if (nhsoLtcSubTab === 'inventory') return '📦 คลังอุปกรณ์ LTC';
-      if (nhsoLtcSubTab === 'nhso') return '🏥 โครงการ สปสช.';
+      if (nhsoLtcSubTab === 'route') return '📊 แดชบอร์ดติดตาม';
+      if (nhsoLtcSubTab === 'register') return '📝 ลงทะเบียนผู้มีภาวะพึ่งพิง';
+      if (nhsoLtcSubTab === 'inventory') return '📦 คลังอุปกรณ์';
+      if (nhsoLtcSubTab === 'nhso') return '🏥 โครงการ สปสช. (กองทุน)';
+    } else if (currentTab === 'nhso') {
+      return '🏥 กองทุนหลักประกันสุขภาพตำบลบางเป้า (กปท.)';
     } else if (currentTab === 'equipment') {
-      if (equipmentSubTab === 'loans') return '🔄 ระบบยืม-คืน & สัญญาขอยืม A4';
-      if (equipmentSubTab === 'register') return '📝 ลงทะเบียนผู้ยืม';
-      if (equipmentSubTab === 'inventory') return '🦼 คลังอุปกรณ์การแพทย์';
+      if (equipmentSubTab === 'route' || equipmentSubTab === 'loans' || equipmentSubTab === 'map') return '📊 แดชบอร์ดติดตาม (รอบส่ง/ยืม-คืน)';
+      if (equipmentSubTab === 'register') return '📝 ลงทะเบียนขอยืมอุปกรณ์';
+      if (equipmentSubTab === 'inventory') return '📦 คลังอุปกรณ์การแพทย์';
+
     } else if (currentTab === 'petitions') {
-      if (petitionsSubTab === 'general') return '📑 คำร้องทั่วไป & เหตุรำคาญ';
-      if (petitionsSubTab === 'sewage') return '🚛 คำร้องขอดูดส้วม / สิ่งปฏิกูล';
-      if (petitionsSubTab === 'print') return '🖨️ พิมพ์เสนอผู้บริหาร (A4 ตราครุฑ)';
-      if (petitionsSubTab === 'tracking') return '🔍 ติดตามผลคำร้อง';
+      if (petitionsSubTab === 'dashboard' || petitionsSubTab === 'general') return '📊 1. แดชบอร์ดติดตามคำร้อง';
+      if (petitionsSubTab === 'form' || petitionsSubTab === 'sewage' || petitionsSubTab === 'print' || petitionsSubTab === 'tracking') return '📝 2. แบบฟอร์มคำร้อง';
     } else if (currentTab === 'settings') {
       if (settingsSubTab === 'signers') return '✍️ ตั้งค่าผู้เซ็นเอกสารทุกระบบ';
       if (settingsSubTab === 'users') return '👤 ทะเบียนผู้ใช้งาน & สลับสิทธิ์';
@@ -245,6 +251,7 @@ export default function App() {
   const [selectedPetitionForA4Print, setSelectedPetitionForA4Print] = useState<PublicPetition | null>(null);
 
   const [selectedLicenseForOfficialDoc, setSelectedLicenseForOfficialDoc] = useState<LicenseRecord | null>(null);
+  const [officialLicenseModalOpen, setOfficialLicenseModalOpen] = useState(false);
   const [selectedLicenseForOfficialReport, setSelectedLicenseForOfficialReport] = useState<LicenseRecord | null>(null);
 
   const [equipmentLoanModalOpen, setEquipmentLoanModalOpen] = useState(false);
@@ -326,10 +333,28 @@ export default function App() {
     }
   }, [signerSettings]);
 
-  // Real-time synchronization from Cloud Firestore
+  // Load signer settings from Firestore if available
+  useEffect(() => {
+    loadSignerSettingsFromFirestore().then((loaded) => {
+      if (loaded && loaded.directorName && loaded.mayorName) {
+        setSignerSettings(loaded);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Real-time synchronization from Cloud Firestore for all 5 core systems
   useEffect(() => {
     const unsubLicenses = subscribeCollection<LicenseRecord>(COLLECTIONS.LICENSES, (items) => {
       if (items && items.length > 0) setLicenses(items);
+    });
+    const unsubEstablishments = subscribeCollection<Establishment>(COLLECTIONS.ESTABLISHMENTS, (items) => {
+      if (items && items.length > 0) setEstablishments(items);
+    });
+    const unsubHazardous = subscribeCollection<HazardousBusiness>(COLLECTIONS.HAZARDOUS, (items) => {
+      if (items && items.length > 0) setHazardousBusinesses(items);
+    });
+    const unsubInspections = subscribeCollection<InspectionRecord>(COLLECTIONS.INSPECTIONS, (items) => {
+      if (items && items.length > 0) setInspections(items);
     });
     const unsubPetitions = subscribeCollection<PublicPetition>(COLLECTIONS.PETITIONS, (items) => {
       if (items && items.length > 0) setPetitions(items);
@@ -343,13 +368,20 @@ export default function App() {
     const unsubNhso = subscribeCollection<NhsoProject>(COLLECTIONS.NHSO, (items) => {
       if (items && items.length > 0) setNhsoProjects(items);
     });
+    const unsubLtc = subscribeCollection<LtcPatient>(COLLECTIONS.LTC, (items) => {
+      if (items && items.length > 0) setLtcPatients(items);
+    });
 
     return () => {
       unsubLicenses();
+      unsubEstablishments();
+      unsubHazardous();
+      unsubInspections();
       unsubPetitions();
       unsubEquipment();
       unsubLoans();
       unsubNhso();
+      unsubLtc();
     };
   }, []);
 
@@ -396,6 +428,7 @@ export default function App() {
       } else {
         setLicenses([newLicense, ...licenses]);
       }
+      saveToFirestore(COLLECTIONS.LICENSES, newLicense).catch(() => {});
     }
 
     // Also record in establishments table
@@ -426,6 +459,7 @@ export default function App() {
     };
 
     setEstablishments([newEst, ...establishments]);
+    saveToFirestore(COLLECTIONS.ESTABLISHMENTS, newEst).catch(() => {});
 
     showToast(
       'success',
@@ -470,10 +504,10 @@ export default function App() {
     setPrintOptionsModalOpen(true);
   };
 
-  // 3. ออกใบอนุญาต (🖊️ ออกใบอนุญาต): เปิด modal ตรวจสอบและแก้ไขข้อมูลใบอนุญาต อภ.2
+  // 3. ออกใบอนุญาต (🖊️ ออกใบอนุญาต): เปิดระบบออกใบอนุญาต & พิมพ์เทมเพลตมาตรฐาน (หน้า-หลัง A4)
   const handleIssueLicense = (lic: LicenseRecord) => {
-    setSelectedLicenseForEdit(lic);
-    setEditLicenseModalOpen(true);
+    setSelectedLicenseForOfficialDoc(lic);
+    setOfficialLicenseModalOpen(true);
   };
 
   // 4. ต่ออายุ (🔄 ต่ออายุ): อัปเดตอายุใบอนุญาต +365 วัน และเปิดหน้าใบอนุญาตฉบับต่ออายุ
@@ -508,6 +542,7 @@ export default function App() {
     setLicenses(updated);
     showToast('success', `ต่ออายุใบอนุญาต ${lic.businessName} สำเร็จ (รอบปี พ.ศ. ${thaiCurrentYear}, คงเหลือ 365 วัน)`);
     const renewed = updated.find((l) => l.id === lic.id) || lic;
+    saveToFirestore(COLLECTIONS.LICENSES, renewed).catch(() => {});
     setSelectedLicenseForEdit(renewed);
     setEditLicenseModalOpen(true);
   };
@@ -515,6 +550,7 @@ export default function App() {
   // Edit License Modal Handlers
   const handleSaveLicenseOnly = async (updated: LicenseRecord) => {
     setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
+    saveToFirestore(COLLECTIONS.LICENSES, updated).catch(() => {});
     showToast('success', `บันทึกข้อมูลใบอนุญาต ${updated.businessName} สำเร็จ`);
     try {
       await updateLicenseRecordInGas(updated, config.appsScriptUrl || DEFAULT_GAS_URL);
@@ -525,6 +561,7 @@ export default function App() {
 
   const handleSaveAndExportPdf = async (updated: LicenseRecord) => {
     setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
+    saveToFirestore(COLLECTIONS.LICENSES, updated).catch(() => {});
     showToast('info', `กำลังส่งข้อมูลและสร้าง PDF ใบอนุญาตแบบทางการของ ${updated.businessName}...`);
     try {
       await updateLicenseRecordInGas(updated, config.appsScriptUrl || DEFAULT_GAS_URL);
@@ -544,6 +581,7 @@ export default function App() {
 
   const handleSaveAndOpenGoogleSheet = async (updated: LicenseRecord) => {
     setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
+    saveToFirestore(COLLECTIONS.LICENSES, updated).catch(() => {});
     showToast('info', `กำลังสร้าง Google Sheet ใบอนุญาต (สร้างสำเนาเฉพาะร้านค้า) ของ ${updated.businessName}...`);
     try {
       await updateLicenseRecordInGas(updated, config.appsScriptUrl || DEFAULT_GAS_URL);
@@ -624,18 +662,16 @@ export default function App() {
   };
 
   const handleResetMockData = () => {
-    if (window.confirm('คุณต้องการรีเซ็ตข้อมูลตัวอย่างทั้งหมดเป็นค่าเริ่มต้น (36 ร้านค้า) หรือไม่?')) {
-      setLicenses(INITIAL_LICENSE_RECORDS);
-      setEstablishments(INITIAL_ESTABLISHMENTS);
-      setInspections(INITIAL_INSPECTIONS);
-      setHazardousBusinesses(INITIAL_HAZARDOUS_BUSINESSES);
-      setPetitions(INITIAL_PETITIONS);
-      setNhsoProjects(INITIAL_NHSO_PROJECTS);
-      setLtcPatients(INITIAL_LTC_PATIENTS);
-      setEquipmentList(INITIAL_MEDICAL_EQUIPMENT);
-      setLoans(INITIAL_EQUIPMENT_LOANS);
-      showToast('info', 'รีเซ็ตข้อมูลตัวอย่างตามต้นฉบับ 36 รายการเรียบร้อยแล้ว');
-    }
+    setLicenses(INITIAL_LICENSE_RECORDS);
+    setEstablishments(INITIAL_ESTABLISHMENTS);
+    setInspections(INITIAL_INSPECTIONS);
+    setHazardousBusinesses(INITIAL_HAZARDOUS_BUSINESSES);
+    setPetitions(INITIAL_PETITIONS);
+    setNhsoProjects(INITIAL_NHSO_PROJECTS);
+    setLtcPatients(INITIAL_LTC_PATIENTS);
+    setEquipmentList(INITIAL_MEDICAL_EQUIPMENT);
+    setLoans(INITIAL_EQUIPMENT_LOANS);
+    showToast('info', 'รีเซ็ตข้อมูลตัวอย่างตามต้นฉบับ 36 รายการเรียบร้อยแล้ว');
   };
 
   const badgeCounts = {
@@ -646,7 +682,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen bg-[#f4f7fa] flex overflow-hidden font-sans text-slate-800 antialiased">
+    <div className="relative h-screen bg-[#f4f7fa] flex overflow-hidden font-sans text-slate-800 antialiased">
       {/* 1. Sidebar Navigation (Left Panel: 6 Strictly Ordered Modules) */}
       <Sidebar
         currentTab={currentTab}
@@ -667,7 +703,7 @@ export default function App() {
       />
 
       {/* 2. Main Container with Top Header and Scrollable Content */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      <div className="relative flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Top Header Bar without horizontal pills */}
         <Navbar
           currentTab={currentTab}
@@ -686,8 +722,8 @@ export default function App() {
         />
 
         {/* Scrollable View Area */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
-          <main className={`flex-1 w-full max-w-7xl mx-auto ${(currentTab === 'hazardous' || currentTab === 'gas_app' || currentTab === 'dashboard' || currentTab === 'establishments') ? 'px-2 sm:px-4 py-3' : 'px-3 sm:px-6 lg:px-8 py-5'} print:p-0 print:m-0 print:max-w-none`}>
+        <div className="relative flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+          <main className="flex-1 w-full px-3 sm:px-5 lg:px-6 xl:px-8 py-4 max-w-[1920px] mx-auto print:p-0 print:m-0 print:max-w-none">
             {/* 1. 🏠 แดชบอร์ดหลักทุกระบบ (Master Overview Dashboard) */}
             {currentTab === 'overview' && (
               <ExecutiveCommandDashboard
@@ -709,17 +745,16 @@ export default function App() {
                     setCurrentTab('hazardous');
                     setHazardousSubTab('dashboard');
                   } else if (t === 'nhso') {
-                    setCurrentTab('nhso_ltc');
-                    setNhsoLtcSubTab('nhso');
+                    setCurrentTab('nhso');
                   } else if (t === 'ltc') {
                     setCurrentTab('nhso_ltc');
                     setNhsoLtcSubTab('route');
                   } else if (t === 'petitions') {
                     setCurrentTab('petitions');
-                    setPetitionsSubTab('sewage');
+                    setPetitionsSubTab('dashboard');
                   } else if (t === 'equipment') {
                     setCurrentTab('equipment');
-                    setEquipmentSubTab('loans');
+                    setEquipmentSubTab('route');
                   } else {
                     setCurrentTab(tab as MainNavTab);
                   }
@@ -753,19 +788,23 @@ export default function App() {
                 }}
                 onDeleteBusiness={(b) => {
                   setHazardousBusinesses(hazardousBusinesses.filter((x) => x.id !== b.id));
+                  deleteFromFirestore(COLLECTIONS.HAZARDOUS, b.id).catch(() => {});
                   showToast('info', `ลบกิจการ ${b.name} เรียบร้อย`);
                 }}
                 activeSubTab={hazardousSubTab}
                 onSubTabChange={(tab) => setHazardousSubTab(tab as any)}
                 selectedLicenseForInspectionEdit={selectedLicenseForInspectionEdit}
                 onClearInspectionEdit={() => setSelectedLicenseForInspectionEdit(null)}
+                formResetKey={inspectionFormResetKey}
+                signerSettings={signerSettings}
+                onOpenSignerSettings={() => setSignerSettingsModalOpen(true)}
                 gasUrl={config.appsScriptUrl || DEFAULT_GAS_URL}
                 sheetId={config.sheetId || DEFAULT_SHEET_ID}
               />
             )}
 
-            {/* 3. 📦 ระบบแจกจ่ายโครงการ สปสช. LTC (ระบบนำทางแผนที่, หน้าลงทะเบียน, หน้าคลังอุปกรณ์, โครงการ สปสช.) */}
-            {(currentTab === 'nhso_ltc' || currentTab === 'nhso' || currentTab === 'ltc') && (
+            {/* 3. 📦 ระบบแจกจ่ายโครงการ สปสช. LTC (ระบบนำทางแผนที่, ลงทะเบียนผู้มีภาวะพึ่งพิง, คลังอุปกรณ์) */}
+            {(currentTab === 'nhso_ltc' || currentTab === 'ltc') && (
               <NhsoLtcCombinedView
                 projects={nhsoProjects}
                 patients={ltcPatients}
@@ -773,32 +812,37 @@ export default function App() {
                 activeSubTab={nhsoLtcSubTab}
                 onSubTabChange={(st) => setNhsoLtcSubTab(st)}
                 onAddNewProject={() => {
-                  const name = window.prompt('ชื่อโครงการ สปสช.:');
-                  if (name) {
-                    const newProj: NhsoProject = {
-                      id: `NHSO-${Date.now()}`,
-                      projectCode: `สปสช-69-00${nhsoProjects.length + 1}`,
-                      projectName: name,
-                      proposingOrg: 'ชมรม อสม. ตำบลบางเป้า',
-                      category: 'disease_prevention',
-                      budgetRequested: 35000,
-                      budgetApproved: 0,
-                      status: 'submitted',
-                      fiscalYear: '2569',
-                      startDate: '2026-11-01',
-                      endDate: '2027-02-28',
-                      targetParticipants: 150,
-                      responsiblePerson: currentUser.fullName,
-                      phone: '081-xxx-xxxx',
-                    };
-                    setNhsoProjects([newProj, ...nhsoProjects]);
-                    showToast('success', `เสนอโครงการ ${name} แล้ว`);
-                  }
+                  const newProj: NhsoProject = {
+                    id: `NHSO-${Date.now()}`,
+                    projectCode: `สปสช-69-00${nhsoProjects.length + 1}`,
+                    projectName: `โครงการฟื้นฟูสมรรถภาพผู้มีภาวะพึ่งพิงตำบลบางเป้า ครั้งที่ ${nhsoProjects.length + 1}`,
+                    proposingOrg: 'ชมรม อสม. ตำบลบางเป้า',
+                    category: 'rehabilitation',
+                    budgetRequested: 40000,
+                    budgetApproved: 0,
+                    status: 'submitted',
+                    fiscalYear: '2569',
+                    startDate: '2026-11-01',
+                    endDate: '2027-03-31',
+                    targetParticipants: 150,
+                    responsiblePerson: currentUser.fullName,
+                    phone: '081-456-7890',
+                  };
+                  setNhsoProjects([newProj, ...nhsoProjects]);
+                  saveToFirestore(COLLECTIONS.NHSO, newProj).catch(() => {});
+                  showToast('success', `บันทึกเสนอโครงการใหม่ "${newProj.projectName}" เรียบร้อย`);
                 }}
                 onApproveProject={(id, b) => {
                   if (perms.canApprove) {
                     setNhsoProjects((prev) =>
-                      prev.map((p) => (p.id === id ? { ...p, status: 'approved', budgetApproved: b } : p))
+                      prev.map((p) => {
+                        if (p.id === id) {
+                          const updatedP = { ...p, status: 'approved' as const, budgetApproved: b };
+                          saveToFirestore(COLLECTIONS.NHSO, updatedP).catch(() => {});
+                          return updatedP;
+                        }
+                        return p;
+                      })
                     );
                     showToast('success', 'อนุมัติงบโครงการเรียบร้อย');
                   }
@@ -806,20 +850,40 @@ export default function App() {
                 onAddNewPatient={() => setNhsoLtcSubTab('register')}
                 onAddRegisteredPatient={(newPatient) => {
                   setLtcPatients((prev) => [newPatient, ...prev]);
-                  showToast('success', `ขึ้นทะเบียนผู้ป่วย LTC "${newPatient.fullName}" สำเร็จ`);
+                  saveToFirestore(COLLECTIONS.LTC, newPatient).catch(() => {});
+                  showToast('success', `ขึ้นทะเบียนผู้มีภาวะพึ่งพิง "${newPatient.fullName}" สำเร็จ`);
+                }}
+                onUpdatePatient={(updatedPatient) => {
+                  setLtcPatients((prev) =>
+                    prev.map((p) => (p.id === updatedPatient.id ? updatedPatient : p))
+                  );
+                  saveToFirestore(COLLECTIONS.LTC, updatedPatient).catch(() => {});
+                  showToast('success', `อัปเดตข้อมูลผู้มีภาวะพึ่งพิง "${updatedPatient.fullName}" สำเร็จ`);
+                }}
+                onDeletePatient={(patientId) => {
+                  const target = ltcPatients.find((p) => p.id === patientId);
+                  setLtcPatients((prev) => prev.filter((p) => p.id !== patientId));
+                  deleteFromFirestore(COLLECTIONS.LTC, patientId).catch(() => {});
+                  if (target) {
+                    showToast('info', `ลบรายชื่อ "${target.fullName}" เรียบร้อยแล้ว`);
+                  }
                 }}
                 onRecordVisit={(p) => {
-                  const notes = window.prompt(`บันทึกเยี่ยมบ้าน ${p.fullName}:`, 'สัญญาณชีพปกติ ทำแผลแล้ว มอบชุดดูแลเรียบร้อย');
-                  if (notes) {
-                    setLtcPatients((prev) =>
-                      prev.map((item) =>
-                        item.id === p.id
-                          ? { ...item, lastVisitDate: new Date().toISOString().slice(0, 10), receivedCarePack: true }
-                          : item
-                      )
-                    );
-                    showToast('success', `บันทึกเยี่ยมบ้าน ${p.fullName} เรียบร้อย`);
-                  }
+                  setLtcPatients((prev) =>
+                    prev.map((item) => {
+                      if (item.id === p.id) {
+                        const updatedItem = {
+                          ...item,
+                          lastVisitDate: new Date().toISOString().slice(0, 10),
+                          receivedCarePack: true,
+                        };
+                        saveToFirestore(COLLECTIONS.LTC, updatedItem).catch(() => {});
+                        return updatedItem;
+                      }
+                      return item;
+                    })
+                  );
+                  showToast('success', `บันทึกการลงพื้นที่เยี่ยมบ้านและมอบชุดดูแลผู้ป่วยแก่ "${p.fullName}" สำเร็จ`);
                 }}
                 onPrintCarePlan={() => window.print()}
               />
@@ -834,44 +898,126 @@ export default function App() {
                 activeSubTab={equipmentSubTab}
                 onSubTabChange={(st) => setEquipmentSubTab(st)}
                 onNewLoan={() => setEquipmentSubTab('register')}
-                onReturnEquipment={(loanId) => {
+                savedSignerSettings={signerSettings}
+                onDeleteLoan={(loanId) => {
+                  setLoans((prev) => prev.filter((l) => l.id !== loanId));
+                  deleteFromFirestore(COLLECTIONS.LOANS, loanId).catch(() => {});
+                  showToast('info', 'ลบรายการขอยืมอุปกรณ์เรียบร้อยแล้ว');
+                }}
+                onReturnEquipment={(loanId, returnCondition, notes) => {
                   const targetLoan = loans.find((l) => l.id === loanId);
                   setLoans((prev) =>
-                    prev.map((l) => (l.id === loanId ? { ...l, status: 'returned' } : l))
+                    prev.map((l) => {
+                      if (l.id === loanId) {
+                        const updatedL = {
+                          ...l,
+                          status: 'returned' as const,
+                          returnDate: new Date().toISOString().split('T')[0],
+                          returnCondition: returnCondition || 'complete',
+                          damageNotes: notes || '',
+                        };
+                        saveToFirestore(COLLECTIONS.LOANS, updatedL).catch(() => {});
+                        return updatedL;
+                      }
+                      return l;
+                    })
                   );
                   if (targetLoan && targetLoan.status !== 'returned') {
                     setEquipmentList((prev) =>
-                      prev.map((eq) =>
-                        eq.id === targetLoan.equipmentId
-                          ? {
-                              ...eq,
-                              availableQuantity: eq.availableQuantity + 1,
-                              inUseQuantity: Math.max(0, eq.inUseQuantity - 1),
-                            }
-                          : eq
-                      )
+                      prev.map((eq) => {
+                        if (eq.id === targetLoan.equipmentId) {
+                          const updatedEq = {
+                            ...eq,
+                            availableQuantity: eq.availableQuantity + 1,
+                            inUseQuantity: Math.max(0, eq.inUseQuantity - 1),
+                          };
+                          saveToFirestore(COLLECTIONS.EQUIPMENT, updatedEq).catch(() => {});
+                          return updatedEq;
+                        }
+                        return eq;
+                      })
                     );
                   }
                   showToast('success', 'บันทึกรับคืนอุปกรณ์เรียบร้อยและคืนยอดสต็อกแล้ว');
+                }}
+                onUpdateLoanStatus={(loanId, newStatus, extra) => {
+                  const targetLoan = loans.find((l) => l.id === loanId);
+                  setLoans((prev) =>
+                    prev.map((l) => {
+                      if (l.id === loanId) {
+                        const updatedL = { ...l, status: newStatus, ...extra };
+                        saveToFirestore(COLLECTIONS.LOANS, updatedL).catch(() => {});
+                        return updatedL;
+                      }
+                      return l;
+                    })
+                  );
+                  // If transitioning from pending/approved to borrowed, cut stock
+                  if (targetLoan && targetLoan.status !== 'borrowed' && newStatus === 'borrowed') {
+                    setEquipmentList((prev) =>
+                      prev.map((eq) => {
+                        if (eq.id === targetLoan.equipmentId) {
+                          const updatedEq = {
+                            ...eq,
+                            availableQuantity: Math.max(0, eq.availableQuantity - 1),
+                            inUseQuantity: eq.inUseQuantity + 1,
+                          };
+                          saveToFirestore(COLLECTIONS.EQUIPMENT, updatedEq).catch(() => {});
+                          return updatedEq;
+                        }
+                        return eq;
+                      })
+                    );
+                  }
+                  // If transitioning from borrowed to returned, return stock
+                  if (targetLoan && targetLoan.status === 'borrowed' && newStatus === 'returned') {
+                    setEquipmentList((prev) =>
+                      prev.map((eq) => {
+                        if (eq.id === targetLoan.equipmentId) {
+                          const updatedEq = {
+                            ...eq,
+                            availableQuantity: eq.availableQuantity + 1,
+                            inUseQuantity: Math.max(0, eq.inUseQuantity - 1),
+                          };
+                          saveToFirestore(COLLECTIONS.EQUIPMENT, updatedEq).catch(() => {});
+                          return updatedEq;
+                        }
+                        return eq;
+                      })
+                    );
+                  }
+                  showToast('success', 'อัปเดตสถานะรายการขอยืมเรียบร้อยแล้ว');
+                }}
+                onAddEquipment={(newEq) => {
+                  setEquipmentList((prev) => [newEq, ...prev]);
+                  saveToFirestore(COLLECTIONS.EQUIPMENT, newEq).catch(() => {});
+                  showToast('success', `เพิ่ม ${newEq.name} เข้าคลังเรียบร้อยแล้ว`);
                 }}
                 onPrintContract={(loan) => {
                   setSelectedLoanForPrint(loan);
                   setEquipmentLoanModalOpen(true);
                 }}
                 onAddRegisteredLoan={(newLoan) => {
-                  setLoans([newLoan, ...loans]);
-                  setEquipmentList((prev) =>
-                    prev.map((eq) =>
-                      eq.id === newLoan.equipmentId
-                        ? {
+                  setLoans((prev) => [newLoan, ...prev]);
+                  saveToFirestore(COLLECTIONS.LOANS, newLoan).catch(() => {});
+                  // If newLoan is already borrowed, cut stock. If pending, don't cut yet!
+                  if (newLoan.status === 'borrowed') {
+                    setEquipmentList((prev) =>
+                      prev.map((eq) => {
+                        if (eq.id === newLoan.equipmentId) {
+                          const updatedEq = {
                             ...eq,
                             availableQuantity: Math.max(0, eq.availableQuantity - 1),
                             inUseQuantity: eq.inUseQuantity + 1,
-                          }
-                        : eq
-                    )
-                  );
-                  showToast('success', `บันทึกการขอยืม ${newLoan.equipmentName} เรียบร้อย (ตัดสต็อกแล้ว)`);
+                          };
+                          saveToFirestore(COLLECTIONS.EQUIPMENT, updatedEq).catch(() => {});
+                          return updatedEq;
+                        }
+                        return eq;
+                      })
+                    );
+                  }
+                  showToast('success', `บันทึกคำขอยืม ${newLoan.equipmentName} เรียบร้อยแล้ว`);
                 }}
               />
             )}
@@ -883,30 +1029,95 @@ export default function App() {
                 userRole={currentUser.role}
                 activeSubTab={petitionsSubTab}
                 onSubTabChange={(st) => setPetitionsSubTab(st)}
+                signerSettings={signerSettings}
+                onUpdateSignerSettings={setSignerSettings}
                 onAddNew={() => setNewPetitionModalOpen(true)}
                 onUpdateStatus={(id, st, notes) => {
                   setPetitions((prev) =>
-                    prev.map((p) => (p.id === id ? { ...p, status: st, resolutionNotes: notes } : p))
+                    prev.map((p) => {
+                      if (p.id === id) {
+                        const updatedP = { ...p, status: st, resolutionNotes: notes };
+                        saveToFirestore(COLLECTIONS.PETITIONS, updatedP).catch(() => {});
+                        return updatedP;
+                      }
+                      return p;
+                    })
                   );
                   showToast('success', 'อัปเดตคำร้องเรียบร้อย');
+                }}
+                onDeletePetition={(id) => {
+                  setPetitions((prev) => prev.filter((p) => p.id !== id));
+                  deleteFromFirestore(COLLECTIONS.PETITIONS, id).catch(() => {});
+                  showToast('info', 'ลบรายการคำร้องเรียบร้อยแล้ว');
                 }}
                 onPrintPetition={(p) => {
                   setSelectedPetitionForA4Print(p);
                   setPrintPetitionModalOpen(true);
                 }}
+                onAddPetition={(newP) => {
+                  setPetitions([newP, ...petitions]);
+                  saveToFirestore(COLLECTIONS.PETITIONS, newP).catch(() => {});
+                  showToast('success', `บันทึกคำร้อง  เรียบร้อย`);
+                }}
                 onAddSewagePetition={(newSewage) => {
                   setPetitions([newSewage, ...petitions]);
+                  saveToFirestore(COLLECTIONS.PETITIONS, newSewage).catch(() => {});
                   showToast('success', `บันทึกคำร้องขอดูดส้วม ${newSewage.trackingCode} เรียบร้อย`);
                 }}
               />
             )}
 
-            {/* 6. ⚙️ ระบบตั้งค่าหน้าผู้ใช้งานของทุกระบบ (ผู้เซ็นเอกสาร, ผู้ใช้งาน, ผู้มีอำนาจพิจารณา, Sheets) */}
+            {/* 6. 🏥 โครงการ สปสช. (กองทุนหลักประกันสุขภาพตำบลบางเป้า) */}
+            {currentTab === 'nhso' && (
+              <NhsoFundView
+                projects={nhsoProjects}
+                userRole={currentUser.role}
+                onAddNew={() => {
+                  const newProj: NhsoProject = {
+                    id: `NHSO-${Date.now()}`,
+                    projectCode: `สปสช-69-00${nhsoProjects.length + 1}`,
+                    projectName: `โครงการฟื้นฟูสมรรถภาพผู้มีภาวะพึ่งพิงตำบลบางเป้า ครั้งที่ ${nhsoProjects.length + 1}`,
+                    proposingOrg: 'ชมรม อสม. ตำบลบางเป้า',
+                    category: 'rehabilitation',
+                    budgetRequested: 40000,
+                    budgetApproved: 0,
+                    status: 'submitted',
+                    fiscalYear: '2569',
+                    startDate: '2026-11-01',
+                    endDate: '2027-03-31',
+                    targetParticipants: 150,
+                    responsiblePerson: currentUser.fullName,
+                    phone: '081-456-7890',
+                  };
+                  setNhsoProjects([newProj, ...nhsoProjects]);
+                  saveToFirestore(COLLECTIONS.NHSO, newProj).catch(() => {});
+                  showToast('success', `บันทึกเสนอโครงการใหม่ "${newProj.projectName}" เรียบร้อย`);
+                }}
+                onApproveProject={(id, b) => {
+                  if (perms.canApprove) {
+                    setNhsoProjects((prev) =>
+                      prev.map((p) => {
+                        if (p.id === id) {
+                          const updatedP = { ...p, status: 'approved' as const, budgetApproved: b };
+                          saveToFirestore(COLLECTIONS.NHSO, updatedP).catch(() => {});
+                          return updatedP;
+                        }
+                        return p;
+                      })
+                    );
+                    showToast('success', 'อนุมัติงบโครงการเรียบร้อย');
+                  }
+                }}
+              />
+            )}
+
+            {/* 7. ⚙️ ระบบตั้งค่าหน้าผู้ใช้งานของทุกระบบ (ผู้เซ็นเอกสาร, ผู้ใช้งาน, ผู้มีอำนาจพิจารณา, Sheets) */}
             {currentTab === 'settings' && (
               <SettingsModuleView
                 signerSettings={signerSettings}
                 onSaveSignerSettings={(s) => {
                   setSignerSettings(s);
+                  saveSignerSettingsToFirestore(s).catch(() => {});
                   showToast('success', 'บันทึกการตั้งค่าผู้ลงนามเรียบร้อยแล้ว');
                 }}
                 currentUser={currentUser}
@@ -926,7 +1137,7 @@ export default function App() {
 
           {/* Footer */}
           <footer className="bg-white border-t border-slate-200 py-3.5 px-4 text-center text-xs text-slate-500 print:hidden mt-auto">
-            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="max-w-[1920px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
               <div>
                 ระบบงานสารสนเทศสาธารณสุขและจัดการเมืองอัจฉริยะ • เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง
               </div>
@@ -983,6 +1194,7 @@ export default function App() {
         settings={signerSettings}
         onSave={(newSettings) => {
           setSignerSettings(newSettings);
+          saveSignerSettingsToFirestore(newSettings).catch(() => {});
           showToast('success', 'บันทึกการตั้งค่าผู้บริหารและผู้ลงนามเรียบร้อยแล้ว');
         }}
       />
@@ -1042,11 +1254,22 @@ export default function App() {
           }
         }}
         onEditBeforePrint={() => {
-          if (selectedLicenseForOfficialDoc) {
-            setSelectedLicenseForEdit(selectedLicenseForOfficialDoc);
-            setEditLicenseModalOpen(true);
-          }
+          setLicenseOptionsModalOpen(false);
+          setOfficialLicenseModalOpen(true);
         }}
+        onOpenOfficialPrint={() => {
+          setLicenseOptionsModalOpen(false);
+          setOfficialLicenseModalOpen(true);
+        }}
+      />
+
+      {/* Modal 1.2: ระบบออกใบอนุญาต & พิมพ์เทมเพลตมาตรฐาน Word-XML (หน้า-หลัง A4) */}
+      <PrintOfficialLicenseModal
+        license={selectedLicenseForOfficialDoc}
+        isOpen={officialLicenseModalOpen}
+        onClose={() => setOfficialLicenseModalOpen(false)}
+        savedSignerSettings={signerSettings}
+        onSaveLicense={handleSaveLicenseOnly}
       />
 
       {/* Modal 2: ตรวจสอบและแก้ไขข้อมูลใบอนุญาต (Matching Image 8) */}
@@ -1112,6 +1335,7 @@ export default function App() {
         onClose={() => setNewHazardousModalOpen(false)}
         onSave={(h) => {
           setHazardousBusinesses([h, ...hazardousBusinesses]);
+          saveToFirestore(COLLECTIONS.HAZARDOUS, h).catch(() => {});
           showToast('success', `เพิ่มกิจการอันตราย ${h.name} เรียบร้อย`);
         }}
       />
@@ -1121,6 +1345,7 @@ export default function App() {
         onClose={() => setNewPetitionModalOpen(false)}
         onSave={(p) => {
           setPetitions([p, ...petitions]);
+          saveToFirestore(COLLECTIONS.PETITIONS, p).catch(() => {});
           showToast('success', `ยื่นคำร้อง ${p.trackingCode} สำเร็จ`);
         }}
       />
@@ -1131,6 +1356,7 @@ export default function App() {
         equipmentList={equipmentList}
         onSave={(l) => {
           setLoans([l, ...loans]);
+          saveToFirestore(COLLECTIONS.LOANS, l).catch(() => {});
           showToast('success', `บันทึกการยืม ${l.equipmentName} เรียบร้อย`);
         }}
       />

@@ -55,16 +55,16 @@ export const InspectionFormModal: React.FC<InspectionFormModalProps> = ({
 
   const [activeCategory, setActiveCategory] = useState<CriteriaCategory | 'all'>('all');
   const [inspectorName, setInspectorName] = useState(
-    establishment.inspectorName || 'น.ส. พิมลภัส ศรีสุข'
+    establishment.inspectorName || 'พันจ่าเอกอานัส เด่นหมาด'
   );
-  const [inspectorPosition, setInspectorPosition] = useState('นักวิชาการสาธารณสุขชำนาญการ');
+  const [inspectorPosition, setInspectorPosition] = useState('เจ้าพนักงานสาธารณสุขชำนาญงาน');
   const [inspectionDate, setInspectionDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
   const [recommendations, setRecommendations] = useState('');
   const [reinspectionDueDate, setReinspectionDueDate] = useState('');
   const [inspectorSignature, setInspectorSignature] = useState(
-    establishment.inspectorName ? establishment.inspectorName.split(' ')[0] : 'พิมลภัส'
+    establishment.inspectorName ? establishment.inspectorName.split(' ')[0] : 'อานัส'
   );
   const [recipientSignature, setRecipientSignature] = useState(establishment.ownerName);
   const [evidencePhotoUrl, setEvidencePhotoUrl] = useState(establishment.imageUrl || '');

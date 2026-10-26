@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   UserCheck,
@@ -22,15 +22,21 @@ import {
   ChevronRight,
   Database,
   Lock,
+  Edit2,
+  Trash2,
+  UserCog,
+  Plus,
 } from 'lucide-react';
 import {
   SignerSettings,
   DEFAULT_SIGNER_SETTINGS,
+  InspectorSignerItem,
   User,
   UserRole,
   GoogleSheetsConfig,
 } from '../types/index.ts';
-import { getAllUsers, registerUser, setCurrentUser } from '../services/authService.ts';
+import { getAllUsers, registerUser, updateUser, deleteUser, setCurrentUser } from '../services/authService.ts';
+import { saveUserToFirestore, deleteUserFromFirestore } from '../services/firebaseService.ts';
 
 interface SettingsModuleViewProps {
   signerSettings: SignerSettings;
@@ -75,8 +81,53 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
   };
 
   // Signers Form State
-  const [signerForm, setSignerForm] = useState<SignerSettings>(signerSettings || DEFAULT_SIGNER_SETTINGS);
+  const [signerForm, setSignerForm] = useState<SignerSettings>(() => ({
+    ...DEFAULT_SIGNER_SETTINGS,
+    ...signerSettings,
+    inspectors:
+      signerSettings?.inspectors && signerSettings.inspectors.length > 0
+        ? signerSettings.inspectors
+        : DEFAULT_SIGNER_SETTINGS.inspectors,
+  }));
   const [signerSaved, setSignerSaved] = useState(false);
+
+  useEffect(() => {
+    setSignerForm({
+      ...DEFAULT_SIGNER_SETTINGS,
+      ...signerSettings,
+      inspectors:
+        signerSettings?.inspectors && signerSettings.inspectors.length > 0
+          ? signerSettings.inspectors
+          : DEFAULT_SIGNER_SETTINGS.inspectors,
+    });
+  }, [signerSettings]);
+
+  const inspectorsList: InspectorSignerItem[] =
+    signerForm.inspectors || DEFAULT_SIGNER_SETTINGS.inspectors || [];
+
+  const handleAddInspectorInSettings = () => {
+    setSignerForm({
+      ...signerForm,
+      inspectors: [
+        ...inspectorsList,
+        { id: `insp-${Date.now()}`, name: '', position: 'เจ้าพนักงานสาธารณสุข' },
+      ],
+    });
+  };
+
+  const handleUpdateInspectorInSettings = (id: string, field: 'name' | 'position', value: string) => {
+    setSignerForm({
+      ...signerForm,
+      inspectors: inspectorsList.map((i) => (i.id === id ? { ...i, [field]: value } : i)),
+    });
+  };
+
+  const handleRemoveInspectorInSettings = (id: string) => {
+    setSignerForm({
+      ...signerForm,
+      inspectors: inspectorsList.filter((i) => i.id !== id),
+    });
+  };
 
   // Sheets Config Form State
   const [sheetsForm, setSheetsForm] = useState<GoogleSheetsConfig>(config);
@@ -85,15 +136,18 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
   // Users State
   const [usersList, setUsersList] = useState<User[]>(() => getAllUsers());
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     username: '',
     fullName: '',
     email: '',
     phone: '',
     role: 'inspector' as UserRole,
-    roleTitle: 'นายตรวจ / เจ้าพนักงานสาธารณสุข',
-    department: 'กองสาธารณสุขและสิ่งแวดล้อม',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    roleTitle: 'เจ้าพนักงานสาธารณสุข / นายตรวจ',
+    department: 'กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
   });
 
   // Approver delegation state
@@ -117,12 +171,10 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
   };
 
   const handleResetSigners = () => {
-    if (window.confirm('คุณต้องการคืนค่าเริ่มต้นของผู้ลงนาม ทต.บางเป้า หรือไม่?')) {
-      setSignerForm(DEFAULT_SIGNER_SETTINGS);
-      onSaveSignerSettings(DEFAULT_SIGNER_SETTINGS);
-      localStorage.setItem('bangpao_signer_settings', JSON.stringify(DEFAULT_SIGNER_SETTINGS));
-      showToast('info', 'คืนค่าเริ่มต้นของผู้ลงนามเรียบร้อย');
-    }
+    setSignerForm(DEFAULT_SIGNER_SETTINGS);
+    onSaveSignerSettings(DEFAULT_SIGNER_SETTINGS);
+    localStorage.setItem('bangpao_signer_settings', JSON.stringify(DEFAULT_SIGNER_SETTINGS));
+    showToast('info', 'คืนค่าเริ่มต้นของผู้บริหารและผู้ลงนาม ทต.บางเป้า เรียบร้อยแล้ว');
   };
 
   const handleSaveSheetsConfig = (e: React.FormEvent) => {
@@ -133,7 +185,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
     setTimeout(() => setSheetsSaved(false), 2500);
   };
 
-  const handleRegisterNewUser = (e: React.FormEvent) => {
+  const handleRegisterNewUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserForm.username || !newUserForm.fullName) {
       showToast('error', 'กรุณากรอกชื่อผู้ใช้และชื่อ-นามสกุลให้ครบถ้วน');
@@ -143,6 +195,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
     const res = registerUser(newUserForm);
     if (res.success && res.user) {
       setUsersList(getAllUsers());
+      saveUserToFirestore(res.user).catch((err) => console.warn('Firestore user sync warning:', err));
       setShowAddUserModal(false);
       setNewUserForm({
         username: '',
@@ -150,13 +203,45 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
         email: '',
         phone: '',
         role: 'inspector',
-        roleTitle: 'นายตรวจ / เจ้าพนักงานสาธารณสุข',
-        department: 'กองสาธารณสุขและสิ่งแวดล้อม',
-        avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+        roleTitle: 'เจ้าพนักงานสาธารณสุข / นายตรวจ',
+        department: 'กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า',
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
       });
-      showToast('success', `เพิ่มเจ้าหน้าที่ ${res.user.fullName} เรียบร้อยแล้ว`);
+      showToast('success', `เพิ่มเจ้าหน้าที่ "${res.user.fullName}" เข้าสู่ระบบและบันทึกลง Cloud Firestore สำเร็จ`);
     } else {
       showToast('error', res.message || 'ไม่สามารถเพิ่มผู้ใช้งานได้');
+    }
+  };
+
+  const handleEditUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    const res = updateUser(editingUser);
+    if (res.success && res.user) {
+      setUsersList(getAllUsers());
+      saveUserToFirestore(res.user).catch((err) => console.warn('Firestore user sync warning:', err));
+      if (currentUser.id === res.user.id) {
+        onUserChange(res.user);
+      }
+      showToast('success', res.message);
+      setEditingUser(null);
+    } else {
+      showToast('error', res.message);
+    }
+  };
+
+  const handleDeleteUserConfirm = async () => {
+    if (!deleteConfirmUser) return;
+    const targetId = deleteConfirmUser.id;
+    const targetName = deleteConfirmUser.fullName;
+    const res = deleteUser(targetId);
+    if (res.success) {
+      setUsersList(getAllUsers());
+      deleteUserFromFirestore(targetId).catch((err) => console.warn('Firestore user delete warning:', err));
+      showToast('success', res.message);
+      setDeleteConfirmUser(null);
+    } else {
+      showToast('error', res.message);
     }
   };
 
@@ -287,6 +372,73 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                   <span>บันทึกการตั้งค่าผู้ลงนามเรียบร้อยแล้ว ข้อมูลจะมีผลต่อการพิมพ์เอกสารทันที</span>
                 </div>
               )}
+
+              {/* รายชื่อเจ้าหน้าที่ผู้ตรวจประเมิน (ตัวเลือกดรอปดาวน์ในฟอร์มประเมิน) */}
+              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs sm:text-sm font-bold text-emerald-950 flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-emerald-700" />
+                      <span>รายชื่อเจ้าหน้าที่ผู้ตรวจประเมิน / ผู้ลงนาม (ตัวเลือกดรอปดาวน์ในฟอร์มประเมิน)</span>
+                    </span>
+                    <p className="text-[11px] text-emerald-700 mt-0.5">
+                      เพิ่มหรือแก้ไขชื่อและตำแหน่ง เพื่อใช้เลือกในดรอปดาวน์หน้าฟอร์มตรวจประเมินสุขลักษณะ
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddInspectorInSettings}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs transition-colors cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>เพิ่มรายชื่อ</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {inspectorsList.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-emerald-200/80 shadow-2xs"
+                    >
+                      <div className="sm:col-span-5">
+                        <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                          ชื่อ-นามสกุล ลำดับที่ {idx + 1}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="เช่น พันจ่าเอกอานัส เด่นหมาด"
+                          value={item.name}
+                          onChange={(e) => handleUpdateInspectorInSettings(item.id, 'name', e.target.value)}
+                          className="w-full text-xs sm:text-sm font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg"
+                        />
+                      </div>
+                      <div className="sm:col-span-6">
+                        <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                          ตำแหน่ง
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="เช่น เจ้าพนักงานสาธารณสุขชำนาญงาน"
+                          value={item.position}
+                          onChange={(e) => handleUpdateInspectorInSettings(item.id, 'position', e.target.value)}
+                          className="w-full text-xs sm:text-sm px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg"
+                        />
+                      </div>
+                      <div className="sm:col-span-1 flex justify-end sm:pt-4">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveInspectorInSettings(item.id)}
+                          title="ลบรายชื่อนี้"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* 1. Director */}
               <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-2.5">
@@ -608,6 +760,129 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                 );
               })}
             </div>
+            {/* Personnel & Roles Management Table */}
+            <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                    <UserCog className="w-4 h-4 text-emerald-600" />
+                    <span>ทำเนียบบุคลากรและการจัดการตำแหน่งเจ้าหน้าที่ (Personnel & Roles)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    รองรับการโยกย้าย เปลี่ยนตำแหน่ง เพิ่มบุคลากรใหม่ หรือลบรายชื่อผู้ที่ลาออก ซิงค์สดกับ Cloud Firestore
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ เพิ่มเจ้าหน้าที่</span>
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-700 border-b border-slate-200 font-bold text-[11px]">
+                      <th className="py-2.5 px-3">ชื่อ-นามสกุล / บัญชี</th>
+                      <th className="py-2.5 px-3">ตำแหน่งที่ปรากฏในระบบ / เอกสาร</th>
+                      <th className="py-2.5 px-3 text-center">สิทธิ์การทำงาน</th>
+                      <th className="py-2.5 px-3">กลุ่มงาน / สังกัด</th>
+                      <th className="py-2.5 px-3">เบอร์ติดต่อ</th>
+                      <th className="py-2.5 px-3 text-center min-w-[160px]">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-[11px]">
+                    {usersList.map((u) => {
+                      const isActive = currentUser.id === u.id;
+                      return (
+                        <tr key={u.id} className={`hover:bg-slate-50/70 transition-colors ${isActive ? 'bg-emerald-50/40' : ''}`}>
+                          <td className="py-2.5 px-3 font-semibold text-slate-800">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                                {u.fullName ? u.fullName[0] : 'U'}
+                              </div>
+                              <div>
+                                <div className="font-bold flex items-center gap-1">
+                                  <span>{u.fullName}</span>
+                                  {isActive && (
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold">
+                                      ปัจจุบัน
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">@{u.username} • {u.id}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 font-medium text-slate-700">
+                            {u.roleTitle || '-'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                              u.role === 'admin'
+                                ? 'bg-purple-100 text-purple-800'
+                                : u.role === 'inspector'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : u.role === 'staff'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-slate-100 text-slate-800'
+                            }`}>
+                              {u.role.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600">
+                            {u.department || 'กองสาธารณสุขและสิ่งแวดล้อม'}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600">
+                            {u.phone || '-'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Edit Button */}
+                              <button
+                                type="button"
+                                onClick={() => setEditingUser({ ...u })}
+                                className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors cursor-pointer"
+                                title="แก้ไขตำแหน่งและข้อมูล"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Switch User Button */}
+                              {!isActive && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSwitchUser(u)}
+                                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold text-[10px] transition-colors cursor-pointer"
+                                  title="สลับเป็นผู้ใช้งานนี้"
+                                >
+                                  สลับ
+                                </button>
+                              )}
+
+                              {/* Delete Button */}
+                              {!isActive && usersList.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmUser(u)}
+                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
+                                  title="ลบรายชื่อบุคลากร (กรณีลาออก/ย้าย)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
             {/* Role Permissions Matrix */}
             <div className="mt-6 pt-5 border-t border-slate-100">
@@ -921,11 +1196,50 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
 
             <button
               type="button"
-              onClick={onResetMockData}
+              onClick={() => setShowResetConfirmModal(true)}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
             >
               รีเซ็ตข้อมูลตัวอย่าง 36 รายการ
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirm Reset Mock Data */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-800">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">ยืนยันรีเซ็ตข้อมูลตัวอย่าง</h3>
+                <p className="text-xs text-slate-500">คืนค่าเริ่มต้นตามต้นฉบับ 36 ร้านค้า</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              คุณต้องการรีเซ็ตข้อมูลตัวอย่างทั้งหมดกลับเป็นค่าเริ่มต้นตามต้นฉบับ (36 สถานประกอบการ, คำร้อง, กายอุปกรณ์ และผู้ป่วย) หรือไม่?
+            </p>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirmModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetConfirmModal(false);
+                  onResetMockData();
+                }}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+              >
+                ยืนยันรีเซ็ตข้อมูล
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -981,6 +1295,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                       const r = e.target.value as UserRole;
                       const roleTitles: Record<UserRole, string> = {
                         admin: 'นายกเทศมนตรี / ผู้บริหารระดับสูง',
+                        executive: 'ผู้บริหารเทศบาลตำบลบางเป้า',
                         inspector: 'นายตรวจ / เจ้าพนักงานสาธารณสุข',
                         staff: 'เจ้าหน้าที่ธุรการ / แคร์กีฟเวอร์',
                         citizen: 'ประชาชน / ผู้ประกอบการ',
@@ -1034,6 +1349,155 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal: Edit Existing Staff */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-emerald-800 px-6 py-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <UserCog className="w-5 h-5 text-emerald-300" />
+                <h3 className="font-bold text-sm text-white">แก้ไขข้อมูลและตำแหน่งเจ้าหน้าที่</h3>
+              </div>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditUserSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-600">ชื่อ-นามสกุล (พร้อมคำนำหน้า)</label>
+                <input
+                  type="text"
+                  value={editingUser.fullName}
+                  onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
+                  className="w-full text-xs font-bold px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600">ตำแหน่งงาน / ชื่อตำแหน่งในเอกสารราชการ</label>
+                <input
+                  type="text"
+                  value={editingUser.roleTitle}
+                  onChange={(e) => setEditingUser({ ...editingUser, roleTitle: e.target.value })}
+                  placeholder="e.g. เจ้าพนักงานสาธารณสุขชำนาญงาน"
+                  className="w-full text-xs font-semibold px-3 py-2 bg-white border border-emerald-300 rounded-xl mt-1 focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">ระดับสิทธิ์ (Role)</label>
+                  <select
+                    value={editingUser.role}
+                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRole })}
+                    className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1 font-semibold"
+                  >
+                    <option value="inspector">นายตรวจ (Inspector)</option>
+                    <option value="admin">ผู้บริหาร / ผอ.กอง (Admin)</option>
+                    <option value="executive">ผู้บริหารสูงสุด / นายกฯ (Executive)</option>
+                    <option value="staff">เจ้าหน้าที่ธุรการ / LTC (Staff)</option>
+                    <option value="citizen">ประชาชน / ผู้ประกอบการ</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">เบอร์โทรศัพท์</label>
+                  <input
+                    type="tel"
+                    value={editingUser.phone}
+                    onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
+                    className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600">สังกัดกลุ่มงาน / ฝ่าย</label>
+                <input
+                  type="text"
+                  value={editingUser.department}
+                  onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
+                  className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600">อีเมลติดต่อ</label>
+                <input
+                  type="email"
+                  value={editingUser.email}
+                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                  className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>บันทึกการเปลี่ยนแปลง</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Confirmation Modal */}
+      {deleteConfirmUser && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150 p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">ยืนยันการลบบุคลากร</h3>
+                <p className="text-xs text-slate-500">การดำเนินการนี้จะลบข้อมูลออกจากระบบและ Firestore</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1">
+              <div><span className="font-bold">ชื่อ:</span> {deleteConfirmUser.fullName}</div>
+              <div><span className="font-bold">ตำแหน่ง:</span> {deleteConfirmUser.roleTitle}</div>
+              <div><span className="font-bold">สังกัด:</span> {deleteConfirmUser.department}</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmUser(null)}
+                className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteUserConfirm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>ยืนยันการลบ</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

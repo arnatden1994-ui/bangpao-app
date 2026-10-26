@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>ระบบบริหารการแจกจ่าย สปสช. 10(7) & LTC</title>
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    * { font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { background-color: #f1f5f9; margin: 0; }
+    /* Hide legacy sidebar on desktop since we have the new master sidebar */
+    .sidebar { display: none !important; }
+    .main-content { padding: 24px; width: 100%; max-width: 100%; }
+    
+    .stat-card { border: none; border-radius: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); }
+    #mapRegistration { height: 500px; width: 100% !important; border-radius: 12px; border: 2px solid #cbd5e1; background: #e2e8f0; }
+    #mapRoute { height: 520px; width: 100% !important; border-radius: 12px; border: 2px solid #cbd5e1; background: #e2e8f0; }
+    .section-view { display: none; }
+    .section-view.active { display: block; }
+    .route-item-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="container-fluid">
+  <div class="row">
+    <!-- Main Content -->
+    <div class="col-12 main-content">
+      
+      <!-- 1. DASHBOARD -->
+      <div id="section-dashboard" class="section-view active">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="fw-bold m-0"><i class="fa-solid fa-chart-line text-primary me-2"></i> ภาพรวมการแจกจ่ายสิ่งของ</h4>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+              <i class="fa-solid fa-print me-1"></i> สั่งพิมพ์รายงาน
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow">
+  <li><a class="dropdown-item" href="javascript:void(0)" onclick="printDashboardOverview()"><i class="fa-solid fa-chart-pie me-2 text-primary"></i>พิมพ์สรุป Dashboard</a></li>
+  <li><a class="dropdown-item" href="javascript:void(0)" onclick="printPlansTable()"><i class="fa-solid fa-print me-2 text-success"></i>พิมพ์ตารางแผนการแจกของ</a></li>
+  <li><hr class="dropdown-divider"></li>
+  <li><a class="dropdown-item" href="javascript:void(0)" onclick="switchSection('plans'); setTimeout(() => document.getElementById('reviewPlanYear').focus(), 500);"><i class="fa-solid fa-list-check me-2 text-info"></i>ไปดูตารางแผนการแจกของ</a></li>
+</ul>
+          </div>
+        </div>
+        <div class="row g-3 mb-4">
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-primary border-4">
+              <span class="text-muted small">ผู้ป่วยในโครงการทั้งหมด</span>
+              <h2 class="fw-bold text-primary my-1" id="dashTotalRecipients">0</h2>
+              <span class="small text-muted">รายชื่อ</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-success border-4">
+              <span class="text-muted small">แผนแจกของ (แจกแล้ว / ทั้งหมด)</span>
+              <h2 class="fw-bold my-1"><span class="text-success" id="dashDeliveredPlans">0</span> / <span class="text-secondary" id="dashTotalPlans">0</span></h2>
+              <span class="small text-muted">สถานะการแจกจ่าย</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-warning border-4" style="cursor: pointer;" onclick="switchSection('route')" title="คลิกเพื่อไปหน้าจัดเส้นทาง">
+              <span class="text-muted small">แผนที่รอจัดส่ง <i class="fa-solid fa-arrow-right-long text-warning ms-1"></i></span>
+              <h2 class="fw-bold my-1 text-warning" id="dashPendingPlans">0</h2>
+              <span class="small text-muted">ต้องดำเนินการ</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-danger border-4" style="cursor: pointer;" onclick="switchSection('stock')" title="คลิกเพื่อไปหน้าคลังพัสดุ">
+              <span class="text-muted small">พัสดุในคลัง <i class="fa-solid fa-arrow-right-long text-danger ms-1"></i></span>
+              <h2 class="fw-bold text-danger my-1" id="dashStockCount">0</h2>
+              <span class="small text-muted">หมวดหมู่</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="card stat-card p-3 bg-white">
+              <h6 class="fw-bold mb-3">จำนวนผู้ป่วยแยกตามโซน/หมู่บ้าน</h6>
+              <canvas id="zoneChart" height="200"></canvas>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card stat-card p-3 bg-white">
+              <h6 class="fw-bold mb-3">ยอดคงเหลือพัสดุ</h6>
+              <div id="stockSummaryList" class="list-group list-group-flush" style="max-height: 220px; overflow-y: auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. REGISTRATION & BULK IMPORT -->
+      <div id="section-registration" class="section-view">
+        <h4 class="fw-bold mb-3"><i class="fa-solid fa-address-card text-success me-2"></i> ลงทะเบียนรายชื่อผู้ป่วย (ปักหมุดบ้าน)</h4>
+        
+        <div class="row g-3">
+          <!-- Left: Form -->
+          <div class="col-md-5 col-lg-4">
+            <div class="card stat-card p-4 bg-white h-100">
+              <form id="formRegister">
+                <input type="hidden" id="regId" value="">
+                <div class="mb-3">
+                  <label class="form-label fw-medium">ชื่อ-นามสกุลผู้รับ *</label>
+                  <input type="text" class="form-control" id="regName" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-medium">โซน / หมู่บ้าน *</label>
+                  <select class="form-select" id="regZone" required>
+                    <option value="">-- เลือกโซน/หมู่บ้าน --</option>
+                    <option value="หมู่ 1 ชายวัด">หมู่ที่ 1 บ้านชายวัด</option>
+                    <option value="หมู่ 2 เกาะปอม">หมู่ที่ 2 บ้านเกาะปอม</option>
+                    <option value="หมู่ 3 ตลาดใหม่">หมู่ที่ 3 บ้านตลาดใหม่</option>
+                    <option value="หมู่ 4 แหลมม่วง">หมู่ที่ 4 บ้านแหลมม่วง</option>
+                    <option value="หมู่ 5 ป่าเตียว">หมู่ที่ 5 บ้านป่าเตียว</option>
+                    <option value="หมู่ 6 ควนทองสีห์">หมู่ที่ 6 บ้านควนทองสีห์</option>
+                    <option value="หมู่ 7 ท่าเรือ">หมู่ที่ 7 บ้านท่าเรือ</option>
+                  </select>
+                </div>
+                <div class="mb-4">
+                  <label class="form-label fw-medium">ที่อยู่ / บ้านเลขที่</label>
+                  <input type="text" class="form-control" id="regAddress">
+                </div>
+                
+                <div class="bg-light p-3 rounded border mb-4">
+                  <label class="form-label fw-bold text-secondary mb-2"><i class="fa-solid fa-map-pin me-1"></i> พิกัดที่เลือก</label>
+                  <div class="row g-2">
+                    <div class="col-6"><input type="text" class="form-control form-control-sm bg-white" id="regLat" placeholder="Lat" readonly required></div>
+                    <div class="col-6"><input type="text" class="form-control form-control-sm bg-white" id="regLng" placeholder="Lng" readonly required></div>
+                  </div>
+                  <div class="text-muted small mt-2">* กรุณาคลิกเลือกตำแหน่งบนแผนที่ด้านขวา หรือกดปุ่มรีเฟรชตำแหน่ง</div>
+                </div>
+
+                <div class="row g-2">
+                  <div class="col-8">
+                    <button type="submit" class="btn btn-success fw-bold w-100 py-2"><i class="fa-solid fa-save me-2"></i>บันทึกข้อมูลผู้รับ</button>
+                  </div>
+                  <div class="col-4">
+                    <button type="button" class="btn btn-outline-secondary w-100 py-2" onclick="document.getElementById('formRegister').reset(); document.getElementById('regId').value='';">ล้างฟอร์ม</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+          <!-- Right: Map -->
+          <div class="col-md-7 col-lg-8">
+            <div class="card stat-card p-3 bg-white h-100 d-flex flex-column">
+              <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <label class="form-label fw-bold text-primary m-0"><i class="fa-solid fa-map-location-dot me-1"></i> แผนที่ปักหมุดบ้าน</label>
+                <div>
+                  <button type="button" class="btn btn-sm btn-primary" onclick="getGPS()"><i class="fa-solid fa-location-crosshairs"></i> ตำแหน่งปัจจุบัน</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleFullscreenMap('mapRegistration')"><i class="fa-solid fa-expand"></i> เต็มจอ</button>
+                </div>
+              </div>
+              <!-- Added min-height for tall portrait look -->
+              <div id="mapRegistration" style="flex-grow: 1; min-height: 650px; border-radius: 8px; z-index: 1;"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Manage Recipients Table -->
+        <div class="card mt-4 p-3 shadow-sm border-0">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold text-success m-0"><i class="fa-solid fa-users-gear me-2"></i>จัดการรายชื่อผู้ป่วย (แก้ไข/ลบ)</h6>
+            <div class="input-group input-group-sm w-auto">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" id="searchRecipient" class="form-control" placeholder="ค้นหารายชื่อ..." onkeyup="renderRecipientsManagementTable()">
+            </div>
+          </div>
+          <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <table class="table table-bordered table-hover align-middle small">
+              <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                <tr>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th>โซน/หมู่บ้าน</th>
+                  <th>ที่อยู่</th>
+                  <th>พิกัด (Lat, Lng)</th>
+                  <th class="text-center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="recipientsManageBody">
+                <tr><td colspan="5" class="text-center text-muted">กำลังโหลดข้อมูล...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- 2.5 PLANS -->
+      <div id="section-plans" class="section-view">
+        <h4 class="fw-bold mb-3"><i class="fa-solid fa-clipboard-list text-info me-2"></i> กำหนดแผนการแจกของ</h4>
+        
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="card p-3 shadow-sm border-0 h-100">
+              <h6 class="fw-bold text-primary mb-3">1. เลือกผู้รับและรอบ</h6>
+              <div class="mb-3">
+                <label class="form-label small text-muted">ผู้รับ (เฉพาะคนที่มีพิกัดครบ)</label>
+                <select class="form-select" id="planPatientSelect">
+                  <option value="">-- เลือกผู้รับ --</option>
+                </select>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label small text-muted">ปีงบประมาณ</label>
+                  <input type="number" class="form-control" id="planYear" value="2569" required>
+                </div>
+                <div class="col-6">
+                  <label class="form-label small text-muted">จำนวนรอบทั้งหมด</label>
+                  <input type="number" class="form-control" id="planTotalRounds" value="2" min="1" max="12" required>
+                </div>
+              </div>
+              <button class="btn btn-outline-primary w-100 fw-bold" onclick="generatePlanForms()">เริ่มสร้างแผนการแจก</button>
+            </div>
+          </div>
+          
+          <div class="col-md-8">
+            <div class="card p-3 shadow-sm border-0 h-100" id="planFormsContainer" style="display:none;">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold text-primary m-0">2. กำหนดสิ่งของในแต่ละรอบ</h6>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyRound1ToAll()"><i class="fa-solid fa-copy me-1"></i>คัดลอกรอบ 1 ไปทุกรอบ</button>
+              </div>
+              <div id="planRoundsList" style="max-height: 500px; overflow-y: auto; overflow-x: hidden;"></div>
+              <div class="text-end mt-3 border-top pt-3">
+                <button class="btn btn-success fw-bold px-4" onclick="savePlans()"><i class="fa-solid fa-save me-2"></i>บันทึกแผนทั้งหมด</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Step 3: Review All Plans -->
+        <div class="card mt-4 p-3 shadow-sm border-0">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold text-success m-0">3. ตรวจสอบแผนการแจกทั้งหมด</h6>
+            <div>
+              <select class="form-select form-select-sm d-inline-block w-auto me-2" id="reviewPlanYear" onchange="renderReviewPlansTable()">
+                <option value="2569">ปี 2569</option>
+                <option value="2568">ปี 2568</option>
+                <option value="2567">ปี 2567</option>
+              </select>
+              <select class="form-select form-select-sm d-inline-block w-auto me-2" id="reviewPlanRound" onchange="renderReviewPlansTable()">
+                <option value="all">-- ทุกรอบ --</option>
+                <option value="1">รอบ 1</option>
+                <option value="2">รอบ 2</option>
+                <option value="3">รอบ 3</option>
+                <option value="4">รอบ 4</option>
+              </select>
+              <button class="btn btn-sm btn-outline-secondary" onclick="printPlansTable()"><i class="fa-solid fa-print me-1"></i>พิมพ์ตาราง (PDF)</button>
+            </div>
+          </div>
+          <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <table class="table table-bordered table-hover align-middle small" id="reviewPlansTable">
+              <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                <tr>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th>โซน/หมู่บ้าน</th>
+                  <th>รอบที่แจก</th>
+                  <th>รายการสิ่งของ (จำนวน)</th>
+                  <th>สถานะ</th>
+                </tr>
+              </thead>
+              <tbody id="reviewPlansBody">
+                <tr><td colspan="5" class="text-center text-muted">กำลังโหลดข้อมูล...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. STOCK -->
+      <div id="section-stock" class="section-view">
+        <h4 class="fw-bold mb-3"><i class="fa-solid fa-warehouse text-warning me-2"></i> คลังพัสดุ</h4>
+        <div class="row g-3">
+          <div class="col-md-7">
+            <div class="card stat-card p-3 bg-white">
+              <table class="table table-hover align-middle">
+                <thead class="table-light"><tr><th>รหัส</th><th>รายการ</th><th>คงเหลือ</th><th>หน่วย</th></tr></thead>
+                <tbody id="stockTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="col-md-5">
+            <div class="card stat-card p-3 bg-white">
+              <h6 class="fw-bold mb-3">รับพัสดุเข้าคลัง</h6>
+              <form id="formAddStock">
+                <div class="mb-2"><input type="text" class="form-control" id="newStockName" placeholder="ชื่อพัสดุ (เช่น ผ้าอ้อม M)" required></div>
+                <div class="row g-2 mb-2">
+                  <div class="col-6"><input type="text" class="form-control" id="newStockCode" placeholder="รหัส"></div>
+                  <div class="col-6"><input type="text" class="form-control" id="newStockUnit" placeholder="หน่วย (ชิ้น/แพ็ค)" required></div>
+                </div>
+                <div class="mb-3"><input type="number" class="form-control" id="addStockQty" placeholder="จำนวน" min="1" required></div>
+                <button type="submit" class="btn btn-primary w-100 fw-bold">บันทึกรับเข้า</button>
+              </form>
+            </div>
+            
+            <div class="card stat-card p-3 bg-white mt-3">
+              <h6 class="fw-bold mb-3"><i class="fa-solid fa-clock-rotate-left text-secondary me-2"></i> ประวัติการเข้า-ออกคลัง (50 รายการล่าสุด)</h6>
+              <div style="max-height: 250px; overflow-y: auto;">
+                <table class="table table-sm table-hover align-middle small">
+                  <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                    <tr><th>ว/ด/ป</th><th>รายการ</th><th>เข้า/ออก</th><th>จำนวน</th></tr>
+                  </thead>
+                  <tbody id="stockLedgerBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. ROUTE & ROUND DELIVERY -->
+      <div id="section-route" class="section-view">
+        <h4 class="fw-bold mb-3"><i class="fa-solid fa-route text-danger me-2"></i> AI จัดเส้นทาง & แจกของตามรอบ</h4>
+        
+        <div class="row g-3 mb-3">
+          <div class="col-md-2">
+            <label class="form-label fw-bold text-danger">ปีงบประมาณ:</label>
+            <input type="number" class="form-control border-danger fw-bold text-danger" id="routeYear" value="2567" onchange="renderRecipientCheckList()">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold text-danger">วงรอบที่แจก:</label>
+            <input type="number" class="form-control border-danger fw-bold text-danger" id="selectDeliveryRound" value="1" min="1" max="12" onchange="renderRecipientCheckList()">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold">กรองตามโซน (ถ้าต้องการ):</label>
+            <select class="form-select" id="routeZoneFilter" onchange="renderRecipientCheckList()">
+              <option value="">-- ทุกโซน --</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold text-primary">จำนวนรถ (คัน):</label>
+            <input type="number" class="form-control border-primary fw-bold text-center" id="numCars" value="1" min="1" max="10">
+          </div>
+          <div class="col-md-4 d-flex align-items-end">
+            <button class="btn btn-danger w-100 fw-bold shadow-sm py-2" onclick="calculateRoute()">
+              <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI จัดเส้นทางให้รถแต่ละคัน
+            </button>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-5">
+            <div class="card stat-card p-3 bg-white">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold m-0">ติ๊กเลือกผู้ป่วยในรอบนี้ (<span id="selectedCount">0</span> คน)</h6>
+                <button class="btn btn-sm btn-outline-secondary" onclick="clearBucket()">ล้าง</button>
+              </div>
+              <div id="recipientCheckList" style="max-height: 420px; overflow-y: auto;" class="border rounded p-2 bg-light"></div>
+            </div>
+          </div>
+          <div class="col-md-7">
+            <div class="card stat-card p-3 bg-white mb-3">
+              <div id="mapRoute"></div>
+            </div>
+            <div id="routeOrderResult" class="card stat-card p-3 bg-white">
+              <div class="text-center text-muted py-3">เลือกรายชื่อด้านซ้ายแล้วกดคำนวณเส้นทางเพื่อเริ่มแจกของ</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+  var mapReg = null, markerReg = null;
+  var mapRoute = null, routeLayer = null;
+  var globalStock = [], globalRecipients = [], activeBucketList = [];
+  var zoneChartInstance = null, lastRouteData = null;
+
+  // เรียก server พร้อมแสดง error ถ้าล้มเหลว (ไม่ให้หน้าจอค้าง)
+  function gsr() {
+    return google.script.run.withFailureHandler(err => {
+      Swal.fire('เกิดข้อผิดพลาด', (err && err.message) ? err.message : String(err), 'error');
+    });
+  }
+
+  function switchSection(id) {
+    document.querySelectorAll('.section-view').forEach(v => v.classList.remove('active'));
+    const section = document.getElementById('section-' + id);
+    if(section) section.classList.add('active');
+    
+    setTimeout(() => {
+      if (id === 'registration') {
+        if (!mapReg) initRegMap();
+        else mapReg.invalidateSize();
+      }
+      if (id === 'route') {
+        if (!mapRoute) initRouteMap();
+        else mapRoute.invalidateSize();
+      }
+      if (id.startsWith('medlend') && !window.medlendDataLoaded) {
+        initMedLendData();
+        window.medlendDataLoaded = true;
+      }
+    }, 200);
+  }
+
+  window.addEventListener("message", function(e) {
+    if (e.data && e.data.action === "changeTab") {
+      switchSection(e.data.tab);
+    }
+  });
+
+  window.addEventListener("storage", function(e) {
+    if (e.key === "nhso_tab_action" && e.newValue) {
+      const tabId = e.newValue.split('_')[0];
+      switchSection(tabId);
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    initRegMap();
+    initRouteMap();
+    loadDashboardData();
+    loadStockData();
+    loadRecipientsData();
+    
+    const storedAction = localStorage.getItem("nhso_tab_action");
+    if (storedAction) {
+      const tabId = storedAction.split('_')[0];
+      switchSection(tabId);
+    }
+  });
+
+  function initRegMap() {
+    if (typeof L === 'undefined' || mapReg) return;
+    var hybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'] });
+    
+    if (document.getElementById('mapRegistration')) {
+      mapReg = L.map('mapRegistration', { center: [7.4116, 99.5312], zoom: 17, layers: [hybrid] });
+      mapReg.on('click', e => setRegPin(e.latlng.lat, e.latlng.lng));
+      getGPS();
+    }
+  }
+
+  function initRouteMap() {
+    if (typeof L === 'undefined' || mapRoute) return;
+    var hybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'] });
+    
+    if (document.getElementById('mapRoute')) {
+      mapRoute = L.map('mapRoute', { center: [7.4116, 99.5312], zoom: 14, layers: [hybrid] });
+    }
+  }
+
+  function refreshRegMap() {
+    if (mapReg) mapReg.invalidateSize();
+  }
+
+  function setRegPin(lat, lng) {
+    if (!mapReg) return;
+    if (markerReg) mapReg.removeLayer(markerReg);
+    var redIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+    markerReg = L.marker([lat, lng], { icon: redIcon }).addTo(mapReg);
+    document.getElementById('regLat').value = lat.toFixed(6);
+    document.getElementById('regLng').value = lng.toFixed(6);
+  }
+
+  function getGPS() {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        if (mapReg) {
+          mapReg.setView([pos.coords.latitude, pos.coords.longitude], 18);
+          setRegPin(pos.coords.latitude, pos.coords.longitude);
+        }
+      }, err => console.warn(err), { enableHighAccuracy: true, timeout: 8000 });
+    }
+  }
+  
+  window.toggleFullscreenMap = function(mapId) {
+    const mapDiv = document.getElementById(mapId);
+    if (!document.fullscreenElement) {
+      if (mapDiv.requestFullscreen) {
+        mapDiv.requestFullscreen();
+      } else if (mapDiv.webkitRequestFullscreen) { /* Safari */
+        mapDiv.webkitRequestFullscreen();
+      } else if (mapDiv.msRequestFullscreen) { /* IE11 */
+        mapDiv.msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) { /* Safari */
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) { /* IE11 */
+        document.msExitFullscreen();
+      }
+    }
+  };
+
+  function loadDashboardData() {
+    gsr().withSuccessHandler(res => {
+      if (!res) return;
+      document.getElementById('dashTotalRecipients').innerText = res.totalRecipients || 0;
+      document.getElementById('dashTotalPlans').innerText = res.totalPlans || 0;
+      document.getElementById('dashDeliveredPlans').innerText = res.deliveredPlans || 0;
+      document.getElementById('dashPendingPlans').innerText = res.pendingPlans || 0;
+      document.getElementById('dashStockCount').innerText = res.stockItems ? res.stockItems.length : 0;
+
+      var labels = Object.keys(res.zoneCounts || {}), data = Object.values(res.zoneCounts || {});
+      if (zoneChartInstance) zoneChartInstance.destroy();
+      zoneChartInstance = new Chart(document.getElementById('zoneChart').getContext('2d'), {
+        type: 'bar',
+        data: { labels: labels.length ? labels : ['ไม่มีโซน'], datasets: [{ data: labels.length ? data : [0], backgroundColor: '#0284c7' }] },
+        options: { plugins: { legend: { display: false } } }
+      });
+
+      var html = '';
+      (res.stockItems || []).forEach(i => {
+        let textClass = i.stock <= i.alertLevel ? 'text-danger fw-bold' : 'text-primary';
+        html += `<div class="list-group-item d-flex justify-content-between align-items-center py-2">
+          <span>${i.name}</span>
+          <span class="badge bg-light ${textClass} rounded-pill border">${i.stock} ${i.unit}</span>
+        </div>`;
+      });
+      document.getElementById('stockSummaryList').innerHTML = html || '<div class="text-muted text-center">ไม่มีของในคลัง</div>';
+    }).nhsoGetDashboardStats();
+  }
+
+  function loadStockData() {
+    gsr().withSuccessHandler(items => {
+      globalStock = items || [];
+      var tbody = '';
+      var selectOpt = '<option value="">-- เลือกรายการพัสดุจากคลัง --</option>';
+      
+      globalStock.forEach(i => {
+        tbody += `<tr><td>${i.code}</td><td>${i.name}</td><td class="fw-bold">${i.stock}</td><td>${i.unit}</td></tr>`;
+        selectOpt += `<option value="${i.name}">${i.name} (คงเหลือ: ${i.stock} ${i.unit})</option>`;
+      });
+
+      document.getElementById('stockTableBody').innerHTML = tbody || '<tr><td colspan="4" class="text-center">ว่าง</td></tr>';
+      // removed regStockItemSelect population
+      
+      // Load Ledger
+      gsr().withSuccessHandler(ledger => {
+        let lbody = '';
+        ledger.forEach(l => {
+          let badge = l.type === 'IN' ? '<span class="badge bg-success">รับเข้า</span>' : '<span class="badge bg-danger">จ่ายออก</span>';
+          lbody += `<tr>
+            <td class="text-muted" style="font-size: 0.75rem;">${l.date.split(' ')[0]}</td>
+            <td>${l.itemName}</td>
+            <td>${badge}</td>
+            <td class="fw-bold ${l.type === 'IN' ? 'text-success' : 'text-danger'}">${l.type === 'IN' ? '+' : '-'}${l.qty}</td>
+          </tr>`;
+        });
+        document.getElementById('stockLedgerBody').innerHTML = lbody || '<tr><td colspan="4" class="text-center text-muted">ไม่มีประวัติ</td></tr>';
+      }).nhsoGetStockLedger();
+      
+    }).nhsoGetStockList();
+  }
+
+  document.getElementById('formRegister').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!document.getElementById('regLat').value || !document.getElementById('regLng').value) {
+      Swal.fire('ยังไม่ได้ปักหมุด', 'กรุณาคลิกปักหมุดบ้านบนแผนที่ หรือกดปุ่ม "รีเฟรชตำแหน่งปัจจุบัน" ก่อนบันทึก', 'warning');
+      return;
+    }
+    Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    var payload = {
+      id: document.getElementById('regId').value,
+      name: document.getElementById('regName').value,
+      zone: document.getElementById('regZone').value,
+      address: document.getElementById('regAddress').value,
+      lat: document.getElementById('regLat').value,
+      lng: document.getElementById('regLng').value
+    };
+
+    gsr().withSuccessHandler(res => {
+      if (res.success) {
+        Swal.fire('สำเร็จ', res.message, 'success');
+        document.getElementById('formRegister').reset();
+        document.getElementById('regId').value = '';
+        loadDashboardData();
+        loadStockData();
+        loadRecipientsData();
+      } else {
+        Swal.fire('ผิดพลาด', res.message, 'error');
+      }
+    }).nhsoSaveRecipient(payload);
+  });
+
+
+
+  document.getElementById('formAddStock').addEventListener('submit', e => {
+    e.preventDefault();
+    Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    gsr().withSuccessHandler(res => {
+      Swal.fire('แจ้งผล', res.message, res.success ? 'success' : 'error');
+      loadStockData(); loadDashboardData();
+      document.getElementById('formAddStock').reset();
+    }).nhsoUpdateStock(true, document.getElementById('newStockCode').value, document.getElementById('newStockName').value, document.getElementById('addStockQty').value, document.getElementById('newStockUnit').value);
+  });
+
+  function loadRecipientsData() {
+    gsr().withSuccessHandler(list => {
+      globalRecipients = list || [];
+      populatePlanPatients();
+      loadPlansData();
+      renderRecipientsManagementTable();
+    }).nhsoGetRecipientsList();
+  }
+  
+  window.renderRecipientsManagementTable = function() {
+    let tbody = document.getElementById('recipientsManageBody');
+    if (!tbody) return;
+    let keyword = (document.getElementById('searchRecipient') ? document.getElementById('searchRecipient').value.toLowerCase() : '');
+    let filtered = globalRecipients.filter(r => 
+      r.name.toLowerCase().includes(keyword) || 
+      (r.zone && r.zone.toLowerCase().includes(keyword))
+    );
+    
+    let html = '';
+    if (filtered.length === 0) {
+      html = '<tr><td colspan="5" class="text-center text-muted">ไม่พบข้อมูล</td></tr>';
+    } else {
+      filtered.forEach(r => {
+        let coords = (r.lat && r.lng) ? `<a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" class="text-decoration-none"><i class="fa-solid fa-map-marker-alt text-danger"></i> ${r.lat}, ${r.lng}</a>` : '<span class="text-muted">ไม่มีพิกัด</span>';
+        html += `<tr>
+          <td class="fw-bold">${r.name}</td>
+          <td>${r.zone}</td>
+          <td>${r.address || '-'}</td>
+          <td><small>${coords}</small></td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-primary me-1" title="แก้ไข" onclick="editRecipient('${r.id}')"><i class="fa-solid fa-edit"></i></button>
+            <button class="btn btn-sm btn-outline-danger" title="ลบ" onclick="deleteRecipient('${r.id}')"><i class="fa-solid fa-trash"></i></button>
+          </td>
+        </tr>`;
+      });
+    }
+    tbody.innerHTML = html;
+  };
+  
+  window.editRecipient = function(id) {
+    let p = globalRecipients.find(x => String(x.id) === String(id));
+    if (!p) return;
+    document.getElementById('regId').value = p.id;
+    document.getElementById('regName').value = p.name;
+    document.getElementById('regZone').value = p.zone;
+    document.getElementById('regAddress').value = p.address || '';
+    if (p.lat && p.lng) {
+      setRegPin(p.lat, p.lng);
+      if (mapReg) mapReg.setView([p.lat, p.lng], 18);
+    }
+    // Change submit behavior to update (In NHSO_Server.js nhsoSaveRecipient updates if name/zone matches, but we should scroll up)
+    window.scrollTo({ top: document.getElementById('section-registration').offsetTop - 50, behavior: 'smooth' });
+    Swal.fire({
+      icon: 'info',
+      title: 'โหมดแก้ไข',
+      text: 'ข้อมูลถูกโหลดเข้าฟอร์มด้านบนแล้ว เมื่อแก้ไขเสร็จให้กด "บันทึกข้อมูลผู้รับ"',
+      timer: 2500,
+      showConfirmButton: false
+    });
+  };
+  
+  window.deleteRecipient = function(id) {
+    Swal.fire({
+      title: 'ยืนยันการลบ?',
+      text: 'ต้องการลบข้อมูลผู้ป่วยรายนี้หรือไม่?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'ลบ',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#d33'
+    }).then((res) => {
+      if(res.isConfirmed) {
+        Swal.fire({title:'กำลังลบ...', didOpen:()=>Swal.showLoading()});
+        gsr().withSuccessHandler(r => {
+          if(r.success) {
+            Swal.fire('ลบสำเร็จ', '', 'success');
+            loadRecipientsData();
+            loadDashboardData();
+          } else {
+            Swal.fire('ผิดพลาด', r.error, 'error');
+          }
+        }).nhsoDeleteRecipient(id);
+      }
+    });
+  };
+
+
+  // --- PLANS JS ---
+  function populatePlanPatients() {
+    let sel = document.getElementById('planPatientSelect');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- เลือกผู้รับ --</option>';
+    globalRecipients.forEach(r => {
+      let valid = (r.lat && r.lng);
+      sel.innerHTML += `<option value="${r.id}" ${!valid?'disabled':''}>${r.name} (${r.zone || 'ไม่มีโซน'}) ${!valid?'[ขาดพิกัด]':''}</option>`;
+    });
+  }
+
+  function generatePlanForms() {
+    let pid = document.getElementById('planPatientSelect').value;
+    if (!pid) return Swal.fire('แจ้งเตือน', 'กรุณาเลือกผู้รับ', 'warning');
+    let rounds = parseInt(document.getElementById('planTotalRounds').value);
+    let html = '';
+    
+    let opts = globalStock.map(s => `<option value="${s.name}">${s.name} (คลัง: ${s.stock})</option>`).join('');
+
+    for(let i=1; i<=rounds; i++) {
+      html += `
+      <div class="border rounded p-3 mb-3 bg-light" id="planRound${i}">
+        <h6 class="fw-bold text-secondary mb-2">รอบที่ ${i}</h6>
+        <div id="itemsListRound${i}">
+          <div class="row g-2 mb-2 item-row">
+            <div class="col-8">
+              <select class="form-select item-name">
+                <option value="">-- เลือกสิ่งของ --</option>
+                ${opts}
+              </select>
+            </div>
+            <div class="col-3">
+              <input type="number" class="form-control item-qty" placeholder="จำนวน" min="1">
+            </div>
+            <div class="col-1">
+              <button class="btn btn-danger btn-sm w-100" onclick="this.parentElement.parentElement.remove()"><i class="fa-solid fa-times"></i></button>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary mt-2" onclick="addPlanItemRow(${i})">+ เพิ่มรายการ</button>
+      </div>`;
+    }
+    document.getElementById('planRoundsList').innerHTML = html;
+    document.getElementById('planFormsContainer').style.display = 'block';
+  }
+
+  window.addPlanItemRow = function(round) {
+    let opts = globalStock.map(s => `<option value="${s.name}">${s.name} (คลัง: ${s.stock})</option>`).join('');
+    let div = document.createElement('div');
+    div.className = 'row g-2 mb-2 item-row';
+    div.innerHTML = `
+      <div class="col-8">
+        <select class="form-select item-name"><option value="">-- เลือกสิ่งของ --</option>${opts}</select>
+      </div>
+      <div class="col-3"><input type="number" class="form-control item-qty" placeholder="จำนวน" min="1"></div>
+      <div class="col-1"><button class="btn btn-danger btn-sm w-100" onclick="this.parentElement.parentElement.remove()"><i class="fa-solid fa-times"></i></button></div>
+    `;
+    document.getElementById('itemsListRound' + round).appendChild(div);
+  };
+
+  window.copyRound1ToAll = function() {
+    let r1 = document.getElementById('itemsListRound1');
+    if (!r1) return;
+    let rounds = parseInt(document.getElementById('planTotalRounds').value);
+    let html = r1.innerHTML;
+    for(let i=2; i<=rounds; i++) {
+      document.getElementById('itemsListRound' + i).innerHTML = html;
+      let srcSelects = r1.querySelectorAll('select');
+      let srcInputs = r1.querySelectorAll('input');
+      let dstSelects = document.getElementById('itemsListRound' + i).querySelectorAll('select');
+      let dstInputs = document.getElementById('itemsListRound' + i).querySelectorAll('input');
+      
+      for(let j=0; j<srcSelects.length; j++) dstSelects[j].value = srcSelects[j].value;
+      for(let j=0; j<srcInputs.length; j++) dstInputs[j].value = srcInputs[j].value;
+    }
+  };
+
+  window.savePlans = function() {
+    let pid = document.getElementById('planPatientSelect').value;
+    let year = document.getElementById('planYear').value;
+    let rounds = parseInt(document.getElementById('planTotalRounds').value);
+    
+    let plansData = [];
+    for(let i=1; i<=rounds; i++) {
+      let rows = document.getElementById('itemsListRound' + i).querySelectorAll('.item-row');
+      rows.forEach(r => {
+        let name = r.querySelector('.item-name').value;
+        let qty = parseInt(r.querySelector('.item-qty').value);
+        if (name && qty > 0) {
+          plansData.push({ round: i, itemName: name, qty: qty });
+        }
+      });
+    }
+    
+    if (plansData.length === 0) return Swal.fire('แจ้งเตือน', 'กรุณาระบุสิ่งของอย่างน้อย 1 รายการ', 'warning');
+    
+    Swal.fire({ title: 'กำลังบันทึกแผน...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    gsr().withSuccessHandler(res => {
+      Swal.fire('แจ้งผล', res.message, res.success ? 'success' : 'error');
+      if(res.success) {
+        document.getElementById('planFormsContainer').style.display = 'none';
+        loadDashboardData();
+        loadPlansData();
+      }
+    }).nhsoSavePlan(pid, year, plansData);
+  };
+
+  var globalPlans = [];
+  function loadPlansData() {
+    gsr().withSuccessHandler(res => {
+      globalPlans = res || [];
+      renderRecipientCheckList();
+      window.renderReviewPlansTable();
+    }).nhsoGetPlans('');
+  }
+
+  window.renderReviewPlansTable = function() {
+    let year = document.getElementById('reviewPlanYear').value;
+    let roundFilter = document.getElementById('reviewPlanRound') ? document.getElementById('reviewPlanRound').value : 'all';
+    let tbody = document.getElementById('reviewPlansBody');
+    if (!tbody) return;
+    
+    // Group by patient and round
+    let grouped = {};
+    globalPlans.forEach(p => {
+      if (p.year !== year) return;
+      if (roundFilter !== 'all' && String(p.round) !== String(roundFilter)) return;
+      let key = p.patientId + '_' + p.round;
+      if (!grouped[key]) {
+        let recipient = globalRecipients.find(r => r.id === p.patientId);
+        grouped[key] = {
+          name: recipient ? recipient.name : p.patientId,
+          zone: recipient ? recipient.zone : '',
+          round: p.round,
+          items: [],
+          status: p.status
+        };
+      }
+      grouped[key].items.push(`${p.itemName} (x${p.qty})`);
+      if (p.status !== 'แจกแล้ว') grouped[key].status = 'รอแจก'; // If any item in the round is not delivered, it's pending
+    });
+    
+    let html = '';
+    let sortedKeys = Object.keys(grouped).sort((a,b) => grouped[a].round - grouped[b].round);
+    if (sortedKeys.length === 0) {
+      html = '<tr><td colspan="5" class="text-center text-muted">ไม่พบข้อมูลแผนการแจกที่ตรงเงื่อนไข</td></tr>';
+    } else {
+      sortedKeys.forEach(k => {
+        let row = grouped[k];
+        let pId = k.split('_')[0];
+        let badge = row.status === 'แจกแล้ว' 
+          ? `<span class="badge bg-success"><i class="fa-solid fa-check"></i> แจกแล้ว</span>` 
+          : `<button class="btn btn-sm btn-warning fw-bold action-btns" onclick="markDelivered('${pId}', '${year}', ${row.round}, '${row.name}')"><i class="fa-solid fa-truck-fast"></i> กดเพื่อจ่ายของ</button>`;
+          
+        let delBtn = row.status === 'แจกแล้ว' ? '' : `<button class="btn btn-sm btn-outline-danger action-btns ms-2" title="ลบแผนนี้" onclick="deletePlan('${pId}', '${year}', ${row.round})"><i class="fa-solid fa-trash"></i></button>`;
+        let editBtn = row.status === 'แจกแล้ว' ? '' : `<button class="btn btn-sm btn-outline-primary action-btns ms-1" title="แก้ไข" onclick="editPlan('${pId}')"><i class="fa-solid fa-edit"></i></button>`;
+        
+        html += `<tr>
+          <td>${row.name}</td>
+          <td>${row.zone}</td>
+          <td class="text-center">${row.round}</td>
+          <td>${row.items.join('<br>')}</td>
+          <td class="text-center">${badge}${editBtn}${delBtn}</td>
+        </tr>`;
+      });
+    }
+    tbody.innerHTML = html;
+  };
+
+  window.deletePlan = function(pId, year, round) {
+    Swal.fire({
+      title: 'ยืนยันการลบ',
+      text: `ต้องการลบแผนแจกของสำหรับรอบที่ ${round} ใช่หรือไม่?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'ลบ',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc3545'
+    }).then(r => {
+      if(r.isConfirmed) {
+        Swal.fire({ title: 'กำลังลบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        gsr().withSuccessHandler(res => {
+          if(res.success) {
+            Swal.fire('สำเร็จ', res.message, 'success');
+            loadPlansData();
+          } else {
+            Swal.fire('ผิดพลาด', res.message, 'error');
+          }
+        }).nhsoDeletePlanByRound(pId, year, round);
+      }
+    });
+  };
+
+  window.editPlan = function(pId) {
+    document.getElementById('planPatientSelect').value = pId;
+    window.scrollTo({ top: document.getElementById('section-plans').offsetTop - 50, behavior: 'smooth' });
+    Swal.fire({
+      icon: 'info',
+      title: 'เลือกผู้ป่วยแล้ว',
+      text: 'กรุณากำหนดสิ่งของใหม่ในขั้นตอนที่ 2 และกดบันทึก (แผนใหม่จะทับแผนเดิมสำหรับรอบนั้นๆ)',
+      timer: 3500,
+      showConfirmButton: false
+    });
+  };
+
+  window.printHtml = function(htmlContent, title) {
+    let win = window.open('', '_blank');
+    if (!win) {
+      Swal.fire('แจ้งเตือน', 'กรุณาอนุญาต Pop-ups (Allow Pop-ups) บนเบราว์เซอร์ของคุณเพื่อสั่งพิมพ์', 'warning');
+      return;
+    }
+    win.document.open();
+    win.document.write("<!DOCTYPE html>\n<" + "html>\n<" + "head>\n");
+    win.document.write("  <title>" + title + "</title>\n");
+    win.document.write("  <link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css\" rel=\"stylesheet\">\n");
+    win.document.write("  <link href=\"https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&display=swap\" rel=\"stylesheet\">\n");
+    win.document.write("  <" + "style>\n");
+    win.document.write("    body { font-family: 'Sarabun', sans-serif; padding: 20px; font-size: 12px; }\n");
+    win.document.write("    table { font-size: 12px; width: 100%; border-collapse: collapse; }\n");
+    win.document.write("    table, th, td { border: 1px solid #dee2e6; padding: 8px; }\n");
+    win.document.write("    .table-light th { background-color: #f8f9fa; }\n");
+    win.document.write("    .btn, .dropdown, .action-btns, .no-print { display: none !important; }\n");
+    win.document.write("    img.canvas-img { max-width: 100%; height: auto; }\n");
+    win.document.write("  <" + "/style>\n");
+    win.document.write("<" + "/head>\n<" + "body>\n");
+    win.document.write(htmlContent);
+    win.document.write("\n<" + "/body>\n<" + "/html>");
+    win.document.close();
+    
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 1500);
+  };
+
+  window.printDashboardOverview = function() {
+    let dashClone = document.getElementById('section-dashboard').cloneNode(true);
+    
+    // Convert canvases to images so they print correctly
+    let originalCanvases = document.getElementById('section-dashboard').getElementsByTagName('canvas');
+    let clonedCanvases = dashClone.getElementsByTagName('canvas');
+    for (let i = 0; i < originalCanvases.length; i++) {
+      let img = document.createElement('img');
+      img.src = originalCanvases[i].toDataURL('image/png');
+      img.className = 'canvas-img';
+      clonedCanvases[i].parentNode.replaceChild(img, clonedCanvases[i]);
+    }
+    
+    let printContent = '<h3 class="text-center mb-4">รายงานสรุปภาพรวมการแจกจ่ายสิ่งของ สปสช.</h3>' + dashClone.outerHTML;
+    printHtml(printContent, 'พิมพ์สรุปภาพรวม');
+  };
+
+  window.printPlansTable = function() {
+    let year = document.getElementById('reviewPlanYear').value;
+    let tableHtml = document.getElementById('reviewPlansTable').outerHTML;
+    let printContent = `
+      <h3 style="text-align: center; margin-bottom: 20px;">สรุปแผนการแจกจ่ายพัสดุ สปสช. ประจำปี ${year}</h3>
+      ${tableHtml}
+    `;
+    printHtml(printContent, 'พิมพ์แผนการแจก');
+  };
+
+  function renderRecipientCheckList() {
+    var year = document.getElementById('routeYear').value;
+    var round = document.getElementById('selectDeliveryRound').value;
+    var zoneFilter = document.getElementById('routeZoneFilter').value;
+    var zones = {}, html = '';
+
+    // สร้าง Map ของผู้ป่วยที่มีแผนแจกในรอบนี้
+    let patientsInRound = {};
+    globalPlans.forEach(p => {
+      if (p.year === year && p.round === round) {
+        if (!patientsInRound[p.patientId]) {
+          patientsInRound[p.patientId] = { items: [], allDelivered: true };
+        }
+        patientsInRound[p.patientId].items.push(`${p.itemName} x${p.qty}`);
+        if (p.status !== 'แจกแล้ว') patientsInRound[p.patientId].allDelivered = false;
+      }
+    });
+
+    globalRecipients.forEach((r, idx) => {
+      if (r.zone) zones[r.zone] = true;
+      let planData = patientsInRound[r.id];
+      if (planData) {
+        if (!zoneFilter || r.zone === zoneFilter) {
+          var isChecked = activeBucketList.some(b => b.id === r.id);
+          var badge = planData.allDelivered ? '<span class="badge bg-success ms-1">แจกแล้ว</span>' : '<span class="badge bg-warning text-dark ms-1">รอแจก</span>';
+          
+          html += `<div class="form-check py-1 border-bottom">
+            <input class="form-check-input rec-chk" type="checkbox" value="${idx}" id="rc_${idx}" ${isChecked ? 'checked' : ''} onchange="toggleBucket(${idx})">
+            <label class="form-check-label small" for="rc_${idx}">
+              <strong>${r.name}</strong> (${r.zone}) ${badge}
+              <div class="text-muted text-truncate" style="font-size:0.75rem;">${planData.items.join(', ')}</div>
+            </label>
+          </div>`;
+        }
+      }
+    });
+
+    document.getElementById('recipientCheckList').innerHTML = html || '<div class="text-center text-muted py-2">ไม่มีแผนการแจกสำหรับรอบ/ปีนี้</div>';
+    
+    var zOpt = '<option value="">-- ทุกโซน --</option>';
+    Object.keys(zones).forEach(z => zOpt += `<option value="${z}" ${z === zoneFilter ? 'selected' : ''}>${z}</option>`);
+    
+    // Only update zone filter dropdown if it doesn't already have options or is empty
+    if (document.getElementById('routeZoneFilter').options.length <= 1) {
+      document.getElementById('routeZoneFilter').innerHTML = zOpt;
+    }
+  }
+
+  function toggleBucket(idx) {
+    var item = globalRecipients[idx];
+    var eIdx = activeBucketList.findIndex(b => b.id === item.id);
+    if (eIdx >= 0) activeBucketList.splice(eIdx, 1); else activeBucketList.push(item);
+    document.getElementById('selectedCount').innerText = activeBucketList.length;
+  }
+
+  function clearBucket() {
+    activeBucketList = [];
+    document.querySelectorAll('.rec-chk').forEach(c => c.checked = false);
+    document.getElementById('selectedCount').innerText = 0;
+  }
+
+  function calculateRoute() {
+    if (activeBucketList.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาติ๊กเลือกผู้ป่วยในรอบนี้ก่อน', 'warning'); return; }
+    Swal.fire({ title: 'กำลังจัดเส้นทาง...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => sendRoute(pos.coords.latitude, pos.coords.longitude), () => sendRoute('', ''));
+    } else { sendRoute('', ''); }
+  }
+
+  function sendRoute(lat, lng) {
+    var cars = parseInt(document.getElementById('numCars').value) || 1;
+    gsr().withSuccessHandler(res => {
+      Swal.close();
+      if (!res.success) { Swal.fire('ผิดพลาด', 'สร้างเส้นทางไม่สำเร็จ', 'error'); return; }
+      lastRouteData = res;
+      renderRouteDisplay(res);
+    }).nhsoBuildGoogleMapsRoute(activeBucketList, { currentLat: lat, currentLng: lng, numCars: cars });
+  }
+
+  function renderRouteDisplay(res) {
+    if (!mapRoute) initRouteMap();
+    mapRoute.invalidateSize();
+
+    if (routeLayer) mapRoute.removeLayer(routeLayer);
+    routeLayer = L.layerGroup().addTo(mapRoute);
+
+    var carColors = ['#0284c7', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#db2777', '#ca8a04', '#059669', '#4f46e5', '#ea580c'];
+    var allLatLngs = [];
+
+    res.ordered.forEach((p, i) => {
+      var carColor = carColors[(p.car - 1) % carColors.length] || carColors[0];
+      if (p.id !== 'GPS') {
+        var customIcon = L.divIcon({
+          className: 'custom-div-icon',
+          html: `<div style="background-color:${carColor}; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+        L.marker([p.lat, p.lng], {icon: customIcon}).addTo(routeLayer).bindPopup(`<b>คันที่ ${p.car} - ${p.name}</b><br>${p.items || ''}`);
+        allLatLngs.push([p.lat, p.lng]);
+      }
+    });
+
+    if (allLatLngs.length > 1) {
+      mapRoute.fitBounds(L.latLngBounds(allLatLngs), { padding: [30, 30] });
+    } else if (allLatLngs.length === 1) {
+      mapRoute.setView(allLatLngs[0], 16);
+    }
+
+    var year = document.getElementById('routeYear').value;
+    var roundNum = document.getElementById('selectDeliveryRound').value;
+    var html = `<div class="alert alert-success p-2 small mb-3">
+      <strong><i class="fa-brands fa-google"></i> ลิงก์นำทางรอบที่ ${roundNum}:</strong>
+      <div class="d-grid gap-1 mt-2">`;
+    res.googleMapsUrls.forEach(u => {
+      var carColor = carColors[(u.car - 1) % carColors.length] || carColors[0];
+      html += `<a href="${u.url}" target="_blank" class="btn btn-sm text-white text-start fw-bold" style="background-color:${carColor}; border:none;">${u.label}</a>`;
+    });
+    html += `</div></div><div class="list-group list-group-flush">`;
+
+    res.ordered.forEach((p, i) => {
+      if (p.id === 'GPS') return;
+      
+      let isDone = true;
+      let planItems = [];
+      globalPlans.forEach(plan => {
+        if (plan.patientId === p.id && plan.year === year && plan.round === roundNum) {
+          planItems.push(`${plan.itemName} x${plan.qty}`);
+          if (plan.status !== 'แจกแล้ว') isDone = false;
+        }
+      });
+      if (planItems.length === 0) isDone = false; // No plans means not done, or shouldn't be here
+      
+      var carColor = carColors[(p.car - 1) % carColors.length] || carColors[0];
+      html += `<div class="list-group-item py-2 px-0 d-flex justify-content-between align-items-center">
+        <div>
+          <span class="badge rounded-pill me-1" style="background-color:${carColor}">คัน ${p.car}</span>
+          <strong>${p.name}</strong> (${p.zone})<div class="small text-muted">${planItems.join(', ')}</div>
+        </div>
+        <div>
+          ${isDone ? '<span class="badge bg-success">แจกแล้ว</span>' : `<button class="btn btn-sm btn-success" onclick="markDelivered('${p.id}', '${year}', '${roundNum}', '${p.name}')"><i class="fa-solid fa-check me-1"></i> แจกสำเร็จ</button>`}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+    document.getElementById('routeOrderResult').innerHTML = html;
+  }
+
+  function markDelivered(id, year, roundNum, name) {
+    Swal.fire({
+      title: `ยืนยันการแจก`,
+      text: `บันทึกว่าส่งของให้ ${name} สำหรับปี ${year} รอบที่ ${roundNum} เรียบร้อยแล้ว?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'บันทึก',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#10b981'
+    }).then(r => {
+      if (r.isConfirmed) {
+        gsr().withSuccessHandler(res => {
+          Swal.fire('สำเร็จ', res.message, 'success');
+          loadDashboardData();
+          loadPlansData();
+          if (lastRouteData) calculateRoute();
+        }).nhsoMarkAsDeliveredByRound(id, year, roundNum, '');
+      }
+    });
+  }
+</script>
+
+
+      <!-- ================= MEDLEND MODULE ================= -->
+      <!-- Dashboard (4.1) -->
+      <div id="section-medlend-dash" class="section-view active">
+        <h5 class="fw-bold text-success mb-4"><i class="fa-solid fa-chart-pie me-2"></i> แดชบอร์ดระบบยืม-คืนอุปกรณ์</h5>
+        <div class="row mb-4">
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-success border-4">
+              <span class="text-muted small">อุปกรณ์พร้อมใช้</span>
+              <h2 class="fw-bold my-1 text-success" id="med_stat_available">0</h2>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-primary border-4">
+              <span class="text-muted small">อยู่ระหว่างการยืม</span>
+              <h2 class="fw-bold my-1 text-primary" id="med_stat_borrowed">0</h2>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-warning border-4">
+              <span class="text-muted small">รออนุมัติ / ส่งซ่อม</span>
+              <h2 class="fw-bold my-1 text-warning" id="med_stat_maintenance">0</h2>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card stat-card p-3 bg-white border-start border-danger border-4">
+              <span class="text-muted small">เกินกำหนดส่งคืน</span>
+              <h2 class="fw-bold my-1 text-danger" id="med_stat_overdue">0</h2>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white border-0 pt-3 pb-0">
+            <h6 class="fw-bold text-success"><i class="fa-solid fa-map-location-dot me-2"></i> แผนที่พิกัดผู้ป่วย (Patient Map)</h6>
+          </div>
+          <div class="card-body">
+            <div id="med_globalMap" style="height: 350px; width: 100%; border-radius: 10px; z-index: 1;"></div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white fw-bold py-3"><i class="fa-solid fa-list-ol text-secondary me-2"></i> รายการอุปกรณ์ที่ถูกยืม</div>
+          <div class="card-body p-0 table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light text-muted small">
+                <tr><th>เลขสัญญา</th><th>ผู้ป่วย / ผู้ยืม</th><th>อุปกรณ์</th><th>วันที่ยืม</th><th>กำหนดคืน</th><th>สถานะ</th><th>จัดการ</th></tr>
+              </thead>
+              <tbody id="med_activeLoansTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Borrow (4.2) -->
+      <div id="section-medlend-borrow" class="section-view">
+        <h5 class="fw-bold text-success mb-4"><i class="fa-solid fa-map-location-dot me-2"></i> ทำเรื่องขอยืมอุปกรณ์ & ปักหมุดบ้าน</h5>
+        <div class="row">
+          <div class="col-md-8">
+            <div class="card shadow-sm border-0">
+              <div class="card-body p-4">
+                <form id="med_borrowForm" onsubmit="event.preventDefault(); med_submitBorrow();">
+                  <h6 class="fw-bold mb-3 border-bottom pb-2">ข้อมูลผู้ยืม และ ผู้ป่วย</h6>
+                  <div class="row mb-3">
+                    <div class="col-md-6"><label class="form-label small fw-bold">เลขบัตร ปชช. (ผู้ป่วย)</label><input type="text" class="form-control" id="med_req_cid" required></div>
+                    <div class="col-md-6"><label class="form-label small fw-bold">ชื่อ-สกุล (ผู้ป่วย)</label><input type="text" class="form-control" id="med_req_patient" required></div>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-6"><label class="form-label small fw-bold">ชื่อ-สกุล (ผู้ทำเรื่องยืม)</label><input type="text" class="form-control" id="med_req_borrower" required></div>
+                    <div class="col-md-6"><label class="form-label small fw-bold">เบอร์โทรศัพท์ติดต่อ</label><input type="text" class="form-control" id="med_req_phone" required></div>
+                  </div>
+                  <div class="mb-4">
+                    <label class="form-label small fw-bold">พิกัด GPS บ้านผู้ป่วย (Lat, Lng)</label>
+                    <div class="input-group">
+                      <input type="text" class="form-control" id="med_req_gps" placeholder="เช่น 7.4116, 99.5312" required readonly>
+                      <button class="btn btn-outline-danger" type="button" onclick="med_getCurrentGps()"><i class="fa-solid fa-location-crosshairs"></i> ดึงปัจจุบัน</button>
+                      <button class="btn btn-outline-primary" type="button" onclick="med_openMapPicker()"><i class="fa-solid fa-map"></i> ดูแผนที่</button>
+                    </div>
+                  </div>
+                  <h6 class="fw-bold mb-3 border-bottom pb-2">รายละเอียดการยืม</h6>
+                  <div class="row mb-4">
+                    <div class="col-md-8">
+                      <label class="form-label small fw-bold">อุปกรณ์ที่ต้องการยืม</label>
+                      <select class="form-select" id="med_req_equip" required></select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small fw-bold">กำหนดคืน (เว้นว่างถ้าระยะยาว)</label>
+                      <input type="date" class="form-control" id="med_req_due">
+                    </div>
+                  </div>
+                  <div class="text-end"><button type="submit" class="btn btn-success px-5 fw-bold"><i class="fa-solid fa-check me-2"></i> บันทึกคำขอยืม</button></div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Registry (4.3) -->
+      <div id="section-medlend-registry" class="section-view">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h5 class="fw-bold text-primary mb-0"><i class="fa-solid fa-barcode me-2"></i> ทะเบียนคุมอุปกรณ์ & QR Code</h5>
+          <div>
+            <button class="btn btn-dark btn-sm me-2" onclick="med_openQrScanner()"><i class="fa-solid fa-camera me-1"></i> สแกน QR</button>
+            <button class="btn btn-primary btn-sm" onclick="med_openAddEquipModal()"><i class="fa-solid fa-plus me-1"></i> เพิ่มอุปกรณ์ใหม่</button>
+          </div>
+        </div>
+        <div class="card shadow-sm border-0">
+          <div class="card-body p-0 table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light text-muted small">
+                <tr><th>รูปภาพ</th><th>รหัสครุภัณฑ์</th><th>ชื่ออุปกรณ์ / หมวดหมู่</th><th>ซีเรียล / วันที่รับเข้า</th><th>สถานะ</th><th>จัดการ</th></tr>
+              </thead>
+              <tbody id="med_inventoryTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Return (4.4) -->
+      <div id="section-medlend-return" class="section-view">
+        <h5 class="fw-bold text-info mb-4"><i class="fa-solid fa-rotate-left me-2"></i> บันทึกรับคืน & ตรวจสภาพ</h5>
+        <div class="card shadow-sm border-0">
+          <div class="card-body p-0 table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light text-muted small">
+                <tr><th>เลขสัญญา</th><th>ผู้ป่วย</th><th>อุปกรณ์</th><th>สถานะ</th><th>จัดการ</th></tr>
+              </thead>
+              <tbody id="med_returnTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Approve (4.5) -->
+      <div id="section-medlend-approve" class="section-view">
+        <h5 class="fw-bold text-warning mb-4"><i class="fa-solid fa-file-signature me-2"></i> เสนอแฟ้มอนุมัติ & ผู้บริหารลงนาม</h5>
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white border-0 pt-3 pb-0"><h6 class="fw-bold text-warning">คำขอยืมที่รอการอนุมัติ (Pending)</h6></div>
+          <div class="card-body p-0 table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light text-muted small">
+                <tr><th>เลขที่สัญญา</th><th>ผู้ป่วย / ผู้ยืม</th><th>อุปกรณ์</th><th>วันที่ยืม</th><th>ตรวจสอบ & ลงนาม</th></tr>
+              </thead>
+              <tbody id="med_pendingTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Followup (4.6) -->
+      <div id="section-medlend-followup" class="section-view">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h5 class="fw-bold text-pink-500 mb-0" style="color: #ec4899;"><i class="fa-solid fa-user-nurse me-2"></i> บันทึกเยี่ยมบ้าน & ติดตาม</h5>
+          <button class="btn btn-sm text-white" style="background-color: #ec4899;" onclick="med_openFollowUpModal()"><i class="fa-solid fa-plus me-1"></i> เพิ่มบันทึก</button>
+        </div>
+        <div class="card shadow-sm border-0">
+          <div class="card-body p-0 table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light text-muted small">
+                <tr><th>วันที่เยี่ยม</th><th>รหัสสัญญา</th><th>ชื่อผู้ป่วย</th><th>อาการ</th><th>สภาพอุปกรณ์</th><th>ผู้เข้าเยี่ยม</th></tr>
+              </thead>
+              <tbody id="med_visitsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Maintenance (4.7) -->
+      <div id="section-medlend-maintenance" class="section-view">
+        <h5 class="fw-bold text-orange-500 mb-4" style="color: #f97316;"><i class="fa-solid fa-screwdriver-wrench me-2"></i> คิวล้าง & ซ่อมบำรุง</h5>
+        <div class="card shadow-sm border-0">
+          <div class="card-body p-0 table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light text-muted small">
+                <tr><th>รหัสอุปกรณ์</th><th>ชื่ออุปกรณ์</th><th>สถานะปัจจุบัน</th><th>จัดการ</th></tr>
+              </thead>
+              <tbody id="med_maintenanceTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+<!-- ================= END MEDLEND MODULE ================= -->
+
+<!-- MEDLEND PRINT TEMPLATE -->
+<div id="print-area" style="display: none;">
+    <div style="font-family: 'Sarabun', sans-serif; color: black; max-width: 190mm; margin: 0 auto; line-height: 1.2; font-size: 11.5pt;">
+      <div style="text-align: center; font-weight: bold; font-size: 14pt; margin-bottom: 5px;">
+        ศูนย์สาธิตและยืมอุปกรณ์เครื่องช่วยความพิการฟื้นฟูสมรรถภาพที่บ้าน<br>
+        เทศบาลตำบลบางเป้า
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+        <div style="flex: 1;"></div>
+        <div style="flex: 1; text-align: center; font-weight: bold;">แบบฟอร์มขอยืมอุปกรณ์การแพทย์</div>
+        <div style="flex: 1; text-align: right;">เลขที่.......................</div>
+      </div>
+      <div style="text-align: right; margin-bottom: 5px;">
+        วันที่ <span id="print-date-day" class="dot-line" style="width: 30px;"></span> 
+        เดือน <span id="print-date-month" class="dot-line" style="width: 80px;"></span> 
+        พ.ศ. <span id="print-date-year" class="dot-line" style="width: 50px;"></span>
+      </div>
+      <div style="margin-bottom: 5px; line-height: 1.5; text-align: justify;">
+        ชื่อผู้ขอยืม(นาย/นาง/นางสาว) <span id="print-borrower-fname" class="dot-line" style="width: 120px;"></span>
+        นามสกุล <span id="print-borrower-lname" class="dot-line" style="width: 120px;"></span>
+        ที่อยู่ <span id="print-borrower-addr" class="dot-line" style="width: 200px;"></span>
+        เบอร์โทรศัพท์ <span id="print-borrower-phone" class="dot-line" style="width: 100px;"></span><br>
+        เพื่อให้ผู้ป่วยชื่อ(นาย/นาง/นางสาว) <span id="print-patient-fname" class="dot-line" style="width: 120px;"></span>
+        นามสกุล <span id="print-patient-lname" class="dot-line" style="width: 120px;"></span>
+        ที่อยู่ <span id="print-patient-addr" class="dot-line" style="width: 250px;"></span><br>
+        มีความสัมพันธ์กับผู้ป่วย <span id="print-relationship" class="dot-line" style="width: 150px;"></span>
+      </div>
+      
+      <div style="font-weight: bold; text-decoration: underline; margin-top: 5px; margin-bottom: 2px;">ประเภทอุปกรณ์ที่ยืม</div>
+      <table style="width: 100%; border: none; margin-bottom: 5px; font-size: 11pt;">
+        <tr>
+          <td style="width: 45%;">(&nbsp;&nbsp;) เตียงเฟาว์เลอร์ชนิดมือหมุน</td>
+          <td style="width: 25%;">จำนวน...............เตียง</td>
+          <td style="width: 30%;">หมายเลขครุภัณฑ์.................................</td>
+        </tr>
+        <tr>
+          <td>(&nbsp;&nbsp;) ถังออกซิเจนพร้อมอุปกรณ์การใช้ครบชุด</td>
+          <td>จำนวน...............ถัง</td>
+          <td>หมายเลขครุภัณฑ์.................................</td>
+        </tr>
+        <tr>
+          <td>(&nbsp;&nbsp;) รถนั่งคนพิการชนิดพับได้ทำด้วยโลหะ</td>
+          <td>จำนวน..............คัน</td>
+          <td>หมายเลขครุภัณฑ์.................................</td>
+        </tr>
+        <tr>
+          <td>(&nbsp;&nbsp;) เครื่องดูดเสมหะ</td>
+          <td>จำนวน.............เครื่อง</td>
+          <td>หมายเลขครุภัณฑ์.................................</td>
+        </tr>
+        <tr>
+          <td>(&nbsp;&nbsp;) ที่นอนลม</td>
+          <td>จำนวน.............ชุด</td>
+          <td>หมายเลขครุภัณฑ์.................................</td>
+        </tr>
+        <tr>
+          <td>(&nbsp;&nbsp;) อื่นๆ <span id="print-eq-name" class="dot-line" style="width: 120px;"></span></td>
+          <td>จำนวน.............ชิ้น</td>
+          <td>หมายเลขครุภัณฑ์ <span id="print-eq-code" class="dot-line" style="width: 100px;"></span></td>
+        </tr>
+      </table>
+
+      <div style="text-align: center; font-weight: bold; margin-bottom: 5px; font-size: 11pt;">
+        ข้อตกลง เกี่ยวกับการยืมอุปกรณ์เครื่องช่วยความพิการฟื้นฟูสมรรถภาพที่บ้าน
+      </div>
+      <div style="font-size: 10.5pt; line-height: 1.2; text-indent: 30px; margin-bottom: 5px; text-align: justify;">
+        (1) เมื่อผู้ยื่นคำร้องขอยืม ได้ยืมอุปกรณ์ไปแล้ว ผู้ยืมจะต้องจัดซื้อวัสดุสิ้นเปลืองเพื่อประกอบการใช้งานอุปกรณ์ด้วยตนเอง อาทิ สายดูดเสมหะ สายออกซิเจน (Nasal Cannula) น้ำกลั่นสำหรับเครื่องผลิตออกซิเจน ฯลฯ<br>
+        (2) ระหว่างการใช้อุปกรณ์ฯผู้ป่วย หรือผู้ที่ยื่นคำร้อง จะต้องรักษาความสะอาดของอุปกรณ์ทุกชิ้นที่ยืมไป และก่อนจะนำส่งคืนเทศบาลตำบลบางเป้า จะต้องทำความสะอาดอุปกรณ์ที่ยืมไปให้เรียบร้อย (กรณีอุปกรณ์ฯชำรุดเสียหายที่ไม่ใช่จากการเสื่อมสภาพของอุปกรณ์ฯผู้ป่วย หรือผู้ที่ยื่นคำร้อง จะต้องเป็นผู้รับผิดชอบค่าเสียหายทั้งหมด)<br>
+        (3) หลังจากที่ได้รับมอบอุปกรณ์เครื่องช่วยความพิการฟื้นฟูสมรรถภาพที่บ้านจากทางเทศบาลตำบลบางเป้า จะมีเจ้าหน้าที่ลงตรวจเยี่ยม ติดตามอาการ เพื่อทำการประเมินกิจวัตรประจำวัน ดัชนีบาร์เธลเอดีแอล (Barthel Activities of Daily Living : ADL)<br>
+        (4) ในกรณีที่ผลการประเมินกิจวัตรประจำวัน ดัชนีบาร์เธลเอดีแอล (Barthel Activities of Daily Living : ADL) ของผู้ป่วยต่ำกว่าเกณฑ์หรือไม่มีความจำเป็นต้องใช้อุปกรณ์ที่ได้ยืมกับทางเทศบาลตำบลบางเป้าแล้ว นั้น
+        <ul style="margin: 2px 0; padding-left: 50px; list-style-type: none;">
+          <li>- ให้ผู้ที่ยื่นคำร้อง จะต้องทำการส่งคืนอุปกรณ์ทั้งหมดให้แก่เทศบาลตำบลบางเป้า ภายในระยะเวลา 7 วัน</li>
+          <li>- โดยจะต้องแจ้งให้เจ้าหน้าที่เทศบาลตำบลบางเป้าทราบก่อนส่งคืนทุกครั้ง เพื่อทำการตรวจสภาพอุปกรณ์ก่อนส่งคืน</li>
+          <li>- ห้ามส่งมอบอุปกรณ์ที่ขอยืมกับทางเทศบาลตำบลบางเป้าให้บุคคลอื่นต่อ โดยไม่ได้รับอนุญาต โดยเด็ดขาด หากทรัพย์สินเกิดการชำรุดหรือสูญหาย ผู้ที่ลงชื่อขอยืมจะต้องรับผิดชอบต่อทรัพย์สิน นั้น</li>
+          <li>- ผู้ที่ยื่นคำร้องขอยืมอุปกรณ์ เมื่อต้องการนำส่งอุปกรณ์คืน จะต้องมาลงลายมือชื่อต่อเจ้าหน้าที่ ณ กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า เท่านั้น</li>
+        </ul>
+        (5) ห้ามผู้ใดทำการขีดฆ่า หรือลบ ทำลายเลขครุภัณฑ์ที่เขียนกำกับไว้ หรือสลับอุปกรณ์กับอุปกรณ์อื่น โดยเด็ดขาดเนื่องจากเป็นทรัพย์สินของทางราชการ (การทำลายทรัพย์สินของทางราชการหรือพยายามเก็บไว้เป็นของตน มีความผิดตามกฎหมาย)<br>
+      </div>
+      <div style="font-size: 10.5pt; text-indent: 30px; text-align: justify; margin-bottom: 5px;">
+        ข้าพเจ้าได้อ่าน เข้าใจ ในรายละเอียด และยอมรับข้อตกลงข้างต้นแล้ว จึงขอรับรองว่า จะดูแลรักษาอุปกรณ์ที่ยืมเป็นอย่างดี โดยหากมีความเสียหายใดๆ หรือมีการสูญหายเกิดขึ้น ข้าพเจ้าจะขอรับผิดชอบทั้งหมดทุกกรณีโดยไม่มีเงื่อนไข
+      </div>
+
+      <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 11pt;">
+        <div style="text-align: center; width: 45%;">
+          <p style="margin: 0;">ลงชื่อ.....................................................ผู้ยืม</p>
+          <p style="margin: 5px 0;">( <span id="print-sign-borrower" class="dot-line" style="width:120px; border-bottom: none;"></span> )</p>
+          <p style="margin: 0;">วันที่.....................................................</p>
+        </div>
+        <div style="text-align: center; width: 45%;">
+          <p style="margin: 0;">ลงชื่อ.....................................................ผู้ให้ยืม</p>
+          <p style="margin: 5px 0;">(...................................................)</p>
+          <p style="margin: 0;">วันที่......................................................</p>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: center; margin-bottom: 5px; font-size: 11pt;">
+        <div style="text-align: center; width: 80%;">
+          <p style="text-align: left; margin-bottom: 5px; margin-left: 20px;"><span class="checkbox"></span> อนุมัติ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="checkbox"></span> ไม่อนุมัติ</p>
+          <p style="margin: 0;">ลงชื่อ............................................</p>
+          <p style="margin: 5px 0;">( นายนิติธรรม ดำสุด )</p>
+          <p style="margin: 0;">รองนายกเทศมนตรี ปฏิบัติราชการแทน<br>นายกเทศมนตรีตำบลบางเป้า</p>
+          <p style="margin: 0;">วันที่......................................................</p>
+        </div>
+      </div>
+
+      <div style="border-top: 1px dashed black; margin: 5px 0; padding-top: 5px; font-size: 11pt;">
+        <div style="font-weight: bold; margin-bottom: 5px;">ส่งคืนอุปกรณ์</div>
+        <div style="margin-left: 20px; margin-bottom: 5px; line-height: 1.4;">
+          <span class="checkbox"></span> อุปกรณ์ครบถ้วน <br>
+          <span class="checkbox"></span> อุปกรณ์ชำรุด เนื่องจาก........................................................................................................................
+        </div>
+
+        <div style="display: flex; justify-content: space-between;">
+          <div style="text-align: center; width: 45%;">
+            <p style="margin: 0;">ลงชื่อ.....................................................ผู้ส่งคืน</p>
+            <p style="margin: 5px 0;">(.................................................)</p>
+            <p style="margin: 0;">วันที่.....................................................</p>
+          </div>
+          <div style="text-align: center; width: 45%;">
+            <p style="margin: 0;">ลงชื่อ.....................................................ผู้ตรวจสอบ</p>
+            <p style="margin: 5px 0;">(...................................................)</p>
+            <p style="margin: 0;">วันที่......................................................</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+            
+
+<!-- ================= MEDLEND MODALS ================= -->
+<div class="modal fade" id="med_addEqModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white border-0">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-plus me-2"></i> เพิ่ม/แก้ไขอุปกรณ์</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="med_addEqForm" onsubmit="event.preventDefault(); med_submitInventory();">
+          <div class="mb-3"><label class="form-label small fw-bold">รหัสครุภัณฑ์ *</label><input type="text" class="form-control" id="med_eqId" required></div>
+          <div class="mb-3"><label class="form-label small fw-bold">ชื่ออุปกรณ์ *</label><input type="text" class="form-control" id="med_eqName" required placeholder="เช่น เตียงผู้ป่วย 3 ไกร์"></div>
+          <div class="mb-3"><label class="form-label small fw-bold">หมวดหมู่</label><input type="text" class="form-control" id="med_eqCat" placeholder="เช่น อุปกรณ์ช่วยเดิน"></div>
+          <div class="mb-3"><label class="form-label small fw-bold">Serial Number</label><input type="text" class="form-control" id="med_eqSerial"></div>
+          <div class="mb-3"><label class="form-label small fw-bold">วันที่รับเข้า</label><input type="date" class="form-control" id="med_eqDate"></div>
+          <div class="mb-3"><label class="form-label small fw-bold">สภาพเริ่มต้น</label><input type="text" class="form-control" id="med_eqCond" placeholder="เช่น ใหม่, มีรอยขีดข่วน"></div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold">รูปภาพอุปกรณ์ (อัปโหลด)</label>
+            <input type="file" class="form-control" id="med_eqImage" accept="image/*">
+            <input type="hidden" id="med_eqExistingImage">
+          </div>
+          <div class="text-end">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+            <button type="submit" class="btn btn-primary fw-bold px-4">บันทึก</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="med_mapModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-success text-white border-0">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-map-location-dot me-2"></i> เลือกพิกัดบนแผนที่</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="med_pickerMap" style="height: 400px; width: 100%; z-index:1;"></div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-success fw-bold" onclick="med_confirmMapPicker()">ยืนยันพิกัด</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="med_qrModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-dark text-white border-0">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-qrcode me-2"></i> สแกน QR Code</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="med_stopQrScanner()"></button>
+      </div>
+      <div class="modal-body text-center bg-light">
+        <div id="med_qrReader" style="width:100%; max-width: 400px; margin: 0 auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="med_returnModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-info text-white border-0">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-rotate-left me-2"></i> บันทึกรับคืนอุปกรณ์</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="med_ret_contract">
+        <input type="hidden" id="med_ret_equip">
+        <div class="mb-3"><label class="form-label small fw-bold">วันที่คืน</label><input type="date" class="form-control" id="med_ret_date" required></div>
+        <div class="mb-3"><label class="form-label small fw-bold">สภาพอุปกรณ์เมื่อรับคืน</label><textarea class="form-control" id="med_ret_cond" rows="2"></textarea></div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold">สถานะใหม่</label>
+          <select class="form-select" id="med_ret_status">
+            <option value="ว่าง">ปกติ (พร้อมใช้)</option>
+            <option value="ซ่อม">ชำรุด (ส่งซ่อม/ทำความสะอาด)</option>
+          </select>
+        </div>
+        <div class="text-end">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+          <button type="button" class="btn btn-info text-white fw-bold px-4" onclick="med_submitReturn()">บันทึกรับคืน</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="med_signModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-warning border-0">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-signature me-2"></i> ลงนามอนุมัติ</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <input type="hidden" id="med_sign_contract">
+        <canvas id="med_signCanvas" width="400" height="200" style="border: 1px solid #ccc; border-radius: 8px; background: #fafafa; touch-action: none; max-width: 100%;"></canvas>
+        <div class="mt-2 text-end"><button class="btn btn-sm btn-outline-secondary" onclick="med_clearSignature()">ล้างลายเซ็น</button></div>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-warning fw-bold px-4" onclick="med_submitApprove()">อนุมัติ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="med_followUpModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header text-white border-0" style="background-color: #ec4899;">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-nurse me-2"></i> บันทึกเยี่ยมบ้าน</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3"><label class="form-label small fw-bold">เลือกสัญญา *</label><select class="form-select" id="med_fu_contract" required></select></div>
+        <div class="mb-3"><label class="form-label small fw-bold">วันที่เข้าเยี่ยม *</label><input type="date" class="form-control" id="med_fu_date" required></div>
+        <div class="mb-3"><label class="form-label small fw-bold">อาการผู้ป่วย *</label><textarea class="form-control" id="med_fu_patient" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label small fw-bold">สภาพอุปกรณ์ *</label><textarea class="form-control" id="med_fu_eq" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label small fw-bold">ผู้เข้าเยี่ยม *</label><input type="text" class="form-control" id="med_fu_staff" required></div>
+        <div class="mb-3"><label class="form-label small fw-bold">หมายเหตุ</label><textarea class="form-control" id="med_fu_notes" rows="2"></textarea></div>
+        <div class="text-end">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+          <button type="button" class="btn text-white fw-bold px-4" style="background-color: #ec4899;" onclick="med_submitFollowUp()">บันทึก</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ================= END MEDLEND MODALS ================= -->
+<!-- ================= MEDLEND SCRIPTS ================= -->
+<script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script>
+  let med_data = { inventory: [], requests: [], visits: [] };
+  let med_globalMap = null, med_globalMarkers = [];
+  let med_pickerMap = null, med_pickerMarker = null;
+  let med_scanner = null;
+  let med_sigPad = { canvas: null, ctx: null, drawing: false, lastX: 0, lastY: 0 };
+
+  // Note: The main dashboard tab calls initMedLendData(), so we expose it as a global alias for compatibility
+  function initMedLendData() {
+    Swal.fire({title:'กำลังโหลดข้อมูลยืม-คืน...', allowOutsideClick:false, didOpen:()=>{Swal.showLoading()}});
+    google.script.run.withSuccessHandler(res => {
+      med_data = res;
+      med_renderAll();
+      med_initSigPad();
+      Swal.close();
+    }).withFailureHandler(err => {
+      Swal.fire('Error', err.message, 'error');
+    }).med_getInitialData();
+  }
+
+  function med_renderAll() {
+    med_renderDash();
+    med_renderInventory();
+    med_renderBorrowDropdown();
+    med_renderReturn();
+    med_renderPending();
+    med_renderFollowUp();
+    med_renderMaintenance();
+  }
+
+  function med_renderDash() {
+    const inv = med_data.inventory || [];
+    const reqs = med_data.requests || [];
+    document.getElementById('med_stat_available').innerText = inv.filter(i => i.Status === 'ว่าง').length;
+    document.getElementById('med_stat_borrowed').innerText = inv.filter(i => i.Status === 'ถูกยืม').length;
+    document.getElementById('med_stat_maintenance').innerText = inv.filter(i => i.Status === 'ซ่อม' || i.Status === 'ถูกยืม(รออนุมัติ)').length;
+    
+    let overdue = 0; const today = new Date();
+    const activeReqs = reqs.filter(r => r.Status === 'อนุมัติ' || r.Status === 'ส่งมอบแล้ว');
+    activeReqs.forEach(r => { if(r.DueDate && new Date(r.DueDate) < today) overdue++; });
+    document.getElementById('med_stat_overdue').innerText = overdue;
+    
+    if(!med_globalMap && document.getElementById('med_globalMap')) {
+      med_globalMap = L.map('med_globalMap').setView([7.4, 99.5], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(med_globalMap);
+    }
+    if(med_globalMap) {
+      med_globalMarkers.forEach(m => med_globalMap.removeLayer(m));
+      med_globalMarkers = [];
+      activeReqs.forEach(r => {
+        if(r.Lat && r.Lng) {
+          let lat=parseFloat(r.Lat), lng=parseFloat(r.Lng);
+          if(!isNaN(lat) && !isNaN(lng)) {
+            let eq = inv.find(a => a.EquipID === r.EquipID) || {};
+            let m = L.marker([lat, lng]).addTo(med_globalMap).bindPopup('<b>'+r.PatientName+'</b><br>'+(eq.Name||r.EquipID)+'<br><a href="https://www.google.com/maps/dir/?api=1&destination='+lat+','+lng+'" target="_blank" class="btn btn-sm btn-primary mt-2 text-white">นำทาง</a>');
+            med_globalMarkers.push(m);
+          }
+        }
+      });
+      if(med_globalMarkers.length>0) med_globalMap.fitBounds(new L.featureGroup(med_globalMarkers).getBounds().pad(0.1));
+    }
+
+    const tbody = document.getElementById('med_activeLoansTable');
+    if(tbody) {
+      if(activeReqs.length===0) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">ไม่มีอุปกรณ์ที่ถูกยืม</td></tr>';
+      else {
+        tbody.innerHTML = activeReqs.map(r => {
+          let eqName = inv.find(a => a.EquipID === r.EquipID)?.Name || r.EquipID;
+          let isOverdue = r.DueDate && new Date(r.DueDate) < today;
+          return '<tr>'+
+            '<td class="fw-bold text-primary">'+r.ContractNo+'</td>'+
+            '<td>'+r.PatientName+'<br><small class="text-muted">'+r.Phone+'</small></td>'+
+            '<td>'+eqName+'</td>'+
+            '<td>'+(r.BorrowDate?new Date(r.BorrowDate).toLocaleDateString('th-TH'):'-')+'</td>'+
+            '<td>'+(r.DueDate?new Date(r.DueDate).toLocaleDateString('th-TH'):'ระยะยาว')+'</td>'+
+            '<td><span class="badge '+(isOverdue?'bg-danger':'bg-success')+'">'+(isOverdue?'เกินกำหนด':'ปกติ')+'</span></td>'+
+            '<td><a href="https://www.google.com/maps/dir/?api=1&destination='+r.Lat+','+r.Lng+'" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-location-arrow"></i></a></td>'+
+            '</tr>';
+        }).join('');
+      }
+    }
+  }
+
+  function med_renderInventory() {
+    const inv = med_data.inventory || [];
+    const tbody = document.getElementById('med_inventoryTable');
+    if(!tbody) return;
+    if(inv.length===0) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">ไม่มีข้อมูลอุปกรณ์</td></tr>';
+    else {
+      tbody.innerHTML = inv.map(i => {
+        let img = i.ImageUrl ? '<img src="'+i.ImageUrl+'" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" crossorigin="anonymous">' : '<div class="bg-light text-muted d-flex align-items-center justify-content-center" style="width:40px;height:40px;border-radius:4px;"><i class="fa-solid fa-image"></i></div>';
+        let bc = i.Status==='ว่าง'?'bg-success':(i.Status==='ซ่อม'?'bg-danger':'bg-warning text-dark');
+        return '<tr>'+
+          '<td>'+img+'</td>'+
+          '<td class="fw-bold">'+i.EquipID+'</td>'+
+          '<td>'+i.Name+'<br><small class="text-muted">'+i.Category+'</small></td>'+
+          '<td>'+i.SerialNo+'<br><small class="text-muted">'+(i.EntryDate?new Date(i.EntryDate).toLocaleDateString('th-TH'):'')+'</small></td>'+
+          '<td><span class="badge '+bc+'">'+i.Status+'</span></td>'+
+          '<td>'+
+            '<button class="btn btn-sm btn-outline-secondary me-1" onclick="med_editEquip(\''+i.EquipID+'\')"><i class="fa-solid fa-pen"></i></button>'+
+            '<button class="btn btn-sm btn-outline-danger me-1" onclick="med_deleteEquip(\''+i.EquipID+'\')"><i class="fa-solid fa-trash"></i></button>'+
+            '<button class="btn btn-sm btn-outline-dark" onclick="window.open(\''+i.QRCodeUrl+'\', \'_blank\')"><i class="fa-solid fa-qrcode"></i></button>'+
+          '</td></tr>';
+      }).join('');
+    }
+  }
+
+  function med_openAddEquipModal() {
+    document.getElementById('med_addEqForm').reset();
+    document.getElementById('med_eqId').readOnly = false;
+    document.getElementById('med_eqExistingImage').value = '';
+    new bootstrap.Modal(document.getElementById('med_addEqModal')).show();
+  }
+
+  function med_editEquip(id) {
+    const item = med_data.inventory.find(i => i.EquipID === id);
+    if(!item) return;
+    document.getElementById('med_eqId').value = item.EquipID; document.getElementById('med_eqId').readOnly = true;
+    document.getElementById('med_eqName').value = item.Name;
+    document.getElementById('med_eqCat').value = item.Category;
+    document.getElementById('med_eqSerial').value = item.SerialNo;
+    document.getElementById('med_eqDate').value = item.EntryDate ? new Date(item.EntryDate).toISOString().split('T')[0] : '';
+    document.getElementById('med_eqCond').value = item.Condition;
+    document.getElementById('med_eqExistingImage').value = item.ImageUrl || '';
+    new bootstrap.Modal(document.getElementById('med_addEqModal')).show();
+  }
+
+  function med_deleteEquip(id) {
+    Swal.fire({title:'ยืนยัน',text:'ลบอุปกรณ์นี้หรือไม่?',icon:'warning',showCancelButton:true,confirmButtonText:'ลบ'}).then(r=>{
+      if(r.isConfirmed) {
+        Swal.fire({title:'กำลังลบ...',didOpen:()=>{Swal.showLoading()}});
+        google.script.run.withSuccessHandler(res=>{
+          if(res.success){ med_data=res.data; med_renderAll(); Swal.fire('สำเร็จ','ลบแล้ว','success'); } else Swal.fire('Error',res.message,'error');
+        }).med_deleteInventory(id);
+      }
+    });
+  }
+
+  function med_submitInventory() {
+    const file = document.getElementById('med_eqImage').files[0];
+    const data = {
+      equipId: document.getElementById('med_eqId').value, name: document.getElementById('med_eqName').value,
+      category: document.getElementById('med_eqCat').value, serialNo: document.getElementById('med_eqSerial').value,
+      entryDate: document.getElementById('med_eqDate').value, condition: document.getElementById('med_eqCond').value,
+      existingImageUrl: document.getElementById('med_eqExistingImage').value
+    };
+    if(file) {
+      const fr = new FileReader();
+      fr.onload = e => { data.imageBase64 = e.target.result; med_doSaveInventory(data); };
+      fr.readAsDataURL(file);
+    } else med_doSaveInventory(data);
+  }
+  function med_doSaveInventory(data) {
+    Swal.fire({title:'กำลังบันทึก...',didOpen:()=>{Swal.showLoading()}});
+    google.script.run.withSuccessHandler(res=>{
+      if(res.success){ bootstrap.Modal.getInstance(document.getElementById('med_addEqModal')).hide(); med_data=res.data; med_renderAll(); Swal.fire('สำเร็จ','บันทึกแล้ว','success'); }
+      else Swal.fire('Error',res.message,'error');
+    }).med_saveInventory(data);
+  }
+
+  function med_openQrScanner() {
+    new bootstrap.Modal(document.getElementById('med_qrModal')).show();
+    setTimeout(() => {
+      if(med_scanner) med_scanner.clear();
+      med_scanner = new Html5Qrcode("med_qrReader");
+      med_scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: {width:250,height:250} }, decoded => {
+        med_stopQrScanner(); bootstrap.Modal.getInstance(document.getElementById('med_qrModal')).hide();
+        const item = (med_data.inventory||[]).find(i => i.EquipID === decoded);
+        if(!item) Swal.fire('ไม่พบข้อมูล', 'รหัส '+decoded+' ไม่มีในระบบ', 'warning');
+        else {
+          Swal.fire('พบข้อมูล', item.Name+' ('+item.Status+')', 'success');
+          if(item.Status==='ว่าง'){ document.getElementById('med_req_equip').value=item.EquipID; switchView('medlend-borrow'); }
+        }
+      }, err=>{});
+    }, 500);
+  }
+  function med_stopQrScanner() { if(med_scanner) { med_scanner.stop().catch(e=>{}); med_scanner.clear(); med_scanner=null; } }
+
+  function med_renderBorrowDropdown() {
+    const avail = (med_data.inventory||[]).filter(i => i.Status === 'ว่าง');
+    const select = document.getElementById('med_req_equip');
+    if(!select) return;
+    select.innerHTML = '<option value="">-- เลือกอุปกรณ์ --</option>' + avail.map(i => '<option value="'+i.EquipID+'">'+i.Name+' ('+i.EquipID+')</option>').join('');
+  }
+
+  function med_getCurrentGps() {
+    if(navigator.geolocation) {
+      Swal.fire({title:'กำลังดึงพิกัด...',didOpen:()=>{Swal.showLoading()}});
+      navigator.geolocation.getCurrentPosition(pos => { document.getElementById('med_req_gps').value = pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6); Swal.close(); }, err => Swal.fire('Error','ดึงพิกัดไม่ได้','error'));
+    }
+  }
+
+  function med_openMapPicker() {
+    new bootstrap.Modal(document.getElementById('med_mapModal')).show();
+    setTimeout(() => {
+      if(!med_pickerMap) {
+        med_pickerMap = L.map('med_pickerMap').setView([7.4, 99.5], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(med_pickerMap);
+        med_pickerMarker = L.marker(med_pickerMap.getCenter()).addTo(med_pickerMap);
+        med_pickerMap.on('move', function() { med_pickerMarker.setLatLng(med_pickerMap.getCenter()); });
+        if(navigator.geolocation) navigator.geolocation.getCurrentPosition(pos => med_pickerMap.setView([pos.coords.latitude,pos.coords.longitude], 16));
+      }
+      med_pickerMap.invalidateSize();
+    }, 500);
+  }
+  function med_confirmMapPicker() {
+    if(med_pickerMap) {
+      let c = med_pickerMap.getCenter();
+      document.getElementById('med_req_gps').value = c.lat.toFixed(6)+', '+c.lng.toFixed(6);
+      bootstrap.Modal.getInstance(document.getElementById('med_mapModal')).hide();
+    }
+  }
+
+  function med_submitBorrow() {
+    const gps = document.getElementById('med_req_gps').value.split(',');
+    const data = {
+      patientCID: document.getElementById('med_req_cid').value, patientName: document.getElementById('med_req_patient').value,
+      borrowerName: document.getElementById('med_req_borrower').value, phone: document.getElementById('med_req_phone').value,
+      lat: gps[0]?gps[0].trim():'', lng: gps[1]?gps[1].trim():'', equipId: document.getElementById('med_req_equip').value, dueDate: document.getElementById('med_req_due').value
+    };
+    Swal.fire({title:'กำลังบันทึก...',didOpen:()=>{Swal.showLoading()}});
+    google.script.run.withSuccessHandler(res=>{
+      if(res.success){ Swal.fire('สำเร็จ',res.message,'success'); document.getElementById('med_borrowForm').reset(); med_data=res.data; med_renderAll(); } else Swal.fire('Error',res.message,'error');
+    }).med_saveBorrowRequest(data);
+  }
+
+  function med_renderPending() {
+    const pending = (med_data.requests||[]).filter(r => r.Status === 'รออนุมัติ');
+    const tbody = document.getElementById('med_pendingTable');
+    if(!tbody) return;
+    if(pending.length===0) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ไม่มีคำขอ</td></tr>';
+    else tbody.innerHTML = pending.map(r => {
+      let eqName = (med_data.inventory||[]).find(a => a.EquipID === r.EquipID)?.Name || r.EquipID;
+      return '<tr><td class="fw-bold text-warning">'+r.ContractNo+'</td><td>'+r.PatientName+'</td><td>'+eqName+'</td><td>'+(r.BorrowDate?new Date(r.BorrowDate).toLocaleDateString('th-TH'):'-')+'</td><td>'+
+        '<button class="btn btn-sm btn-warning text-dark fw-bold me-1" onclick="med_openApproveModal(\''+r.ContractNo+'\')"><i class="fa-solid fa-signature"></i> ลงนาม</button>'+
+        '<button class="btn btn-sm btn-outline-info me-1" onclick="med_printDoc(\''+r.ContractNo+'\')"><i class="fa-solid fa-print"></i> พิมพ์เอกสาร</button>' +
+          '<button class="btn btn-sm btn-outline-danger" onclick="med_deleteReq(\''+r.ContractNo+'\')"><i class="fa-solid fa-trash"></i> ลบ</button></td></tr>';
+    }).join('');
+  }
+
+  function med_deleteReq(contract) {
+    Swal.fire({title:'ยืนยัน',text:'ลบคำขอยืม '+contract+' หรือไม่?',icon:'warning',showCancelButton:true,confirmButtonText:'ลบ'}).then(r=>{
+      if(r.isConfirmed) {
+        Swal.fire({title:'กำลังลบ...',didOpen:()=>{Swal.showLoading()}});
+        google.script.run.withSuccessHandler(res=>{ if(res.success){med_data=res.data;med_renderAll();Swal.fire('สำเร็จ','ลบแล้ว','success');}else Swal.fire('Error',res.message,'error'); }).med_deleteRequest(contract);
+      }
+    });
+  }
+
+  
+  function med_printDoc(contractNo) {
+    Swal.fire({title:'กำลังสร้างเอกสาร...', text:'กรุณารอสักครู่', allowOutsideClick:false, didOpen:()=>{Swal.showLoading()}});
+    google.script.run.withSuccessHandler(res => {
+      if(res.success) {
+        Swal.fire({
+          title: 'สำเร็จ',
+          text: 'สร้างเอกสารเรียบร้อยแล้ว',
+          icon: 'success',
+          showCancelButton: true,
+          confirmButtonText: 'เปิดดูเอกสาร',
+          cancelButtonText: 'ปิด'
+        }).then(r => {
+          if(r.isConfirmed) window.open(res.url, '_blank');
+        });
+      } else {
+        Swal.fire('ข้อผิดพลาด', res.message, 'error');
+      }
+    }).med_generatePrintPDF(contractNo);
+  }
+
+    function med_openApproveModal(c) { document.getElementById('med_sign_contract').value = c; med_clearSignature(); new bootstrap.Modal(document.getElementById('med_signModal')).show(); }
+
+  function med_initSigPad() {
+    const c = document.getElementById('med_signCanvas');
+    if(!c) return;
+    med_sigPad.canvas = c; med_sigPad.ctx = c.getContext('2d');
+    med_sigPad.ctx.lineWidth=2; med_sigPad.ctx.strokeStyle='#000';
+    const getPos = e => { const r = c.getBoundingClientRect(); const cx = e.touches ? e.touches[0].clientX : e.clientX; const cy = e.touches ? e.touches[0].clientY : e.clientY; return {x: cx-r.left, y: cy-r.top}; };
+    const start = e => { e.preventDefault(); med_sigPad.drawing=true; const p=getPos(e); med_sigPad.lastX=p.x; med_sigPad.lastY=p.y; };
+    const draw = e => { e.preventDefault(); if(!med_sigPad.drawing) return; const p=getPos(e); med_sigPad.ctx.beginPath(); med_sigPad.ctx.moveTo(med_sigPad.lastX, med_sigPad.lastY); med_sigPad.ctx.lineTo(p.x,p.y); med_sigPad.ctx.stroke(); med_sigPad.lastX=p.x; med_sigPad.lastY=p.y; };
+    const end = () => med_sigPad.drawing=false;
+    c.addEventListener('mousedown',start); c.addEventListener('mousemove',draw); c.addEventListener('mouseup',end); c.addEventListener('mouseout',end);
+    c.addEventListener('touchstart',start,{passive:false}); c.addEventListener('touchmove',draw,{passive:false}); c.addEventListener('touchend',end);
+  }
+  function med_clearSignature() { if(med_sigPad.canvas) med_sigPad.ctx.clearRect(0,0,med_sigPad.canvas.width,med_sigPad.canvas.height); }
+
+  function med_submitApprove() {
+    const c = document.getElementById('med_sign_contract').value;
+    const blank = document.createElement('canvas'); blank.width = med_sigPad.canvas.width; blank.height = med_sigPad.canvas.height;
+    if(med_sigPad.canvas.toDataURL() === blank.toDataURL()) return Swal.fire('แจ้งเตือน', 'กรุณาลงลายเซ็นก่อนอนุมัติ', 'warning');
+    Swal.fire({title:'กำลังบันทึก...',didOpen:()=>{Swal.showLoading()}});
+    google.script.run.withSuccessHandler(res=>{
+      if(res.success){ bootstrap.Modal.getInstance(document.getElementById('med_signModal')).hide(); med_data=res.data; med_renderAll(); Swal.fire('สำเร็จ',res.message,'success'); } else Swal.fire('Error',res.message,'error');
+    }).med_approveRequest(c, med_sigPad.canvas.toDataURL('image/png'));
+  }
+
+  function med_renderReturn() {
+    const active = (med_data.requests||[]).filter(r => r.Status === 'อนุมัติ' || r.Status === 'ส่งมอบแล้ว');
+    const tbody = document.getElementById('med_returnTable');
+    if(!tbody) return;
+    if(active.length===0) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ไม่มีอุปกรณ์ที่ถูกยืม</td></tr>';
+    else tbody.innerHTML = active.map(r => {
+      let eqName = (med_data.inventory||[]).find(a => a.EquipID === r.EquipID)?.Name || r.EquipID;
+      return '<tr><td class="fw-bold text-info">'+r.ContractNo+'</td><td>'+r.PatientName+'</td><td>'+eqName+'</td><td><span class="badge bg-primary">'+r.Status+'</span></td><td><button class="btn btn-sm btn-info text-white" onclick="med_openReturnModal(\''+r.ContractNo+'\', \''+r.EquipID+'\')">รับคืน</button></td></tr>';
+    }).join('');
+  }
+  function med_openReturnModal(c, e) {
+    document.getElementById('med_ret_contract').value=c; document.getElementById('med_ret_equip').value=e; document.getElementById('med_ret_date').value=new Date().toISOString().split('T')[0];
+    new bootstrap.Modal(document.getElementById('med_returnModal')).show();
+  }
+  function med_submitReturn() {
+    const data = { contractNo: document.getElementById('med_ret_contract').value, equipId: document.getElementById('med_ret_equip').value, returnDate: document.getElementById('med_ret_date').value, newCondition: document.getElementById('med_ret_cond').value, newStatus: document.getElementById('med_ret_status').value };
+    Swal.fire({title:'กำลังบันทึก...',didOpen:()=>{Swal.showLoading()}});
+    google.script.run.withSuccessHandler(res=>{
+      if(res.success){ bootstrap.Modal.getInstance(document.getElementById('med_returnModal')).hide(); med_data=res.data; med_renderAll(); Swal.fire('สำเร็จ',res.message,'success'); } else Swal.fire('Error',res.message,'error');
+    }).med_returnEquipment(data);
+  }
+
+  function med_renderFollowUp() {
+    const tbody = document.getElementById('med_visitsTable');
+    if(!tbody) return;
+    if((med_data.visits||[]).length===0) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">ไม่มีข้อมูล</td></tr>';
+    else tbody.innerHTML = (med_data.visits||[]).map(v => {
+      let req = (med_data.requests||[]).find(r => r.ContractNo === v.ContractNo) || {};
+      return '<tr><td>'+(v.VisitDate?new Date(v.VisitDate).toLocaleDateString('th-TH'):'-')+'</td><td class="fw-bold text-pink-500" style="color:#ec4899;">'+v.ContractNo+'</td><td>'+(req.PatientName||'-')+'</td><td>'+v.PatientCondition+'</td><td>'+v.EquipCondition+'</td><td>'+v.StaffName+'</td></tr>';
+    }).join('');
+  }
+  function med_openFollowUpModal() {
+    const active = (med_data.requests||[]).filter(r => r.Status === 'อนุมัติ' || r.Status === 'ส่งมอบแล้ว');
+    const select = document.getElementById('med_fu_contract');
+    if(active.length===0) return Swal.fire('แจ้งเตือน','ไม่มีสัญญาที่ถูกยืม','info');
+    select.innerHTML = active.map(r => '<option value="'+r.ContractNo+'">'+r.PatientName+'</option>').join('');
+    document.getElementById('med_fu_date').value=new Date().toISOString().split('T')[0]; document.getElementById('med_fu_patient').value=''; document.getElementById('med_fu_eq').value=''; document.getElementById('med_fu_staff').value='';
+    new bootstrap.Modal(document.getElementById('med_followUpModal')).show();
+  }
+  function med_submitFollowUp() {
+    const data = { contractNo: document.getElementById('med_fu_contract').value, visitDate: document.getElementById('med_fu_date').value, patientCondition: document.getElementById('med_fu_patient').value, equipCondition: document.getElementById('med_fu_eq').value, staffName: document.getElementById('med_fu_staff').value, notes: document.getElementById('med_fu_notes').value };
+    Swal.fire({title:'กำลังบันทึก...',didOpen:()=>{Swal.showLoading()}});
+    google.script.run.withSuccessHandler(res=>{
+      if(res.success){ bootstrap.Modal.getInstance(document.getElementById('med_followUpModal')).hide(); med_data=res.data; med_renderAll(); Swal.fire('สำเร็จ',res.message,'success'); } else Swal.fire('Error',res.message,'error');
+    }).med_saveVisit(data);
+  }
+
+  function med_renderMaintenance() {
+    const maints = (med_data.inventory||[]).filter(i => i.Status === 'ซ่อม');
+    const tbody = document.getElementById('med_maintenanceTable');
+    if(!tbody) return;
+    if(maints.length===0) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">ไม่มีคิวล้าง/ซ่อม</td></tr>';
+    else tbody.innerHTML = maints.map(i => '<tr><td class="fw-bold text-danger">'+i.EquipID+'</td><td>'+i.Name+'</td><td><span class="badge bg-warning text-dark">'+i.Status+'</span></td><td><button class="btn btn-sm btn-success" onclick="med_finishMaint(\''+i.EquipID+'\')">ซ่อม/ล้างเสร็จแล้ว</button></td></tr>').join('');
+  }
+  function med_finishMaint(id) {
+    Swal.fire({title:'ยืนยัน',text:'อุปกรณ์ซ่อม/ล้างเสร็จแล้ว?',icon:'question',showCancelButton:true}).then(r=>{
+      if(r.isConfirmed){
+        Swal.fire({title:'กำลังบันทึก...',didOpen:()=>{Swal.showLoading()}});
+        google.script.run.withSuccessHandler(res=>{ if(res.success){med_data=res.data;med_renderAll();Swal.fire('สำเร็จ','พร้อมใช้งาน','success');} }).med_updateEquipmentStatus(id, 'ว่าง');
+      }
+    });
+  }
+</script>
+<!-- MEDLEND SCRIPTS END -->
+
+</body>

@@ -12,7 +12,6 @@ import {
   FileCheck2,
   ClipboardCheck,
   Building2,
-  Globe,
   MapPin,
   HeartPulse,
   Truck,
@@ -33,8 +32,8 @@ interface SidebarProps {
   activeSubTabs: {
     hazardous?: 'dashboard' | 'form';
     nhso_ltc?: 'route' | 'register' | 'inventory' | 'nhso';
-    equipment?: 'register' | 'loans' | 'inventory';
-    petitions?: 'general' | 'sewage' | 'print' | 'tracking';
+    equipment?: 'route' | 'loans' | 'register' | 'inventory' | 'map';
+    petitions?: 'dashboard' | 'form' | 'general' | 'sewage' | 'print' | 'tracking';
     settings?: 'signers' | 'users' | 'approvers' | 'sheets';
   };
   onNavigate: (tab: MainNavTab, subTab?: string) => void;
@@ -79,33 +78,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }));
   };
 
-  // 6 Main Categories strictly ordered:
-  // 1 แดชบอร์ดหลักทุกระบบ
-  // 2. กิจการอันตรายต่อสุขภาพ (Apps Script 100%)
-  // 3. 📦 ระบบแจกจ่ายโครงการ สปสช. & การดูแลระยะยาว (LTC)
-  // 4. 🩺 ระบบบริการยืม-คืนอุปกรณ์ทางการแพทย์
-  // 5. 📋 ระบบยื่นคำร้องและบริการประชาชน
-  // 6. ⚙️ ระบบตั้งค่าหน้าผู้ใช้งานทุกระบบ
+  // 6 Main Categories strictly ordered
   const navModules = [
     {
       id: 'overview' as MainNavTab,
-      number: '1',
+      number: '',
       title: 'แดชบอร์ดหลักทุกระบบ',
       subtitle: 'ศูนย์สั่งการสถิติ & ติดตามภาพรวม',
       icon: LayoutDashboard,
       badge: null,
-      numberColor: 'bg-sky-500/20 text-sky-300 border-sky-400/40',
+      iconBg: 'bg-sky-100 text-sky-700 border-sky-200',
       subItems: [],
     },
     {
       id: 'hazardous' as MainNavTab,
-      number: '2',
+      number: '1',
       title: 'กิจการอันตรายต่อสุขภาพ',
       subtitle: 'ตรวจประเมิน & ออกใบอนุญาต อภ.2',
       icon: Shield,
       badge: badgeCounts.expiringLicenses > 0 ? `${badgeCounts.expiringLicenses}` : null,
       badgeColor: 'bg-amber-500 text-white',
-      numberColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40',
+      iconBg: 'bg-emerald-100 text-emerald-700 border-emerald-200',
       subItems: [
         {
           id: 'dashboard',
@@ -123,65 +116,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'nhso_ltc' as MainNavTab,
-      number: '3',
+      number: '2',
       title: 'ระบบแจกจ่าย สปสช. & LTC',
-      subtitle: 'การดูแลระยะยาว & นำทางแจกของ',
+      subtitle: 'การดูแลระยะยาว & ติดตามพิกัด',
       icon: Package,
       badge: badgeCounts.ltcPatients > 0 ? `${badgeCounts.ltcPatients}` : null,
       badgeColor: 'bg-pink-500 text-white',
-      numberColor: 'bg-rose-500/20 text-rose-300 border-rose-400/40',
+      iconBg: 'bg-rose-100 text-rose-700 border-rose-200',
       subItems: [
         {
           id: 'route',
-          title: '🗺️ ระบบนำทางแจกจ่ายของ',
-          desc: 'Smart Route Optimizer แผนที่บ้าน',
-          icon: Truck,
+          title: '📊 แดชบอร์ดติดตาม',
+          desc: 'แผนที่พิกัดผู้มีภาวะพึ่งพิง & สรุปภาพรวม',
+          icon: LayoutDashboard,
         },
         {
           id: 'register',
-          title: '📝 หน้าลงทะเบียนผู้ป่วย LTC',
+          title: '📝 ลงทะเบียนผู้มีภาวะพึ่งพิง',
           desc: 'ขึ้นทะเบียนผู้ป่วยติดเตียง/ติดบ้าน',
           icon: HeartPulse,
         },
         {
           id: 'inventory',
-          title: '📦 หน้าคลังอุปกรณ์ LTC',
+          title: '📦 คลังอุปกรณ์',
           desc: 'ผ้าอ้อมผู้ใหญ่ & แผ่นรองซับ',
           icon: Package,
-        },
-        {
-          id: 'nhso',
-          title: '🏥 โครงการ สปสช. (กองทุน)',
-          desc: 'เอกสารแนบ 6 & มติกรรมการ',
-          icon: Building2,
         },
       ],
     },
     {
       id: 'equipment' as MainNavTab,
-      number: '4',
+      number: '3',
       title: 'ระบบบริการยืม-คืนอุปกรณ์',
       subtitle: 'อุปกรณ์ทางการแพทย์ & สัญญาขอยืม',
       icon: Stethoscope,
       badge: badgeCounts.activeLoans > 0 ? `${badgeCounts.activeLoans}` : null,
-      badgeColor: 'bg-indigo-500 text-white',
-      numberColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40',
+      badgeColor: 'bg-indigo-600 text-white',
+      iconBg: 'bg-indigo-100 text-indigo-700 border-indigo-200',
       subItems: [
         {
-          id: 'loans',
-          title: '🔄 ระบบยืม-คืน & สัญญา A4',
-          desc: 'รายการยืมอุปกรณ์ & สัญญาตราครุฑ',
-          icon: RotateCcw,
+          id: 'route',
+          title: '📊 แดชบอร์ดติดตาม (รอบส่ง/ยืม-คืน)',
+          desc: 'แผนที่ดาวเทียม & จัดคิวนำส่ง',
+          icon: MapPin,
         },
         {
           id: 'register',
-          title: '📝 หน้าลงทะเบียนผู้ยืม',
-          desc: 'บันทึกขอยืมอุปกรณ์ชิ้นใหม่',
+          title: '📝 ลงทะเบียนขอยืมอุปกรณ์',
+          desc: 'บันทึกขอยืมอุปกรณ์ & ปักหมุด GPS',
           icon: ClipboardCheck,
         },
         {
           id: 'inventory',
-          title: '🦼 คลังอุปกรณ์ทางการแพทย์',
+          title: '📦 คลังอุปกรณ์การแพทย์',
           desc: 'เตียง, ถังออกซิเจน, วีลแชร์',
           icon: Stethoscope,
         },
@@ -189,48 +176,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'petitions' as MainNavTab,
-      number: '5',
+      number: '4',
       title: 'ระบบยื่นคำร้อง & บริการประชาชน',
       subtitle: 'เหตุรำคาญ & สูบสิ่งปฏิกูล ทต.บางเป้า',
       icon: MessageSquareWarning,
       badge: badgeCounts.petitions > 0 ? `${badgeCounts.petitions}` : null,
-      badgeColor: 'bg-amber-400 text-slate-950 font-bold',
-      numberColor: 'bg-amber-500/20 text-amber-300 border-amber-400/40',
+      badgeColor: 'bg-amber-500 text-white',
+      iconBg: 'bg-amber-100 text-amber-700 border-amber-200',
       subItems: [
         {
-          id: 'general',
-          title: '📑 คำร้องทั่วไป & เหตุรำคาญ',
-          desc: 'มลพิษ, กลิ่นเหม็น, เสียงรบกวน',
-          icon: MessageSquareWarning,
+          id: 'dashboard',
+          title: '📊 1. แดชบอร์ดติดตามคำร้อง',
+          desc: 'แผนที่ GIS, สถิติ, ตารางงานสรุปคำร้อง',
+          icon: LayoutDashboard,
         },
         {
-          id: 'sewage',
-          title: '🚛 คำร้องขอดูดส้วม / สิ่งปฏิกูล',
-          desc: 'บริการสูบส้วมเทศบาลตำบลบางเป้า',
-          icon: Truck,
-        },
-        {
-          id: 'print',
-          title: '🖨️ หน้าปริ้นเสนอผู้บริหาร A4',
-          desc: 'พิมพ์บันทึกข้อความตราครุฑ',
-          icon: Printer,
-        },
-        {
-          id: 'tracking',
-          title: '🔍 หน้าติดตามผลคำร้อง',
-          desc: 'ค้นหาด้วย Tracking Code',
-          icon: Search,
+          id: 'form',
+          title: '📝 2. แบบฟอร์มคำร้อง',
+          desc: 'ยื่นคำร้องทั่วไป/สูบส้วม & พิมพ์ A4',
+          icon: FileCheck2,
         },
       ],
     },
     {
+      id: 'nhso' as MainNavTab,
+      number: '5',
+      title: 'โครงการ สปสช. (กองทุน)',
+      subtitle: 'เอกสารแนบ 6 & มติคณะกรรมการ กปท.',
+      icon: Building2,
+      badge: null,
+      iconBg: 'bg-blue-100 text-blue-700 border-blue-200',
+      subItems: [],
+    },
+    {
       id: 'settings' as MainNavTab,
       number: '6',
-      title: 'ระบบตั้งค่าหน้าผู้ใช้งานทุกระบบ',
+      title: 'ระบบตั้งค่าผู้ใช้งานทุกระบบ',
       subtitle: 'ผู้ลงนาม, สิทธิ์, ผังอนุมัติ & Cloud',
       icon: Settings,
       badge: null,
-      numberColor: 'bg-purple-500/20 text-purple-300 border-purple-400/40',
+      iconBg: 'bg-purple-100 text-purple-700 border-purple-200',
       subItems: [
         {
           id: 'signers',
@@ -266,31 +251,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpen && (
         <div
           onClick={onToggle}
-          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-slate-900/35 backdrop-blur-xs z-40 lg:hidden transition-opacity"
         />
       )}
 
-      {/* Main Sidebar */}
+      {/* Main Sidebar - Light, Airy, Non-Opaque Glassmorphic Surface */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 h-screen z-50 flex flex-col bg-gradient-to-b from-[#04241b] via-[#031d16] to-[#02130e] border-r border-emerald-800/40 text-white transition-all duration-300 ease-in-out shrink-0 select-none shadow-2xl lg:shadow-none ${
-          isOpen ? 'w-76 sm:w-82 translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-20'
+        className={`fixed lg:sticky top-0 left-0 h-screen z-50 flex flex-col bg-gradient-to-b from-emerald-50/90 via-white/95 to-teal-50/85 backdrop-blur-xl border-r border-emerald-200/80 text-slate-800 transition-all duration-300 ease-in-out shrink-0 select-none shadow-xl shadow-emerald-950/5 lg:shadow-xs ${
+          isOpen ? 'w-80 sm:w-86 translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-20'
         }`}
       >
-        {/* Brand & Municipal Identity Header */}
-        <div className="h-18 px-4 flex items-center justify-between border-b border-emerald-700/40 bg-gradient-to-r from-[#063f31] to-[#084c3c] shrink-0 shadow-sm">
+        {/* Brand & Municipal Identity Header (Swapped hierarchy + Official Bangpao Seal) */}
+        <div className="min-h-20 px-4 py-2.5 flex items-center justify-between border-b border-emerald-200/80 bg-gradient-to-r from-emerald-100/75 via-teal-50/80 to-white/90 shrink-0">
           <div className="flex items-center gap-3 overflow-hidden min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 p-0.5 shrink-0 shadow-md flex items-center justify-center">
-              <div className="w-full h-full bg-[#063f31] rounded-[14px] flex items-center justify-center">
-                <Shield className="w-5 h-5 text-emerald-300" />
-              </div>
+            <div className="w-12 h-12 rounded-full bg-white p-0.5 shrink-0 shadow-sm ring-2 ring-emerald-500/40 flex items-center justify-center overflow-hidden">
+              <img
+                src="/images-Photoroom.png"
+                alt="ตราเทศบาลตำบลบางเป้า"
+                className="w-full h-full object-contain"
+              />
             </div>
             {isOpen && (
               <div className="flex flex-col min-w-0">
-                <span className="font-extrabold text-[14px] sm:text-[15px] text-white tracking-tight truncate leading-tight">
-                  ทต.บางเป้า อ.กันตัง จ.ตรัง
-                </span>
-                <span className="text-xs text-emerald-200/90 font-medium truncate mt-0.5">
+                <span className="font-bold text-[15px] sm:text-[16px] text-emerald-950 leading-snug truncate">
                   กองสาธารณสุขและสิ่งแวดล้อม
+                </span>
+                <span className="text-[12.5px] text-emerald-700 font-medium truncate mt-0.5">
+                  ทต.บางเป้า อ.กันตัง จ.ตรัง
                 </span>
               </div>
             )}
@@ -299,7 +286,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Toggle / Collapse Button */}
           <button
             onClick={onToggle}
-            className="p-1.5 text-emerald-200 hover:text-white hover:bg-emerald-800/80 rounded-xl transition-colors cursor-pointer shrink-0"
+            className="p-1.5 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-200/60 rounded-xl transition-colors cursor-pointer shrink-0"
             title={isOpen ? 'ย่อแถบเมนู' : 'ขยายแถบเมนู'}
           >
             {isOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
@@ -307,10 +294,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Scrollable Navigation List */}
-        <div className="flex-1 overflow-y-auto px-3 py-3.5 space-y-2 scrollbar-thin scrollbar-thumb-emerald-900/60 scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto px-3 py-3.5 space-y-2">
           {isOpen && (
-            <div className="px-3 py-1 text-xs font-bold text-emerald-400/90 uppercase tracking-wider flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="px-3 py-1 text-xs font-bold text-emerald-800 tracking-wide flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
               <span>เมนูหลัก 6 ระบบงานสาธารณสุข</span>
             </div>
           )}
@@ -336,53 +323,62 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onNavigate(mod.id);
                     }
                   }}
-                  title={!isOpen ? `${mod.number}. ${mod.title}` : undefined}
-                  className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-[13px] sm:text-sm font-bold transition-all cursor-pointer group relative ${
+                  title={!isOpen ? (mod.number ? `${mod.number}. ${mod.title}` : mod.title) : undefined}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all cursor-pointer group relative border ${
                     isTabActive
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-950/50 ring-1 ring-emerald-300/40'
-                      : 'text-emerald-100 hover:bg-emerald-900/60 hover:text-white'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20'
+                      : 'bg-white/70 hover:bg-emerald-50/90 text-slate-800 border-emerald-100/80 hover:border-emerald-200'
                   }`}
                 >
-                  <div className="relative shrink-0">
-                    <Icon
-                      className={`w-5 h-5 transition-transform group-hover:scale-110 ${
-                        isTabActive ? 'text-white' : 'text-emerald-300'
-                      }`}
-                    />
-                    <span
-                      className={`absolute -top-1.5 -right-2 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border shadow-xs ${
-                        mod.numberColor || 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
-                      }`}
-                    >
-                      {mod.number}
-                    </span>
+                  {/* Icon Box with Corner Number Badge (No overlap with icon or title text) */}
+                  <div
+                    className={`relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${
+                      isTabActive
+                        ? 'bg-white/20 text-white border-white/30'
+                        : mod.iconBg || 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    {mod.number && (
+                      <span
+                        className={`absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full text-[10.5px] font-bold flex items-center justify-center shadow-xs border ${
+                          isTabActive
+                            ? 'bg-white text-emerald-800 border-emerald-500'
+                            : 'bg-emerald-700 text-white border-white'
+                        }`}
+                      >
+                        {mod.number}
+                      </span>
+                    )}
                   </div>
 
                   {isOpen && (
                     <div className="flex-1 min-w-0 text-left">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-[13px] sm:text-sm font-bold text-white tracking-tight">{mod.title}</span>
+                      <div
+                        className={`truncate text-[14px] sm:text-[14.5px] font-semibold leading-snug ${
+                          isTabActive ? 'text-white' : 'text-slate-900'
+                        }`}
+                      >
+                        {mod.title}
                       </div>
-                      <div className="text-xs text-emerald-200/80 font-normal truncate mt-0.5">
+                      <div
+                        className={`text-[12px] truncate mt-0.5 ${
+                          isTabActive ? 'text-emerald-50 font-normal' : 'text-slate-500 font-normal'
+                        }`}
+                      >
                         {mod.subtitle}
                       </div>
                     </div>
                   )}
 
-                  {isOpen && mod.badge && (
-                    <span
-                      className={`px-2 py-0.5 text-xs rounded-full shrink-0 font-extrabold ${
-                        mod.badgeColor || 'bg-emerald-800 text-white'
-                      }`}
-                    >
-                      {mod.badge}
-                    </span>
-                  )}
-
                   {isOpen && hasSub && (
                     <button
                       onClick={(e) => toggleSection(mod.id, e)}
-                      className="p-1 hover:bg-black/20 rounded-lg transition-colors text-emerald-300"
+                      className={`p-1 rounded-lg transition-colors shrink-0 ${
+                        isTabActive
+                          ? 'text-white hover:bg-white/20'
+                          : 'text-slate-500 hover:bg-emerald-100/80 hover:text-emerald-800'
+                      }`}
                     >
                       {isExpanded ? (
                         <ChevronDown className="w-4 h-4" />
@@ -394,13 +390,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   {/* Flyout Tooltip for Collapsed Sidebar */}
                   {!isOpen && (
-                    <div className="absolute left-full ml-3 px-3.5 py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-2xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 min-w-[210px] border border-emerald-700">
-                      <div className="font-bold text-emerald-300 text-sm">
+                    <div className="absolute left-full ml-3 px-3.5 py-2.5 bg-white text-slate-800 text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 min-w-[220px] border border-emerald-200">
+                      <div className="font-bold text-emerald-800 text-sm">
                         {mod.number}. {mod.title}
                       </div>
-                      <div className="text-xs text-slate-300 mt-0.5">{mod.subtitle}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{mod.subtitle}</div>
                       {hasSub && (
-                        <div className="mt-2 pt-2 border-t border-slate-800 space-y-1 text-xs text-slate-200">
+                        <div className="mt-2 pt-2 border-t border-slate-100 space-y-1 text-xs text-slate-700">
                           {mod.subItems.map((s) => (
                             <div key={s.id} className="truncate">
                               • {s.title}
@@ -414,7 +410,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 {/* Sub-menu Items (Expanded View) */}
                 {isOpen && hasSub && isExpanded && (
-                  <div className="pl-3 pr-1 py-1 space-y-1.5 ml-5 border-l-2 border-emerald-600/50">
+                  <div className="pl-3 pr-1 py-1 space-y-1 ml-5 border-l-2 border-emerald-300/80">
                     {mod.subItems.map((sub) => {
                       let isSubActive = false;
                       if (mod.id === 'hazardous') {
@@ -422,9 +418,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       } else if (mod.id === 'nhso_ltc') {
                         isSubActive = isTabActive && (activeSubTabs.nhso_ltc || 'route') === sub.id;
                       } else if (mod.id === 'equipment') {
-                        isSubActive = isTabActive && (activeSubTabs.equipment || 'loans') === sub.id;
+                        const curEq = activeSubTabs.equipment || 'route';
+                        const isRouteMatch = (curEq === 'route' || curEq === 'loans' || curEq === 'map') && (sub.id === 'route' || sub.id === 'loans' || sub.id === 'map');
+                        isSubActive = isTabActive && (isRouteMatch || curEq === sub.id);
                       } else if (mod.id === 'petitions') {
-                        isSubActive = isTabActive && (activeSubTabs.petitions || 'general') === sub.id;
+                        const curPet = activeSubTabs.petitions || 'dashboard';
+                        const isDashMatch = (curPet === 'dashboard' || curPet === 'general' || curPet === 'tracking') && sub.id === 'dashboard';
+                        const isFormMatch = (curPet === 'form' || curPet === 'sewage' || curPet === 'print') && sub.id === 'form';
+                        isSubActive = isTabActive && (isDashMatch || isFormMatch || curPet === sub.id);
                       } else if (mod.id === 'settings') {
                         isSubActive = isTabActive && (activeSubTabs.settings || 'signers') === sub.id;
                       }
@@ -436,15 +437,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onNavigate(mod.id, sub.id);
                             if (window.innerWidth < 1024) onToggle();
                           }}
-                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs sm:text-[13px] font-semibold transition-all cursor-pointer text-left ${
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-[13px] sm:text-[13.5px] transition-all cursor-pointer text-left ${
                             isSubActive
-                              ? 'bg-gradient-to-r from-emerald-600/90 to-teal-700/90 text-white font-bold shadow-xs ring-1 ring-emerald-300/40 pl-3.5'
-                              : 'text-emerald-100/90 hover:bg-emerald-800/40 hover:text-white'
+                              ? 'bg-emerald-100/95 text-emerald-950 font-semibold border border-emerald-300 shadow-2xs pl-3.5'
+                              : 'text-slate-700 font-medium hover:bg-emerald-50/90 hover:text-emerald-900'
                           }`}
                         >
-                          <span className="truncate">{sub.title}</span>
+                          <span className="truncate leading-snug">{sub.title}</span>
                           {isSubActive && (
-                            <span className="w-2 h-2 rounded-full bg-emerald-300 shrink-0 shadow-xs" />
+                            <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
                           )}
                         </button>
                       );
@@ -457,7 +458,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* User Profile Card & Signout at Bottom */}
-        <div className="p-3.5 border-t border-emerald-800/40 bg-[#031d16] shrink-0 shadow-lg">
+        <div className="p-3.5 border-t border-emerald-200/80 bg-emerald-50/70 shrink-0">
           {currentUser ? (
             <div className="flex items-center justify-between gap-2">
               <div
@@ -465,15 +466,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer hover:opacity-90 transition-opacity"
                 title="คลิกเพื่อสลับผู้ใช้งาน / แก้ไขโปรไฟล์"
               >
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-600 to-teal-500 border border-emerald-300/60 flex items-center justify-center font-extrabold text-sm text-white shrink-0 shadow-md">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 border border-emerald-400 flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-xs">
                   {currentUser.fullName ? currentUser.fullName[0] : 'U'}
                 </div>
                 {isOpen && (
                   <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-bold text-white truncate leading-tight">
+                    <span className="text-[13.5px] font-bold text-slate-900 truncate leading-snug">
                       {currentUser.fullName}
                     </span>
-                    <span className="text-xs text-emerald-300 font-medium truncate mt-0.5">
+                    <span className="text-xs text-emerald-700 font-medium truncate mt-0.5">
                       {currentUser.roleTitle || currentUser.role}
                     </span>
                   </div>
@@ -484,7 +485,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   onClick={onLogout}
                   title="ออกจากระบบ"
-                  className="p-2 text-emerald-200 hover:text-rose-300 hover:bg-emerald-800/80 rounded-xl transition-colors cursor-pointer shrink-0"
+                  className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -493,7 +494,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ) : (
             <button
               onClick={onOpenAuthModal}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold transition-all shadow-md cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold transition-all shadow-xs cursor-pointer"
             >
               <UserIcon className="w-4 h-4" />
               {isOpen && <span>เข้าสู่ระบบเจ้าหน้าที่</span>}

@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Settings,
   Save,
   CheckCircle2,
-  Building2,
   UserCheck,
   DollarSign,
   RotateCcw,
+  Plus,
+  Trash2,
+  Users,
 } from 'lucide-react';
-import { SignerSettings, DEFAULT_SIGNER_SETTINGS } from '../types/index.ts';
+import { SignerSettings, DEFAULT_SIGNER_SETTINGS, InspectorSignerItem } from '../types/index.ts';
 
 interface SignerSettingsModalProps {
   isOpen: boolean;
@@ -24,19 +26,70 @@ export const SignerSettingsModal: React.FC<SignerSettingsModalProps> = ({
   settings,
   onSave,
 }) => {
-  const [form, setForm] = useState<SignerSettings>(settings || DEFAULT_SIGNER_SETTINGS);
+  const [form, setForm] = useState<SignerSettings>(() => ({
+    ...DEFAULT_SIGNER_SETTINGS,
+    ...settings,
+    inspectors:
+      settings?.inspectors && settings.inspectors.length > 0
+        ? settings.inspectors
+        : DEFAULT_SIGNER_SETTINGS.inspectors,
+  }));
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setForm({
+        ...DEFAULT_SIGNER_SETTINGS,
+        ...settings,
+        inspectors:
+          settings?.inspectors && settings.inspectors.length > 0
+            ? settings.inspectors
+            : DEFAULT_SIGNER_SETTINGS.inspectors,
+      });
+    }
+  }, [isOpen, settings]);
 
   if (!isOpen) return null;
 
+  const inspectorsList: InspectorSignerItem[] =
+    form.inspectors || DEFAULT_SIGNER_SETTINGS.inspectors || [];
+
+  const handleAddInspector = () => {
+    const nextList: InspectorSignerItem[] = [
+      ...inspectorsList,
+      {
+        id: `insp-${Date.now()}`,
+        name: '',
+        position: 'เจ้าพนักงานสาธารณสุข',
+      },
+    ];
+    setForm({ ...form, inspectors: nextList });
+  };
+
+  const handleUpdateInspector = (id: string, field: 'name' | 'position', value: string) => {
+    const nextList = inspectorsList.map((item) =>
+      item.id === id ? { ...item, [field]: value } : item
+    );
+    setForm({ ...form, inspectors: nextList });
+  };
+
+  const handleRemoveInspector = (id: string) => {
+    const nextList = inspectorsList.filter((item) => item.id !== id);
+    setForm({ ...form, inspectors: nextList });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(form);
+    const cleanedInspectors = (form.inspectors || []).filter((i) => i.name.trim() !== '');
+    onSave({
+      ...form,
+      inspectors: cleanedInspectors.length > 0 ? cleanedInspectors : DEFAULT_SIGNER_SETTINGS.inspectors,
+    });
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
       onClose();
-    }, 1200);
+    }, 1000);
   };
 
   const handleReset = () => {
@@ -75,6 +128,73 @@ export const SignerSettingsModal: React.FC<SignerSettingsModalProps> = ({
               <span>บันทึกการตั้งค่าผู้ลงนามเรียบร้อยแล้ว</span>
             </div>
           )}
+
+          {/* รายชื่อเจ้าหน้าที่ผู้ตรวจประเมิน (สำหรับดรอปดาวน์ในแบบฟอร์มประเมิน) */}
+          <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <span className="text-xs sm:text-sm font-bold text-emerald-950 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-emerald-700" />
+                  <span>รายชื่อเจ้าหน้าที่ผู้ตรวจประเมิน / ผู้ลงนาม (ตัวเลือกดรอปดาวน์)</span>
+                </span>
+                <p className="text-[11px] text-emerald-700 mt-0.5">
+                  เพิ่มหรือแก้ไขชื่อและตำแหน่ง เพื่อใช้เลือกในดรอปดาวน์หน้าฟอร์มตรวจประเมินสุขลักษณะ
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddInspector}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs transition-colors cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>เพิ่มรายชื่อ</span>
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {inspectorsList.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-emerald-200/80 shadow-2xs"
+                >
+                  <div className="sm:col-span-5">
+                    <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                      ชื่อ-นามสกุล ลำดับที่ {idx + 1}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="เช่น พันจ่าเอกอานัส เด่นหมาด"
+                      value={item.name}
+                      onChange={(e) => handleUpdateInspector(item.id, 'name', e.target.value)}
+                      className="w-full text-xs sm:text-sm font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg"
+                    />
+                  </div>
+                  <div className="sm:col-span-6">
+                    <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">
+                      ตำแหน่ง
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="เช่น เจ้าพนักงานสาธารณสุขชำนาญงาน"
+                      value={item.position}
+                      onChange={(e) => handleUpdateInspector(item.id, 'position', e.target.value)}
+                      className="w-full text-xs sm:text-sm px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg"
+                    />
+                  </div>
+                  <div className="sm:col-span-1 flex justify-end sm:pt-4">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveInspector(item.id)}
+                      title="ลบรายชื่อนี้"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* ผอ.กอง */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">

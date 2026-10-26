@@ -30,17 +30,17 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
   const [progress, setProgress] = useState(0);
   const [geminiKey, setGeminiKey] = useState(getGeminiApiKey());
   const [savedKeyMsg, setSavedKeyMsg] = useState(false);
+  const [showConfirmSeed, setShowConfirmSeed] = useState(false);
+  const [feedbackResult, setFeedbackResult] = useState<{ success: boolean; message: string } | null>(null);
 
   if (!isOpen) return null;
 
   const handleSeedFirestore = async () => {
-    if (!window.confirm('คุณต้องการอัปโหลดข้อมูลทั้งหมด (ใบอนุญาต, อุปกรณ์การแพทย์, คำร้อง, กปท.) ขึ้นสู่ Firebase Firestore หรือไม่?')) {
-      return;
-    }
-
+    setShowConfirmSeed(false);
     setLoading(true);
     setStatusMsg('กำลังเริ่มอัปโหลด...');
     setProgress(5);
+    setFeedbackResult(null);
 
     const result = await seedAllDataToFirestore((msg, pct) => {
       setStatusMsg(msg);
@@ -48,11 +48,9 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
     });
 
     setLoading(false);
-    if (result.success) {
-      alert('🎉 ' + result.message);
-      if (onRefreshData) onRefreshData();
-    } else {
-      alert('⚠️ ' + result.message);
+    setFeedbackResult({ success: result.success, message: result.message });
+    if (result.success && onRefreshData) {
+      onRefreshData();
     }
   };
 
@@ -111,25 +109,68 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
             </div>
 
             {/* Seed / Sync button */}
-            <div className="mt-4 pt-3 border-t border-amber-200/60">
-              <button
-                type="button"
-                onClick={handleSeedFirestore}
-                disabled={loading}
-                className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl font-bold text-sm shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>{statusMsg || 'กำลังบันทึกลง Firebase...'} ({progress}%)</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    <span>อัปโหลดฐานข้อมูลตั้งต้นทุกระบบขึ้น Cloud Firestore</span>
-                  </>
-                )}
-              </button>
+            <div className="mt-4 pt-3 border-t border-amber-200/60 space-y-3">
+              {showConfirmSeed ? (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2">
+                  <p className="text-xs font-bold text-amber-900">
+                    ยืนยันอัปโหลดข้อมูลตั้งต้นทุกระบบ (ใบอนุญาต 36 ร้านค้า, อุปกรณ์การแพทย์, คำร้อง, กปท.) ขึ้นสู่ Firebase Firestore หรือไม่?
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmSeed(false)}
+                      className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 cursor-pointer"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSeedFirestore}
+                      className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                    >
+                      ยืนยันอัปโหลด
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmSeed(true)}
+                  disabled={loading}
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl font-bold text-sm shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>{statusMsg || 'กำลังบันทึกลง Firebase...'} ({progress}%)</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      <span>อัปโหลดฐานข้อมูลตั้งต้นทุกระบบขึ้น Cloud Firestore</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {feedbackResult && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold flex items-center justify-between ${
+                    feedbackResult.success
+                      ? 'bg-emerald-50 text-emerald-900 border border-emerald-300'
+                      : 'bg-rose-50 text-rose-900 border border-rose-300'
+                  }`}
+                >
+                  <span>{feedbackResult.success ? '🎉 ' : '⚠️ '}{feedbackResult.message}</span>
+                  <button
+                    onClick={() => setFeedbackResult(null)}
+                    className="text-slate-400 hover:text-slate-600 font-bold px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               <p className="text-[11px] text-gray-500 mt-2 text-center">
                 * กดปุ่มนี้เพื่อถ่ายโอนข้อมูลใบอนุญาต, อุปกรณ์การแพทย์, คำร้อง, กปท. ขึ้นสู่ Cloud ทันที
               </p>

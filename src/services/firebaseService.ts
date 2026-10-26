@@ -21,7 +21,9 @@ import {
   PublicPetition,
   SignerSettings,
   DEFAULT_SIGNER_SETTINGS,
+  User,
 } from '../types/index.ts';
+import { INITIAL_USERS } from './authService.ts';
 import {
   INITIAL_ESTABLISHMENTS,
   INITIAL_INSPECTIONS,
@@ -45,6 +47,8 @@ export const COLLECTIONS = {
   EQUIPMENT: 'medical_equipment',
   LOANS: 'equipment_loans',
   SETTINGS: 'system_settings',
+  USERS: 'users',
+  CALENDAR_EVENTS: 'calendar_events',
 } as const;
 
 /**
@@ -212,6 +216,12 @@ export async function seedAllDataToFirestore(
     const signerRef = doc(db, COLLECTIONS.SETTINGS, 'signers');
     batch.set(signerRef, DEFAULT_SIGNER_SETTINGS, { merge: true });
 
+    // 11. Users / Staff Registry
+    INITIAL_USERS.forEach((u) => {
+      const uRef = doc(db, COLLECTIONS.USERS, u.id);
+      batch.set(uRef, u, { merge: true });
+    });
+
     updateProgress('กำลังบันทึกลง Cloud Firestore...', 80);
     await batch.commit();
 
@@ -228,3 +238,46 @@ export async function seedAllDataToFirestore(
     };
   }
 }
+
+/**
+ * Seed all 36 authentic licenses into Firestore Collection "licenses"
+ */
+export async function seedLicensesToFirestore(): Promise<{ success: boolean; message: string; count: number }> {
+  try {
+    const batch = writeBatch(db);
+    INITIAL_LICENSE_RECORDS.forEach((lic) => {
+      const ref = doc(db, COLLECTIONS.LICENSES, lic.id);
+      batch.set(ref, lic, { merge: true });
+    });
+    await batch.commit();
+    return {
+      success: true,
+      message: `นำเข้าข้อมูลใบอนุญาต ${INITIAL_LICENSE_RECORDS.length} รายการลง Cloud Firestore สำเร็จ!`,
+      count: INITIAL_LICENSE_RECORDS.length,
+    };
+  } catch (error: any) {
+    console.error('Error seeding licenses to Firestore:', error);
+    return {
+      success: false,
+      message: error?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลง Firebase',
+      count: 0,
+    };
+  }
+}
+
+/**
+ * Staff / Users Firestore helpers
+ */
+export async function saveUserToFirestore(user: User): Promise<string> {
+  return saveToFirestore(COLLECTIONS.USERS, user, user.id);
+}
+
+export async function deleteUserFromFirestore(userId: string): Promise<void> {
+  return deleteFromFirestore(COLLECTIONS.USERS, userId);
+}
+
+export async function fetchUsersFromFirestore(): Promise<User[]> {
+  return fetchCollection<User>(COLLECTIONS.USERS);
+}
+
+

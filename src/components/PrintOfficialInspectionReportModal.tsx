@@ -348,9 +348,9 @@ export const PrintOfficialInspectionReportModal: React.FC<PrintOfficialInspectio
 
               <div className="w-[50%] float-right text-center mt-5 text-[12pt] leading-snug">
                 <div>ลงชื่อ....................................................................... ผู้ตรวจประเมิน</div>
-                <div className="font-bold mt-1">({signers.directorName || 'นางสาวปฐมาภรณ์ จันทร์แจ่ม'})</div>
+                <div className="font-bold mt-1">({license.inspectionData?.inspectorName || 'พันจ่าเอกอานัส เด่นหมาด'})</div>
                 <div className="mt-0.5">
-                  ตำแหน่ง {signers.directorPosition || 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม'}
+                  ตำแหน่ง {license.inspectionData?.inspectorPosition || 'เจ้าพนักงานสาธารณสุขชำนาญงาน'}
                 </div>
                 <div className="mt-0.5">วันที่ตรวจ {inspectDate}</div>
               </div>

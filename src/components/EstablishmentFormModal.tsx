@@ -27,9 +27,9 @@ export const EstablishmentFormModal: React.FC<EstablishmentFormModalProps> = ({
     ownerName: establishment?.ownerName || '',
     phone: establishment?.phone || '',
     address: establishment?.address || '',
-    subdistrict: establishment?.subdistrict || '',
-    district: establishment?.district || '',
-    province: establishment?.province || 'กรุงเทพมหานคร',
+    subdistrict: establishment?.subdistrict || 'บางเป้า',
+    district: establishment?.district || 'กันตัง',
+    province: establishment?.province || 'ตรัง',
     notes: establishment?.notes || '',
     imageUrl: establishment?.imageUrl || '',
   });
@@ -191,7 +191,7 @@ export const EstablishmentFormModal: React.FC<EstablishmentFormModalProps> = ({
                 value={formData.district}
                 onChange={(e) => setFormData({ ...formData, district: e.target.value })}
                 className="w-full text-xs p-2.5 rounded-lg bg-white border border-slate-300 text-slate-800 focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
-                placeholder="คลองเตย"
+                placeholder="กันตัง"
               />
             </div>
 
@@ -202,7 +202,7 @@ export const EstablishmentFormModal: React.FC<EstablishmentFormModalProps> = ({
                 value={formData.province}
                 onChange={(e) => setFormData({ ...formData, province: e.target.value })}
                 className="w-full text-xs p-2.5 rounded-lg bg-white border border-slate-300 text-slate-800 focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
-                placeholder="กรุงเทพมหานคร"
+                placeholder="ตรัง"
               />
             </div>
           </div>

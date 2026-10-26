@@ -5,7 +5,7 @@ import { DEFAULT_GAS_URL } from '../services/sheetsSync.ts';
 import {
   generateLicenseHtml,
   printHtmlInNewWindow,
-  exportHtmlAsWord,
+  exportLicenseWordDoc,
 } from '../services/officialDocGenerator.ts';
 
 interface PrintLicenseOptionsModalProps {
@@ -16,6 +16,7 @@ interface PrintLicenseOptionsModalProps {
   gasUrl?: string;
   onOpenGoogleSheet: () => void;
   onEditBeforePrint?: () => void;
+  onOpenOfficialPrint?: () => void;
 }
 
 export const PrintLicenseOptionsModal: React.FC<PrintLicenseOptionsModalProps> = ({
@@ -26,6 +27,7 @@ export const PrintLicenseOptionsModal: React.FC<PrintLicenseOptionsModalProps> =
   gasUrl,
   onOpenGoogleSheet,
   onEditBeforePrint,
+  onOpenOfficialPrint,
 }) => {
   if (!isOpen || !license) return null;
 
@@ -46,8 +48,7 @@ export const PrintLicenseOptionsModal: React.FC<PrintLicenseOptionsModalProps> =
 
   const handleExportWord = () => {
     onClose();
-    const html = generateLicenseHtml(license, signers);
-    exportHtmlAsWord(html, `ใบอนุญาต_${license.businessName.replace(/\s+/g, '_')}`);
+    exportLicenseWordDoc(license, signers);
   };
 
   return (
@@ -89,12 +90,19 @@ export const PrintLicenseOptionsModal: React.FC<PrintLicenseOptionsModalProps> =
               <span>📄 พิมพ์ PDF ผ่าน Google Apps Script (ต้นฉบับ)</span>
             </button>
 
-            {/* Button 2: Direct Local Print */}
+            {/* Button 2: Direct Local Print / Interactive Live Preview */}
             <button
-              onClick={handlePrintLocal}
+              onClick={() => {
+                onClose();
+                if (onOpenOfficialPrint) {
+                  onOpenOfficialPrint();
+                } else {
+                  handlePrintLocal();
+                }
+              }}
               className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 cursor-pointer"
             >
-              <span>🖨️ พิมพ์ทันทีในเครื่อง (ตราครุฑ 2 หน้า A4)</span>
+              <span>🖨️ ออกใบอนุญาต / พิมพ์ทันทีในเครื่อง (ตราครุฑ 2 หน้า A4)</span>
             </button>
 
             {/* Button 3: Google Sheet */}
@@ -115,21 +123,23 @@ export const PrintLicenseOptionsModal: React.FC<PrintLicenseOptionsModalProps> =
               className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all active:scale-98 cursor-pointer"
             >
               <FileDown className="w-4 h-4" />
-              <span>📝 ส่งออกเป็น Word (.doc)</span>
+              <span>📝 ส่งออกเป็น Word (.docx) มาตรฐานต้นฉบับ</span>
             </button>
 
-            {/* Optional Button 5: Edit before printing */}
-            {onEditBeforePrint && (
-              <button
-                onClick={() => {
-                  onClose();
+            {/* Button 5: Edit / Preview before printing */}
+            <button
+              onClick={() => {
+                onClose();
+                if (onOpenOfficialPrint) {
+                  onOpenOfficialPrint();
+                } else if (onEditBeforePrint) {
                   onEditBeforePrint();
-                }}
-                className="w-full py-2 px-4 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-amber-200"
-              >
-                <span>✏️ แก้ไขข้อมูลใบอนุญาตก่อนพิมพ์</span>
-              </button>
-            )}
+                }
+              }}
+              className="w-full py-2 px-4 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-amber-200"
+            >
+              <span>✏️ พรีวิว & แก้ไขข้อมูลใบอนุญาตก่อนพิมพ์</span>
+            </button>
           </div>
         </div>
       </div>

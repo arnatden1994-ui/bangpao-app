@@ -2,7 +2,6 @@ import React from 'react';
 import {
   FileSpreadsheet,
   RefreshCw,
-  Shield,
   Settings,
   Menu,
   ExternalLink,
@@ -44,78 +43,80 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSignerSettings,
   onToggleSidebar,
 }) => {
-  const officerName = currentUser?.fullName || 'น.ส. พิมลภัส ศรีสุข';
-  const officerRole = currentUser?.roleTitle || 'นายตรวจ / เจ้าพนักงานสาธารณสุข';
+  const officerName = currentUser?.fullName || 'พันจ่าเอกอานัส เด่นหมาด';
+  const officerRole = currentUser?.roleTitle || 'เจ้าพนักงานสาธารณสุขชำนาญงาน (นายตรวจ)';
 
   const tabTitleMap: Record<MainNavTab, string> = {
-    overview: '1. 🏠 แดชบอร์ดหลักทุกระบบ',
-    hazardous: '2. 🛡️ กิจการอันตรายต่อสุขภาพ',
-    gas_app: '2. 🛡️ กิจการอันตรายต่อสุขภาพ (Apps Script)',
-    dashboard: '2. 🛡️ กิจการอันตรายต่อสุขภาพ (แดชบอร์ด)',
-    establishments: '2. 🛡️ กิจการอันตรายต่อสุขภาพ (ตรวจประเมิน)',
-    nhso_ltc: '3. 📦 ระบบแจกจ่ายโครงการ สปสช. & LTC',
-    nhso: '3. 📦 โครงการ สปสช.',
-    ltc: '3. 📦 การดูแลระยะยาว LTC',
-    equipment: '4. 🩺 ระบบบริการยืม-คืนอุปกรณ์ทางการแพทย์',
-    petitions: '5. 📋 ระบบยื่นคำร้องและบริการประชาชน',
-    reports: '5. 📋 พิมพ์เอกสารราชการเสนอผู้บริหาร',
-    inspections: '2. 🛡️ บันทึกการตรวจประเมิน',
-    settings: '6. ⚙️ ระบบตั้งค่าหน้าผู้ใช้งานทุกระบบ',
+    overview: '🏠 แดชบอร์ดหลักทุกระบบ',
+    hazardous: '1. 🛡️ กิจการอันตรายต่อสุขภาพ',
+    gas_app: '1. 🛡️ กิจการอันตรายต่อสุขภาพ (Apps Script)',
+    dashboard: '1. 🛡️ กิจการอันตรายต่อสุขภาพ (แดชบอร์ด)',
+    establishments: '1. 🛡️ กิจการอันตรายต่อสุขภาพ (ตรวจประเมิน)',
+    nhso_ltc: '2. 📦 ระบบแจกจ่ายโครงการ สปสช. & LTC',
+    ltc: '2. 📦 การดูแลระยะยาว LTC',
+    equipment: '3. 🩺 ระบบบริการยืม-คืนอุปกรณ์ทางการแพทย์',
+    petitions: '4. 📋 ระบบยื่นคำร้องและบริการประชาชน',
+    reports: '4. 📋 พิมพ์เอกสารราชการเสนอผู้บริหาร',
+    inspections: '1. 🛡️ บันทึกการตรวจประเมิน',
+    nhso: '5. 🏥 โครงการ สปสช. (กองทุน)',
+    settings: '6. ⚙️ ระบบตั้งค่าผู้ใช้งานทุกระบบ',
   };
 
   return (
-    <header className="bg-gradient-to-r from-[#063f31] via-[#074737] to-[#043327] text-white sticky top-0 z-40 shadow-md border-b border-emerald-600/40 backdrop-blur-md">
+    <header className="bg-white/85 backdrop-blur-xl text-slate-800 sticky top-0 z-40 shadow-xs border-b border-emerald-200/80">
       <div className="w-full px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-18 gap-3">
-          {/* Left: Sidebar Toggle Button + Bangpao Title + Breadcrumb */}
+          {/* Left: Sidebar Toggle Button + Bangpao Seal + Department Hierarchy + Breadcrumb */}
           <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
             {onToggleSidebar && (
               <button
                 onClick={onToggleSidebar}
-                className="p-2 text-emerald-200 hover:text-white hover:bg-emerald-800/80 rounded-xl transition-colors cursor-pointer shrink-0"
+                className="p-2 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100/80 rounded-xl transition-colors cursor-pointer shrink-0"
                 title="เปิด/ปิด แถบเมนูด้านข้าง"
               >
                 <Menu className="w-5 h-5" />
               </button>
             )}
 
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 p-0.5 flex items-center justify-center shrink-0 shadow-md border border-emerald-300/40 hidden sm:flex">
-              <div className="w-full h-full rounded-[14px] bg-[#063f31] flex items-center justify-center text-emerald-200">
-                <Shield className="w-5 h-5 text-emerald-300" />
-              </div>
+            <div className="w-10 h-10 rounded-full bg-white p-0.5 items-center justify-center shrink-0 shadow-xs ring-2 ring-emerald-500/40 hidden xl:flex overflow-hidden">
+              <img
+                src="/images-Photoroom.png"
+                alt="ตราเทศบาลตำบลบางเป้า"
+                className="w-full h-full object-contain"
+              />
             </div>
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-sm sm:text-base font-black tracking-tight text-white leading-tight truncate">
-                  ระบบงานสารสนเทศสาธารณสุขและจัดการเมืองอัจฉริยะ
+            <div className="min-w-0 overflow-hidden">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <h1 className="text-[14.5px] sm:text-[16px] font-bold text-emerald-950 leading-snug truncate whitespace-nowrap">
+                  กองสาธารณสุขและสิ่งแวดล้อม
                 </h1>
-                <span className="hidden xl:inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-800/90 text-emerald-200 border border-emerald-500/50">
-                  ทต.บางเป้า อ.กันตัง จ.ตรัง
+                <span className="hidden 2xl:inline-block shrink-0 whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100/90 text-emerald-800 border border-emerald-300/70">
+                  เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs sm:text-[13px] text-emerald-200/90 font-medium truncate mt-0.5">
-                <span className="text-emerald-300 font-bold">{tabTitleMap[currentTab] || 'ระบบสาธารณสุข'}</span>
+              <div className="flex items-center gap-1.5 text-xs sm:text-[13px] text-slate-600 font-medium truncate whitespace-nowrap mt-0.5">
+                <span className="text-emerald-700 font-semibold truncate">{tabTitleMap[currentTab] || 'ระบบสาธารณสุข'}</span>
                 {currentSubTabLabel && (
                   <>
-                    <span className="text-emerald-400/60">/</span>
-                    <span className="text-white font-semibold truncate">{currentSubTabLabel}</span>
+                    <span className="text-slate-400 shrink-0">/</span>
+                    <span className="text-slate-800 font-semibold truncate">{currentSubTabLabel}</span>
                   </>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Right: [ตั้งค่าผู้ลงนาม] | [Google Sheets Online] | [เปิดแท็บใหม่] | [รีเฟรช] | โปรไฟล์เจ้าหน้าที่ */}
+          {/* Right: [ตั้งค่าผู้ลงนาม] | [Firebase] | [Google Sheets] | [เปิดแท็บใหม่] | [รีเฟรช] | โปรไฟล์เจ้าหน้าที่ */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             {/* Quick Action: ตั้งค่าผู้ลงนาม */}
             {onOpenSignerSettings && (
               <button
                 onClick={onOpenSignerSettings}
                 title="ตั้งค่าผู้บริหารและผู้ลงนามคำร้อง A4"
-                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-bold rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all cursor-pointer shadow-xs active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold rounded-xl bg-slate-100/90 hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 border border-slate-200/90 hover:border-emerald-300 transition-all cursor-pointer shadow-2xs active:scale-95"
               >
-                <Settings className="w-4 h-4 text-emerald-300" />
+                <Settings className="w-4 h-4 text-emerald-600" />
                 <span className="hidden md:inline">ตั้งค่าผู้ลงนาม</span>
               </button>
             )}
@@ -125,13 +126,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={onOpenFirebaseModal}
                 title="สถานะ Cloud Firestore (Bangpao Public Health) & Google AI Studio"
-                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-bold rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white border border-amber-400/50 transition-all cursor-pointer shadow-xs active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold rounded-xl bg-amber-50/90 hover:bg-amber-100/90 text-amber-900 border border-amber-300/80 transition-all cursor-pointer shadow-2xs active:scale-95"
               >
-                <Flame className="w-4 h-4 text-yellow-300" />
+                <Flame className="w-4 h-4 text-amber-600" />
                 <span className="hidden sm:inline">Firebase Cloud</span>
                 <span className="inline-flex items-center gap-1 ml-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[11px] text-amber-200 hidden lg:inline font-mono font-bold">🟢 Active</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[11px] text-emerald-700 hidden lg:inline font-semibold">Active</span>
                 </span>
               </button>
             )}
@@ -140,13 +141,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onOpenSheetsModal}
               title="ตรวจสอบสถานะการเชื่อมต่อ Google Sheets & Apps Script"
-              className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-bold rounded-xl bg-emerald-800/90 hover:bg-emerald-700 text-white border border-emerald-500/50 transition-all cursor-pointer shadow-xs active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold rounded-xl bg-emerald-50/90 hover:bg-emerald-100/90 text-emerald-900 border border-emerald-300/80 transition-all cursor-pointer shadow-2xs active:scale-95"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span className="hidden sm:inline">Google Sheets</span>
               <span className="inline-flex items-center gap-1 ml-0.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[11px] text-emerald-200 hidden lg:inline font-mono font-bold">🟢 Online</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[11px] text-emerald-700 hidden lg:inline font-semibold">Online</span>
               </span>
             </button>
 
@@ -155,9 +156,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={() => window.open(config.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbylNXKtc6ldvAA6BnxUHmosX4hxhLM_a3uXw_A6xn-f18yar0RF_uZaj-ns6Yrlgax8/exec', '_blank')}
                 title="เปิดระบบ Google Apps Script ต้นฉบับ 100% ในหน้าต่างแยกใหม่"
-                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-bold rounded-xl bg-teal-800/90 hover:bg-teal-700 text-white border border-teal-500/50 transition-all cursor-pointer shadow-xs active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold rounded-xl bg-teal-50/90 hover:bg-teal-100/90 text-teal-900 border border-teal-300/80 transition-all cursor-pointer shadow-2xs active:scale-95"
               >
-                <ExternalLink className="w-4 h-4 text-teal-300" />
+                <ExternalLink className="w-4 h-4 text-teal-700" />
                 <span className="hidden md:inline">เปิดแท็บใหม่</span>
               </button>
             )}
@@ -167,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={onQuickSync}
               disabled={isSyncing}
               title="รีเฟรชและซิงค์ข้อมูลกับ Google Sheets ทันที"
-              className="p-2 sm:p-2.5 text-emerald-200 hover:text-white hover:bg-white/10 rounded-xl transition-colors disabled:opacity-50 cursor-pointer border border-transparent hover:border-emerald-600/40"
+              className="p-2 sm:p-2.5 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100/70 rounded-xl transition-colors disabled:opacity-50 cursor-pointer border border-transparent hover:border-emerald-200"
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
             </button>
@@ -175,18 +176,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Officer Profile Badge */}
             <div
               onClick={onOpenAuthModal}
-              className="flex items-center gap-2 p-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-emerald-600/50 bg-emerald-900/70 hover:bg-emerald-800/90 transition-all text-left shadow-xs cursor-pointer"
+              className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-emerald-200/90 bg-emerald-50/70 hover:bg-emerald-100/80 transition-all text-left shadow-2xs cursor-pointer"
               title="คลิกเพื่อสลับผู้ใช้งาน / ดูโปรไฟล์เจ้าหน้าที่"
             >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-300 text-emerald-950 font-black flex items-center justify-center text-xs shrink-0 shadow-inner">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
                 {officerName.slice(0, 1)}
               </div>
 
               <div className="hidden sm:block text-left">
-                <div className="text-xs sm:text-[13px] font-bold text-white leading-tight truncate max-w-[140px]">
+                <div className="text-xs sm:text-[13px] font-bold text-slate-900 leading-snug truncate max-w-[150px]">
                   {officerName}
                 </div>
-                <div className="text-[11px] text-emerald-300 font-medium truncate max-w-[140px] mt-0.5">
+                <div className="text-[11.5px] text-emerald-700 font-medium truncate max-w-[150px]">
                   {officerRole}
                 </div>
               </div>
