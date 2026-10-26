@@ -9,6 +9,41 @@ export interface GasExportResult {
   error?: string;
 }
 
+async function callGasProxy(body: object): Promise<{ ok: boolean; status: number; data?: any; error?: string }> {
+  try {
+    const response = await fetch('/api/gas-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    let result: any;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      return {
+        ok: false,
+        status: response.status,
+        error: `เซิร์ฟเวอร์ proxy ตอบกลับไม่ใช่ JSON (HTTP ${response.status}): ${text.slice(0, 100)}`,
+      };
+    }
+
+    return {
+      ok: response.ok && result.ok !== false,
+      status: response.status,
+      data: result.data || result,
+    };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      status: 500,
+      error: errorMsg,
+    };
+  }
+}
+
 /**
  * ส่งออกรายงานการตรวจประเมินสุขลักษณะลง Google Sheet ฉบับใหม่ (สร้างสำเนาจาก แบบออกรายงานตรวจ)
  */
@@ -17,39 +52,29 @@ export async function exportReportSheetViaGas(
   targetYear?: string,
   gasUrl: string = DEFAULT_GAS_URL
 ): Promise<GasExportResult> {
-  try {
-    const response = await fetch('/api/gas-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scriptUrl: gasUrl,
-        method: 'GET',
-        queryParams: {
-          action: 'exportReportSheet',
-          shopName: shopName.trim(),
-          targetYear: targetYear || '',
-        },
-      }),
-    });
+  const res = await callGasProxy({
+    scriptUrl: gasUrl,
+    method: 'GET',
+    queryParams: {
+      action: 'exportReportSheet',
+      shopName: shopName.trim(),
+      targetYear: targetYear || '',
+    },
+  });
 
-    const result = await response.json();
-    if (result.ok && result.data && result.data.success) {
-      return {
-        success: true,
-        pdfUrl: result.data.pdfUrl,
-        excelUrl: result.data.excelUrl,
-        sheetUrl: result.data.sheetUrl || result.data.excelUrl,
-      };
-    }
-
+  if (res.ok && res.data && res.data.success) {
     return {
-      success: false,
-      error: result.data?.error || result.message || 'ไม่สามารถสร้างไฟล์ชีตรายงานได้',
+      success: true,
+      pdfUrl: res.data.pdfUrl,
+      excelUrl: res.data.excelUrl,
+      sheetUrl: res.data.sheetUrl || res.data.excelUrl,
     };
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: errorMsg };
   }
+
+  return {
+    success: false,
+    error: res.data?.error || res.error || 'ไม่สามารถสร้างไฟล์ชีตรายงานได้',
+  };
 }
 
 /**
@@ -60,39 +85,29 @@ export async function exportReportPdfViaGas(
   targetYear?: string,
   gasUrl: string = DEFAULT_GAS_URL
 ): Promise<GasExportResult> {
-  try {
-    const response = await fetch('/api/gas-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scriptUrl: gasUrl,
-        method: 'GET',
-        queryParams: {
-          action: 'exportReportPdf',
-          shopName: shopName.trim(),
-          targetYear: targetYear || '',
-        },
-      }),
-    });
+  const res = await callGasProxy({
+    scriptUrl: gasUrl,
+    method: 'GET',
+    queryParams: {
+      action: 'exportReportPdf',
+      shopName: shopName.trim(),
+      targetYear: targetYear || '',
+    },
+  });
 
-    const result = await response.json();
-    if (result.ok && result.data && result.data.success) {
-      return {
-        success: true,
-        pdfUrl: result.data.pdfUrl,
-        excelUrl: result.data.excelUrl,
-        sheetUrl: result.data.sheetUrl,
-      };
-    }
-
+  if (res.ok && res.data && res.data.success) {
     return {
-      success: false,
-      error: result.data?.error || result.message || 'ไม่สามารถสร้างไฟล์ PDF รายงานได้',
+      success: true,
+      pdfUrl: res.data.pdfUrl,
+      excelUrl: res.data.excelUrl,
+      sheetUrl: res.data.sheetUrl,
     };
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: errorMsg };
   }
+
+  return {
+    success: false,
+    error: res.data?.error || res.error || 'ไม่สามารถสร้างไฟล์ PDF รายงานได้',
+  };
 }
 
 /**
@@ -102,38 +117,28 @@ export async function exportLicenseSheetViaGas(
   shopName: string,
   gasUrl: string = DEFAULT_GAS_URL
 ): Promise<GasExportResult> {
-  try {
-    const response = await fetch('/api/gas-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scriptUrl: gasUrl,
-        method: 'GET',
-        queryParams: {
-          action: 'exportLicenseSheet',
-          shopName: shopName.trim(),
-        },
-      }),
-    });
+  const res = await callGasProxy({
+    scriptUrl: gasUrl,
+    method: 'GET',
+    queryParams: {
+      action: 'exportLicenseSheet',
+      shopName: shopName.trim(),
+    },
+  });
 
-    const result = await response.json();
-    if (result.ok && result.data && result.data.success) {
-      return {
-        success: true,
-        pdfUrl: result.data.pdfUrl,
-        excelUrl: result.data.excelUrl,
-        sheetUrl: result.data.sheetUrl || result.data.excelUrl,
-      };
-    }
-
+  if (res.ok && res.data && res.data.success) {
     return {
-      success: false,
-      error: result.data?.error || result.message || 'ไม่สามารถสร้างไฟล์ชีตใบอนุญาตได้',
+      success: true,
+      pdfUrl: res.data.pdfUrl,
+      excelUrl: res.data.excelUrl,
+      sheetUrl: res.data.sheetUrl || res.data.excelUrl,
     };
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: errorMsg };
   }
+
+  return {
+    success: false,
+    error: res.data?.error || res.error || 'ไม่สามารถสร้างไฟล์ชีตใบอนุญาตได้',
+  };
 }
 
 /**
@@ -143,38 +148,28 @@ export async function exportLicensePdfViaGas(
   shopName: string,
   gasUrl: string = DEFAULT_GAS_URL
 ): Promise<GasExportResult> {
-  try {
-    const response = await fetch('/api/gas-proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scriptUrl: gasUrl,
-        method: 'GET',
-        queryParams: {
-          action: 'exportLicensePdf',
-          shopName: shopName.trim(),
-        },
-      }),
-    });
+  const res = await callGasProxy({
+    scriptUrl: gasUrl,
+    method: 'GET',
+    queryParams: {
+      action: 'exportLicensePdf',
+      shopName: shopName.trim(),
+    },
+  });
 
-    const result = await response.json();
-    if (result.ok && result.data && result.data.success) {
-      return {
-        success: true,
-        pdfUrl: result.data.pdfUrl,
-        excelUrl: result.data.excelUrl,
-        sheetUrl: result.data.sheetUrl,
-      };
-    }
-
+  if (res.ok && res.data && res.data.success) {
     return {
-      success: false,
-      error: result.data?.error || result.message || 'ไม่สามารถสร้างไฟล์ PDF ใบอนุญาตได้',
+      success: true,
+      pdfUrl: res.data.pdfUrl,
+      excelUrl: res.data.excelUrl,
+      sheetUrl: res.data.sheetUrl,
     };
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return { success: false, error: errorMsg };
   }
+
+  return {
+    success: false,
+    error: res.data?.error || res.error || 'ไม่สามารถสร้างไฟล์ PDF ใบอนุญาตได้',
+  };
 }
 
 /**
@@ -226,20 +221,15 @@ export async function updateLicenseRecordInGas(
       docYear: docYear,
     };
 
-    const response = await fetch('/api/gas-proxy', {
+    const res = await callGasProxy({
+      scriptUrl: gasUrl,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scriptUrl: gasUrl,
-        method: 'POST',
-        payload,
-      }),
+      payload,
     });
 
-    const result = await response.json();
     return {
-      success: response.ok,
-      message: result.data?.message || 'บันทึกข้อมูลใบอนุญาตเรียบร้อยครับ',
+      success: res.ok,
+      message: res.data?.message || (res.ok ? 'บันทึกข้อมูลใบอนุญาตเรียบร้อยครับ' : (res.error || 'เกิดข้อผิดพลาดในการบันทึก')),
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);

@@ -269,7 +269,17 @@ export async function testAppsScriptConnection(url: string): Promise<{
       body: JSON.stringify({ url }),
     });
 
-    const result = await response.json();
+    const text = await response.text();
+    let result: any;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        message: `ระบบตอบกลับไม่ใช่ JSON (HTTP ${response.status}): ${text.slice(0, 120)}`,
+      };
+    }
+
     if (result.success) {
       return {
         success: true,
@@ -331,8 +341,18 @@ export async function syncToGoogleSheets(
       }),
     });
 
-    const result = await response.json();
-    if (response.ok) {
+    const text = await response.text();
+    let result: any;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        message: `ระบบ Proxy ตอบกลับไม่ใช่ JSON (HTTP ${response.status}): ${text.slice(0, 120)}`,
+      };
+    }
+
+    if (response.ok && result.ok !== false) {
       return {
         success: true,
         message: 'ส่งข้อมูลสาธารณสุขขึ้น Google Sheets สำเร็จเรียบร้อย',
@@ -341,7 +361,7 @@ export async function syncToGoogleSheets(
     } else {
       return {
         success: false,
-        message: 'ส่งข้อมูลไม่สำเร็จ: ' + (result.message || response.statusText),
+        message: 'ส่งข้อมูลไม่สำเร็จ: ' + (result?.data?.message || result?.message || response.statusText),
         data: result,
       };
     }
@@ -374,7 +394,17 @@ export async function fetchFromGoogleSheets(url: string): Promise<{
       }),
     });
 
-    const result = await response.json();
+    const text = await response.text();
+    let result: any;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        message: `ระบบ Proxy ตอบกลับไม่ใช่ JSON (HTTP ${response.status}): ${text.slice(0, 120)}`,
+      };
+    }
+
     if (response.ok && result.data) {
       const data = result.data.data || result.data;
       const items: Establishment[] = Array.isArray(data.establishments) ? data.establishments : [];
