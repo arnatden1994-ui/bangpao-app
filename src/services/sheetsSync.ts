@@ -45,10 +45,19 @@ export function getStoredConfig(): GoogleSheetsConfig {
     const raw = localStorage.getItem(STORAGE_KEYS.CONFIG);
     if (raw) {
       const cfg = JSON.parse(raw);
+      let changed = false;
       // Auto upgrade if config was using old default URL
       if (!cfg.appsScriptUrl || cfg.appsScriptUrl.includes('AKfycbw8') || cfg.appsScriptUrl.includes('AKfycbylNXKt')) {
         cfg.appsScriptUrl = DEFAULT_GAS_URL;
         cfg.sheetId = DEFAULT_SHEET_ID;
+        changed = true;
+      }
+      // Auto enable autoSync by default
+      if (cfg.autoSync === undefined || cfg.autoSync === false) {
+        cfg.autoSync = true;
+        changed = true;
+      }
+      if (changed) {
         localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cfg));
       }
       return cfg;
@@ -60,7 +69,7 @@ export function getStoredConfig(): GoogleSheetsConfig {
   return {
     appsScriptUrl: DEFAULT_GAS_URL,
     sheetId: DEFAULT_SHEET_ID,
-    autoSync: false,
+    autoSync: true,
     lastSyncTime: null,
     syncStatus: 'idle',
     syncMessage: 'พร้อมเชื่อมต่อ Google Sheets',

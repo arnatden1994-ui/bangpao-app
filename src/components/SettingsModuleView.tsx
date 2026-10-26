@@ -1309,6 +1309,33 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                   required
                 />
               </div>
+
+              {/* Auto-Sync Toggle in Settings */}
+              <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 flex items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                    <RefreshCw className={`w-4 h-4 ${sheetsForm.autoSync ? 'animate-spin-slow' : ''}`} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-emerald-950 flex items-center gap-2">
+                      <span>บันทึกและซิงค์อัตโนมัติ (Auto-Sync)</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800 font-semibold">แนะนำ</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800/80 mt-0.5 leading-relaxed">
+                      เมื่อเปิดใช้งาน ทุกครั้งที่มีการบันทึกผลตรวจ ยื่นคำร้อง ออกใบอนุญาต หรือแก้ไขข้อมูล ระบบจะส่งขึ้น Google Sheets ในพื้นหลังทันทีโดยอัตโนมัติ (ไม่ต้องกดปุ่มเอง)
+                    </p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={sheetsForm.autoSync ?? true}
+                    onChange={(e) => setSheetsForm({ ...sheetsForm, autoSync: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
             </div>
 
             {/* Action Buttons */}

@@ -9,6 +9,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { GoogleSheetsConfig, MainNavTab, User } from '../types/index.ts';
+import { DEFAULT_GAS_URL } from '../services/sheetsSync.ts';
 
 interface NavbarProps {
   currentTab: MainNavTab;
@@ -142,21 +143,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Quick Action: Google Sheets Status */}
             <button
               onClick={onOpenSheetsModal}
-              title="ตรวจสอบสถานะการเชื่อมต่อ Google Sheets & Apps Script"
+              title={`สถานะการเชื่อมต่อ Google Sheets: ${config.autoSync ? 'ซิงค์อัตโนมัติ (เปิดใช้งาน)' : 'ซิงค์แบบกดเอง'}${config.lastSyncTime ? ` | บันทึกล่าสุด: ${new Date(config.lastSyncTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.` : ''}`}
               className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold rounded-xl bg-emerald-50/90 hover:bg-emerald-100/90 text-emerald-900 border border-emerald-300/80 transition-all cursor-pointer shadow-2xs active:scale-95"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span className="hidden sm:inline">Google Sheets</span>
               <span className="inline-flex items-center gap-1 ml-0.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[11px] text-emerald-700 hidden lg:inline font-semibold">Online</span>
+                <span className={`w-2 h-2 rounded-full ${config.autoSync ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                <span className="text-[11px] text-emerald-700 hidden lg:inline font-semibold">
+                  {config.autoSync ? 'Auto-Sync' : 'Manual'}
+                </span>
               </span>
             </button>
 
             {/* Quick Action: เปิด Apps Script แท็บใหม่ */}
             {(currentTab === 'hazardous' || currentTab === 'gas_app' || currentTab === 'dashboard' || currentTab === 'establishments') && (
               <button
-                onClick={() => window.open(config.appsScriptUrl || 'https://script.google.com/macros/s/AKfycbylNXKtc6ldvAA6BnxUHmosX4hxhLM_a3uXw_A6xn-f18yar0RF_uZaj-ns6Yrlgax8/exec', '_blank')}
+                onClick={() => window.open(config.appsScriptUrl || DEFAULT_GAS_URL, '_blank')}
                 title="เปิดระบบ Google Apps Script ต้นฉบับ 100% ในหน้าต่างแยกใหม่"
                 className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-semibold rounded-xl bg-teal-50/90 hover:bg-teal-100/90 text-teal-900 border border-teal-300/80 transition-all cursor-pointer shadow-2xs active:scale-95"
               >

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Establishment,
   GoogleSheetsConfig,
@@ -633,41 +633,120 @@ unsubLicenses();
     }
   };
 
-  // Google Sheets Sync
-  const handleQuickSync = async () => {
+  // Google Sheets Sync (รองรับทั้งแบบกดเองและ Auto-Sync อัตโนมัติในพื้นหลัง)
+  const handleQuickSync = async (
+    silent = false,
+    customData?: {
+      establishments?: Establishment[];
+      inspections?: InspectionRecord[];
+      hazardousBusinesses?: HazardousBusiness[];
+      petitions?: PublicPetition[];
+      loans?: EquipmentLoan[];
+      licenses?: LicenseRecord[];
+    }
+  ) => {
     if (!config.appsScriptUrl) {
-      setSheetsModalOpen(true);
+      if (!silent) setSheetsModalOpen(true);
       return;
     }
     setIsSyncing(true);
     try {
       const res = await syncToGoogleSheets(
         config.appsScriptUrl,
-        establishments,
-        inspections,
-        hazardousBusinesses,
-        petitions,
-        loans,
-        licenses
+        customData?.establishments ?? establishments,
+        customData?.inspections ?? inspections,
+        customData?.hazardousBusinesses ?? hazardousBusinesses,
+        customData?.petitions ?? petitions,
+        customData?.loans ?? loans,
+        customData?.licenses ?? licenses
       );
       if (res.success) {
-        setConfig((prev) => ({
-          ...prev,
-          lastSyncTime: new Date().toISOString(),
-          syncStatus: 'success',
-          syncMessage: 'ซิงค์ข้อมูลสำเร็จ',
-        }));
-        showToast('success', 'ส่งข้อมูลขึ้น Google Sheets สำเร็จเรียบร้อย');
+        const now = new Date().toISOString();
+        setConfig((prev) => {
+          const updated = {
+            ...prev,
+            lastSyncTime: now,
+            syncStatus: 'success' as const,
+            syncMessage: 'ซิงค์ข้อมูลสำเร็จ',
+          };
+          saveStoredConfig(updated);
+          return updated;
+        });
+        if (!silent) {
+          showToast('success', 'ส่งข้อมูลขึ้น Google Sheets สำเร็จเรียบร้อย');
+        }
       } else {
-        showToast('error', res.message);
+        if (!silent) {
+          showToast('error', res.message);
+        }
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      showToast('error', 'ไม่สามารถเชื่อมต่อได้: ' + msg);
+      if (!silent) {
+        showToast('error', 'ไม่สามารถเชื่อมต่อได้: ' + msg);
+      }
     } finally {
       setIsSyncing(false);
     }
   };
+
+  // Auto-Sync Engine: ซิงค์อัตโนมัติเมื่อมีการเปลี่ยนแปลง แก้ไข ปรับปรุงข้อมูล
+  const isInitialMount = useRef(true);
+  const autoSyncDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // 1. Debounced Auto-Sync เมื่อข้อมูลหลักมีการเปลี่ยนแปลง (เพิ่ม/แก้/ลบ)
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    if (config.autoSync === false || !config.appsScriptUrl) return;
+
+    if (autoSyncDebounceTimer.current) {
+      clearTimeout(autoSyncDebounceTimer.current);
+    }
+
+    // หน่วงเวลา 2.5 วินาทีหลังจากพิมพ์/แก้ไขเสร็จ เพื่อยิงซิงค์ขึ้นชีตในพื้นหลัง
+    autoSyncDebounceTimer.current = setTimeout(() => {
+      handleQuickSync(true);
+    }, 2500);
+
+    return () => {
+      if (autoSyncDebounceTimer.current) {
+        clearTimeout(autoSyncDebounceTimer.current);
+      }
+    };
+  }, [
+    config.autoSync,
+    config.appsScriptUrl,
+    establishments,
+    inspections,
+    hazardousBusinesses,
+    petitions,
+    loans,
+    licenses,
+  ]);
+
+  // 2. Periodic Auto-Sync ทุกๆ 5 นาทีเพื่อความสม่ำเสมอ
+  useEffect(() => {
+    if (config.autoSync === false || !config.appsScriptUrl) return;
+
+    const interval = setInterval(() => {
+      handleQuickSync(true);
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [
+    config.autoSync,
+    config.appsScriptUrl,
+    establishments,
+    inspections,
+    hazardousBusinesses,
+    petitions,
+    loans,
+    licenses,
+  ]);
 
   const handleSyncPull = async () => {
     if (!config.appsScriptUrl) return;
@@ -1236,7 +1315,7 @@ unsubLicenses();
                 currentUser={currentUser}
                 onUserChange={(u) => setCurrentUserState(u)}
                 config={config}
-                onSaveConfig={(cfg) => setConfig(cfg)}
+                onSaveConfig={(cfg) => { setConfig(cfg); saveStoredConfig(cfg); }}
                 onSyncPush={handleQuickSync}
                 onSyncPull={handleSyncPull}
                 isSyncing={isSyncing}
@@ -1429,7 +1508,7 @@ unsubLicenses();
         isOpen={sheetsModalOpen}
         onClose={() => setSheetsModalOpen(false)}
         config={config}
-        onSaveConfig={setConfig}
+        onSaveConfig={(cfg) => { setConfig(cfg); saveStoredConfig(cfg); }}
         onSyncPush={handleQuickSync}
         onSyncPull={handleSyncPull}
         isSyncing={isSyncing}
