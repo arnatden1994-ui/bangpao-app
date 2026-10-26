@@ -192,27 +192,25 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
         </div>
       </header>
 
-      {/* Main Container: Welcome Banner & 2 Prominent Cards */}
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10 my-auto flex-1 flex flex-col justify-center">
+      {/* Main Container: Welcome Banner & Officer Login Card */}
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 my-auto flex-1 flex flex-col justify-center items-center font-sarabun">
         {/* Welcome Banner */}
-        <div className="text-center max-w-4xl mx-auto mb-8 sm:mb-10">
+        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-xs sm:text-sm font-bold mb-3 shadow-inner">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>ระบบยืนยันตัวตนและจัดการสิทธิ์ตามตำแหน่ง (Official Access Gateway)</span>
+            <span>ระบบยืนยันตัวตนเจ้าหน้าที่ (Official Staff Gateway)</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-snug drop-shadow-sm">
-            ยินดีต้อนรับสู่ระบบสารสนเทศและการบริการประชาชน
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-snug drop-shadow-sm font-sarabun">
+            ระบบสารสนเทศ กองสาธารณสุขและสิ่งแวดล้อม
           </h2>
-          <p className="text-sm sm:text-base lg:text-lg text-emerald-100/90 mt-2 font-medium max-w-2xl mx-auto leading-relaxed">
-            เจ้าหน้าที่โปรดยืนยันตัวตนเพื่อเข้าสู่ระบบงานตามบทบาทหน้าที่ 
-            สำหรับประชาชนสามารถเข้าสู่หน้าแบบฟอร์มเพื่อส่งคำร้องและปักหมุดที่อยู่ได้ทันที
+          <p className="text-base sm:text-lg text-emerald-100/90 mt-2 font-medium max-w-xl mx-auto leading-relaxed font-sarabun">
+            เทศบาลตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง
           </p>
         </div>
 
-        {/* 2 Big Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch max-w-6xl mx-auto w-full">
-          {/* Card 1: สำหรับเจ้าหน้าที่เทศบาล (Officer Authentication - 6 cols) */}
-          <div className="lg:col-span-6 bg-white text-slate-900 rounded-3xl p-7 sm:p-9 shadow-2xl border-2 border-emerald-200/80 flex flex-col justify-between relative overflow-hidden">
+        {/* Centered Officer Login Card */}
+        <div className="max-w-md sm:max-w-lg w-full mx-auto">
+          <div className="bg-white text-slate-900 rounded-3xl p-7 sm:p-9 shadow-2xl border-2 border-emerald-200/80 flex flex-col justify-between relative overflow-hidden font-sarabun">
             <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl from-emerald-100/60 to-transparent rounded-bl-full pointer-events-none" />
 
             <div>
@@ -320,93 +318,6 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
                 <span>ลงทะเบียนขอสิทธิ์ใช้งานสำหรับเจ้าหน้าที่คนใหม่</span>
               </button>
             </div>
-          </div>
-
-          {/* Card 2: สำหรับประชาชนทั่วไป (Citizen Portal with Address Pinning - 6 cols) */}
-          <div className="lg:col-span-6 bg-gradient-to-br from-[#074737] via-[#0a5240] to-[#043327] rounded-3xl p-7 sm:p-9 shadow-2xl border-2 border-emerald-400/40 flex flex-col justify-between text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-400/10 rounded-bl-full pointer-events-none blur-xl" />
-
-            <div>
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-400/20 text-emerald-200 text-xs sm:text-sm font-bold mb-4 border border-emerald-300/30">
-                <Building2 className="w-4 h-4" />
-                <span>ศูนย์บริการประชาชนออนไลน์ (Citizen e-Service)</span>
-              </div>
-
-              <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight mb-2">
-                สำหรับประชาชน ยื่นคำร้อง & ปักหมุดที่อยู่
-              </h3>
-              <p className="text-sm sm:text-base text-emerald-100/90 leading-relaxed mb-6 font-medium">
-                ประชาชนทั่วไปไม่ต้องใช้รหัสผ่านเจ้าหน้าที่ สามารถเข้าสู่แบบฟอร์มเพื่อส่งคำร้องและระบุตำแหน่งพิกัดที่อยู่ได้ทันที
-              </p>
-
-              {/* Service Highlights */}
-              <div className="space-y-3.5 mb-6">
-                <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-colors">
-                  <div className="w-10 h-10 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-white text-sm sm:text-base">
-                      ยื่นคำร้องทั่วไป & ร้องเรียนเหตุรำคาญ
-                    </div>
-                    <div className="text-xs sm:text-sm text-emerald-200/80">
-                      กลิ่นเหม็น, เสียงดัง, ขยะล้น, น้ำเสีย พร้อมระบบปักหมุดจุดเกิดเหตุ
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-colors">
-                  <div className="w-10 h-10 rounded-xl bg-blue-400/20 text-blue-300 flex items-center justify-center shrink-0">
-                    <Truck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-white text-sm sm:text-base">
-                      ขอบริการสูบสิ่งปฏิกูล (ดูดส้วม)
-                    </div>
-                    <div className="text-xs sm:text-sm text-emerald-200/80">
-                      นัดหมายวันเข้าสูบสิ่งปฏิกูล และปักหมุดตำแหน่งบ้านเลขที่อย่างแม่นยำ
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-colors">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-400/20 text-emerald-300 flex items-center justify-center shrink-0">
-                    <MapPin className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-white text-sm sm:text-base">
-                      ปักหมุดแผนที่พิกัดบ้าน (GPS Location)
-                    </div>
-                    <div className="text-xs sm:text-sm text-emerald-200/80">
-                      เลือกตำแหน่งบนแผนที่ หรือใช้ GPS พิกัดปัจจุบันเพื่อให้ทีมงานไปถึงจุดหมายได้ถูกต้อง
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-colors">
-                  <div className="w-10 h-10 rounded-xl bg-teal-400/20 text-teal-300 flex items-center justify-center shrink-0">
-                    <Search className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-white text-sm sm:text-base">
-                      ติดตามสถานะคำร้องแบบเรียลไทม์
-                    </div>
-                    <div className="text-xs sm:text-sm text-emerald-200/80">
-                      ตรวจสอบความคืบหน้าการดำเนินงานของเทศบาลได้ทันที
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={onEnterAsCitizen}
-              className="w-full py-4 px-6 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-base sm:text-lg shadow-2xl shadow-emerald-400/30 transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:scale-[1.01] active:scale-[0.99] mt-2"
-            >
-              <span>เข้าสู่หน้าแบบฟอร์มบริการประชาชน & ปักหมุดที่อยู่</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
           </div>
         </div>
       </main>
