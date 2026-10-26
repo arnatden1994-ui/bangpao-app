@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,6 +26,8 @@ import {
   setCurrentUser,
   logoutUser,
   getRolePermissions,
+  getActiveSession,
+  setActiveSession,
 } from './services/authService.ts';
 import {
   getStoredConfig,
@@ -67,6 +69,8 @@ import {
 } from './data/mockData.ts';
 
 // 100% Original Google Apps Script Live View
+import { LoginGateway } from './components/LoginGateway.tsx';
+import { CitizenPortalView } from './components/CitizenPortalView.tsx';
 import { OriginalGasAppView } from './components/OriginalGasAppView.tsx';
 
 // Main Navigation & Command Dashboard
@@ -127,7 +131,11 @@ import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 export default function App() {
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   // Current logged in officer (Default: พันจ่าเอกอานัส เด่นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
-  const [currentUser, setCurrentUserState] = useState<User>(() => getCurrentUser());
+  const [currentUser, setCurrentUserState] = useState<User | null>(() => getActiveSession());
+  const [isCitizenMode, setIsCitizenMode] = useState<boolean>(() => {
+    const s = getActiveSession();
+    return s?.role === 'citizen';
+  });
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   // Licenses matching Image 6 (36 items)
@@ -174,6 +182,10 @@ export default function App() {
   const [settingsSubTab, setSettingsSubTab] = useState<'signers' | 'users' | 'approvers' | 'sheets'>('signers');
 
   const handleSidebarNavigate = (tab: MainNavTab, sub?: string) => {
+    if (tab === 'settings' && currentUser?.role !== 'admin') {
+      showToast('error', 'สิทธิ์ไม่เพียงพอ: เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถเข้าถึงระบบตั้งค่าได้');
+      return;
+    }
     setCurrentTab(tab);
     if (sub) {
       if (tab === 'hazardous') {
@@ -282,7 +294,7 @@ export default function App() {
     }, 4500);
   };
 
-  const perms = getRolePermissions(currentUser.role);
+  const perms = getRolePermissions(currentUser?.role || 'citizen');
 
   // Sync to LocalStorage
   useEffect(() => {
@@ -373,7 +385,7 @@ export default function App() {
     });
 
     return () => {
-      unsubLicenses();
+unsubLicenses();
       unsubEstablishments();
       unsubHazardous();
       unsubInspections();
@@ -388,25 +400,43 @@ export default function App() {
   // Auth Handlers
   const handleUserChange = (u: User) => {
     setCurrentUserState(u);
-    setCurrentUser(u);
+    setActiveSession(u);
+    setIsCitizenMode(u.role === 'citizen');
+  };
+
+  const handleLoginSuccess = (u: User) => {
+    setCurrentUserState(u);
+    setActiveSession(u);
+    setIsCitizenMode(u.role === 'citizen');
+    showToast('success', `ยินดีต้อนรับ ${u.fullName} (${u.roleTitle || u.role})`);
+  };
+
+  const handleEnterAsCitizen = () => {
+    const citizenUser: User = {
+      id: 'USR-005',
+      username: 'citizen',
+      fullName: 'ประชาชนทั่วไป / ผู้รับบริการ',
+      email: 'citizen@bangpao.go.th',
+      role: 'citizen',
+      roleTitle: 'ประชาชนตำบลบางเป้า (Citizen)',
+      department: 'ประชาชนตำบลบางเป้า',
+      phone: '',
+      createdAt: new Date().toISOString(),
+      status: 'active',
+    };
+    setCurrentUserState(citizenUser);
+    setActiveSession(citizenUser);
+    setIsCitizenMode(true);
+    showToast('info', 'เข้าสู่ศูนย์บริการประชาชนออนไลน์ เทศบาลตำบลบางเป้า');
   };
 
   const handleLogout = () => {
     logoutUser();
-    const guestUser: User = {
-      id: 'GUEST-001',
-      username: 'guest',
-      fullName: 'ผู้ใช้ทั่วไป (Citizen)',
-      email: 'guest@public.gov.th',
-      role: 'citizen',
-      roleTitle: 'ประชาชนทั่วไป',
-      department: 'ผู้รับบริการ',
-      phone: '',
-      createdAt: new Date().toISOString(),
-    };
-    handleUserChange(guestUser);
-    showToast('info', 'ออกจากระบบแล้ว สลับเป็นสิทธิ์ผู้ใช้งานทั่วไป');
+    setCurrentUserState(null);
+    setIsCitizenMode(false);
+    showToast('info', 'ออกจากระบบเรียบร้อยแล้ว');
   };
+
 
   // Official Form Submit Handler (Section 1 + 2 + 3)
   const handleSaveOfficialInspection = async (
@@ -680,6 +710,88 @@ export default function App() {
     activeLoans: loans.filter((l) => l.status === 'borrowed').length,
     ltcPatients: ltcPatients.length,
   };
+
+  // 1. If not authenticated, require identity verification via LoginGateway
+  if (!currentUser) {
+    return (
+      <div className="relative min-h-screen">
+        {toast && (
+          <div
+            className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl border text-sm animate-in slide-in-from-bottom-5 duration-200 ${
+              toast.type === 'success'
+                ? 'bg-emerald-900 border-emerald-500 text-emerald-100'
+                : toast.type === 'error'
+                ? 'bg-rose-900 border-rose-500 text-rose-100'
+                : 'bg-teal-900 border-teal-500 text-teal-100'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : toast.type === 'error' ? (
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-teal-400 shrink-0" />
+            )}
+            <span className="font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <LoginGateway
+          onLoginSuccess={handleLoginSuccess}
+          onEnterAsCitizen={handleEnterAsCitizen}
+          onShowToast={showToast}
+        />
+      </div>
+    );
+  }
+
+  // 2. If citizen, show dedicated Citizen Portal (forms & tracking only, no internal administrative access)
+  if (isCitizenMode || currentUser.role === 'citizen') {
+    return (
+      <div className="relative min-h-screen">
+        {toast && (
+          <div
+            className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl border text-sm animate-in slide-in-from-bottom-5 duration-200 ${
+              toast.type === 'success'
+                ? 'bg-emerald-900 border-emerald-500 text-emerald-100'
+                : toast.type === 'error'
+                ? 'bg-rose-900 border-rose-500 text-rose-100'
+                : 'bg-teal-900 border-teal-500 text-teal-100'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : toast.type === 'error' ? (
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-teal-400 shrink-0" />
+            )}
+            <span className="font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <CitizenPortalView
+          petitions={petitions}
+          onAddPetition={(newP) => {
+            setPetitions([newP, ...petitions]);
+            saveToFirestore(COLLECTIONS.PETITIONS, newP).catch(() => {});
+          }}
+          onExitCitizenMode={handleLogout}
+          onShowToast={showToast}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-screen bg-[#f4f7fa] flex overflow-hidden font-sans text-slate-800 antialiased">

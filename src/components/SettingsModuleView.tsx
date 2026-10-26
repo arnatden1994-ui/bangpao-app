@@ -22,10 +22,13 @@ import {
   ChevronRight,
   Database,
   Lock,
+  Unlock,
   Edit2,
   Trash2,
   UserCog,
   Plus,
+  ShieldAlert,
+  Clock,
 } from 'lucide-react';
 import {
   SignerSettings,
@@ -35,7 +38,16 @@ import {
   UserRole,
   GoogleSheetsConfig,
 } from '../types/index.ts';
-import { getAllUsers, registerUser, updateUser, deleteUser, setCurrentUser } from '../services/authService.ts';
+import {
+  getAllUsers,
+  registerUser,
+  updateUser,
+  deleteUser,
+  setCurrentUser,
+  approveUser,
+  toggleUserStatus,
+  changeUserPassword,
+} from '../services/authService.ts';
 import { saveUserToFirestore, deleteUserFromFirestore } from '../services/firebaseService.ts';
 
 interface SettingsModuleViewProps {
@@ -250,6 +262,49 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
     onUserChange(user);
     showToast('success', `สลับเข้าใช้งานในฐานะ: ${user.fullName} (${user.roleTitle || user.role})`);
   };
+
+  const handleApproveUser = (u: User) => {
+    const res = approveUser(u.id);
+    if (res.success && res.user) {
+      setUsersList(getAllUsers());
+      saveUserToFirestore(res.user).catch((err) => console.warn('Firestore sync warning:', err));
+      showToast('success', res.message);
+    } else {
+      showToast('error', res.message);
+    }
+  };
+
+  const handleToggleUserStatus = (u: User) => {
+    const nextStatus = u.status === 'suspended' ? 'active' : 'suspended';
+    const res = toggleUserStatus(u.id, nextStatus);
+    if (res.success && res.user) {
+      setUsersList(getAllUsers());
+      saveUserToFirestore(res.user).catch((err) => console.warn('Firestore sync warning:', err));
+      showToast('info', res.message);
+    } else {
+      showToast('error', res.message);
+    }
+  };
+
+  // Restrict Module 6 to Admin only
+  if (currentUser.role !== 'admin') {
+    return (
+      <div className="bg-white rounded-3xl p-8 sm:p-12 border border-slate-200/80 shadow-xs max-w-2xl mx-auto my-8 text-center space-y-4 font-sarabun animate-in fade-in duration-200">
+        <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200 shadow-xs">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h3 className="text-xl font-extrabold text-slate-800">
+          จำกัดสิทธิ์การเข้าถึง (เฉพาะผู้ดูแลระบบ / Admin เท่านั้น)
+        </h3>
+        <p className="text-sm text-slate-600 leading-relaxed">
+          ระบบตั้งค่าผู้ใช้งานและการจัดการสิทธิ์ อนุญาตให้เฉพาะ <strong>ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม (Admin)</strong> เท่านั้นที่สามารถกำหนด ยืนยันการสร้างบัญชีผู้ใช้ และให้สิทธิ์การเข้าถึงข้อมูลได้
+        </p>
+        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 inline-block font-medium">
+          บัญชีปัจจุบันของคุณ: <span className="font-bold text-slate-900">{currentUser.fullName}</span> (ตำแหน่ง: {currentUser.roleTitle || currentUser.role})
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
@@ -700,6 +755,66 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
               </button>
             </div>
 
+            {/* Pending Approvals Queue */}
+            {usersList.filter((u) => u.status === 'pending').length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                  <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-amber-900">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <span>
+                      บัญชีผู้ใช้งานที่รอการยืนยันและอนุมัติสิทธิ์ (
+                      {usersList.filter((u) => u.status === 'pending').length} บัญชี)
+                    </span>
+                  </div>
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 font-bold">
+                    ต้องยืนยันโดยแอดมิน (ผอ.กอง)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {usersList
+                    .filter((u) => u.status === 'pending')
+                    .map((u) => (
+                      <div
+                        key={u.id}
+                        className="p-3 bg-white rounded-xl border border-amber-200 flex items-center justify-between gap-3 shadow-2xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs text-slate-900 truncate">
+                            {u.fullName}
+                          </div>
+                          <div className="text-[11px] text-amber-800 font-medium">
+                            ขอสิทธิ์: {u.roleTitle || u.role}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            @{u.username} • {u.phone || 'ไม่ระบุเบอร์'}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveUser(u)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1 cursor-pointer shadow-2xs"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>อนุมัติ</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmUser(u)}
+                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 cursor-pointer"
+                            title="ปฏิเสธคำขอและลบ"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
             {/* Quick Switch Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {usersList.map((u) => {
@@ -789,14 +904,18 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                       <th className="py-2.5 px-3">ชื่อ-นามสกุล / บัญชี</th>
                       <th className="py-2.5 px-3">ตำแหน่งที่ปรากฏในระบบ / เอกสาร</th>
                       <th className="py-2.5 px-3 text-center">สิทธิ์การทำงาน</th>
+                      <th className="py-2.5 px-3 text-center">สถานะบัญชี</th>
                       <th className="py-2.5 px-3">กลุ่มงาน / สังกัด</th>
                       <th className="py-2.5 px-3">เบอร์ติดต่อ</th>
-                      <th className="py-2.5 px-3 text-center min-w-[160px]">จัดการ</th>
+                      <th className="py-2.5 px-3 text-center min-w-[190px]">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-[11px]">
                     {usersList.map((u) => {
                       const isActive = currentUser.id === u.id;
+                      const isPending = u.status === 'pending';
+                      const isSuspended = u.status === 'suspended';
+
                       return (
                         <tr key={u.id} className={`hover:bg-slate-50/70 transition-colors ${isActive ? 'bg-emerald-50/40' : ''}`}>
                           <td className="py-2.5 px-3 font-semibold text-slate-800">
@@ -833,6 +952,21 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                               {u.role.toUpperCase()}
                             </span>
                           </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {isPending ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10px] inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> รออนุมัติ
+                              </span>
+                            ) : isSuspended ? (
+                              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10px] inline-flex items-center gap-1">
+                                <Lock className="w-3 h-3" /> ระงับสิทธิ์
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px] inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> เปิดใช้งาน
+                              </span>
+                            )}
+                          </td>
                           <td className="py-2.5 px-3 text-slate-600">
                             {u.department || 'กองสาธารณสุขและสิ่งแวดล้อม'}
                           </td>
@@ -841,18 +975,46 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                           </td>
                           <td className="py-2.5 px-3 text-center">
                             <div className="flex items-center justify-center gap-1.5">
+                              {/* Approve Button (if pending) */}
+                              {isPending && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveUser(u)}
+                                  className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-colors cursor-pointer shadow-2xs"
+                                  title="อนุมัติและเปิดให้เข้าใช้งาน"
+                                >
+                                  ✓ อนุมัติ
+                                </button>
+                              )}
+
+                              {/* Toggle Status (Lock / Unlock) */}
+                              {!isPending && !isActive && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleUserStatus(u)}
+                                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                                    isSuspended
+                                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                                      : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                                  }`}
+                                  title={isSuspended ? 'ปลดระงับการใช้งาน' : 'ระงับการใช้งานชั่วคราว'}
+                                >
+                                  {isSuspended ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                                </button>
+                              )}
+
                               {/* Edit Button */}
                               <button
                                 type="button"
                                 onClick={() => setEditingUser({ ...u })}
                                 className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors cursor-pointer"
-                                title="แก้ไขตำแหน่งและข้อมูล"
+                                title="แก้ไขสิทธิ์และรหัสผ่าน"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
 
-                              {/* Switch User Button */}
-                              {!isActive && (
+                              {/* Switch User Button (Admin only privilege) */}
+                              {!isActive && !isSuspended && !isPending && (
                                 <button
                                   type="button"
                                   onClick={() => handleSwitchUser(u)}
@@ -1438,6 +1600,32 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                   onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
                   className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">รหัสผ่านเข้าสู่ระบบ (PIN / Password)</label>
+                  <input
+                    type="text"
+                    value={editingUser.password || '1234'}
+                    onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                    placeholder="เช่น 1234"
+                    className="w-full text-xs font-mono font-bold px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">สถานะการให้สิทธิ์ (Account Status)</label>
+                  <select
+                    value={editingUser.status || 'active'}
+                    onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as any })}
+                    className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-xl mt-1 font-semibold"
+                  >
+                    <option value="active">✓ เปิดใช้งาน (อนุมัติสิทธิ์แล้ว)</option>
+                    <option value="pending">⏳ รอการอนุมัติ (Pending)</option>
+                    <option value="suspended">🔒 ระงับการใช้งานชั่วคราว</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">

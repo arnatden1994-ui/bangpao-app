@@ -113,6 +113,7 @@ export interface OfficialInspectionFormState {
 export interface User {
   id: string;
   username: string;
+  password?: string;
   fullName: string;
   email: string;
   role: UserRole;
@@ -121,6 +122,7 @@ export interface User {
   phone: string;
   avatar?: string;
   createdAt: string;
+  status?: 'active' | 'pending' | 'suspended';
 }
 
 export interface RolePermissions {

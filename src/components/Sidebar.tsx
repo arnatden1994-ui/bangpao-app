@@ -245,6 +245,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  // Filter modules based on role: only admin sees Module 6 (Settings)
+  const visibleNavModules = navModules.filter((m) => {
+    if (m.id === 'settings') {
+      return currentUser?.role === 'admin';
+    }
+    return true;
+  });
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -298,11 +306,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isOpen && (
             <div className="px-3 py-1 text-xs font-bold text-emerald-800 tracking-wide flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>เมนูหลัก 6 ระบบงานสาธารณสุข</span>
+              <span>เมนูหลัก {visibleNavModules.length - 1} ระบบงานสาธารณสุข</span>
             </div>
           )}
 
-          {navModules.map((mod) => {
+          {visibleNavModules.map((mod) => {
             const Icon = mod.icon;
             const isTabActive = currentTab === mod.id;
             const hasSub = mod.subItems && mod.subItems.length > 0;
@@ -462,9 +470,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {currentUser ? (
             <div className="flex items-center justify-between gap-2">
               <div
-                onClick={onOpenAuthModal}
-                className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer hover:opacity-90 transition-opacity"
-                title="คลิกเพื่อสลับผู้ใช้งาน / แก้ไขโปรไฟล์"
+                onClick={() => {
+                  if (currentUser.role === 'admin') {
+                    onOpenAuthModal();
+                  }
+                }}
+                className={`flex items-center gap-3 min-w-0 flex-1 ${
+                  currentUser.role === 'admin'
+                    ? 'cursor-pointer hover:opacity-90'
+                    : 'cursor-default'
+                }`}
+                title={
+                  currentUser.role === 'admin'
+                    ? 'คลิกเพื่อจัดการผู้ใช้ / สลับสิทธิ์ (เฉพาะแอดมิน)'
+                    : 'ผู้ปฏิบัติงานปัจจุบัน'
+                }
               >
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 border border-emerald-400 flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-xs">
                   {currentUser.fullName ? currentUser.fullName[0] : 'U'}
@@ -485,9 +505,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   onClick={onLogout}
                   title="ออกจากระบบ"
-                  className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0"
+                  className="px-2.5 py-1.5 text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0 border border-slate-200/80 flex items-center gap-1.5 text-xs font-bold"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5 text-rose-500" />
+                  <span>ออก</span>
                 </button>
               )}
             </div>

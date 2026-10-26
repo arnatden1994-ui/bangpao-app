@@ -6,6 +6,7 @@ import {
   Menu,
   ExternalLink,
   Flame,
+  LogOut,
 } from 'lucide-react';
 import { GoogleSheetsConfig, MainNavTab, User } from '../types/index.ts';
 
@@ -36,6 +37,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   config,
   currentUser,
   onOpenAuthModal,
+  onLogout,
   onOpenSheetsModal,
   onOpenFirebaseModal,
   isSyncing,
@@ -175,9 +177,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Officer Profile Badge */}
             <div
-              onClick={onOpenAuthModal}
-              className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-emerald-200/90 bg-emerald-50/70 hover:bg-emerald-100/80 transition-all text-left shadow-2xs cursor-pointer"
-              title="คลิกเพื่อสลับผู้ใช้งาน / ดูโปรไฟล์เจ้าหน้าที่"
+              onClick={() => {
+                if (currentUser?.role === 'admin') {
+                  onOpenAuthModal();
+                }
+              }}
+              className={`flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-emerald-200/90 bg-emerald-50/70 transition-all text-left shadow-2xs ${
+                currentUser?.role === 'admin' ? 'hover:bg-emerald-100/80 cursor-pointer' : 'cursor-default'
+              }`}
+              title={currentUser?.role === 'admin' ? 'คลิกเพื่อจัดการผู้ใช้ / สลับสิทธิ์ (เฉพาะแอดมิน)' : 'ผู้ปฏิบัติงานปัจจุบัน'}
             >
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
                 {officerName.slice(0, 1)}
@@ -192,6 +200,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Logout Button in Navbar */}
+            <button
+              onClick={onLogout}
+              title="ออกจากระบบ"
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-bold rounded-xl text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-2xs shrink-0 active:scale-95"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-600" />
+              <span className="hidden md:inline">ออกจากระบบ</span>
+            </button>
           </div>
         </div>
       </div>

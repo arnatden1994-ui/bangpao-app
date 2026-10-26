@@ -123,44 +123,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Quick Demo Switcher Banner */}
-        <div className="bg-slate-50 border-b border-slate-200 p-4">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>สลับบทบาทเพื่อทดสอบสิทธิ์ในระบบ (Quick Demo Switch):</span>
+        {/* Quick Demo Switcher Banner (Admin Only Privilege) */}
+        {currentUser?.role === 'admin' && (
+          <div className="bg-slate-50 border-b border-slate-200 p-4">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>สลับบทบาทผู้ใช้งาน (สิทธิ์เฉพาะผู้ดูแลระบบ / Admin):</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              {INITIAL_USERS.map((u) => {
+                const isCurrent = currentUser?.id === u.id;
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => handleQuickSwitch(u)}
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'border-emerald-500 bg-emerald-50/80 font-bold text-emerald-900 ring-1 ring-emerald-400'
+                        : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold truncate text-[11px]">{u.username}</span>
+                      {isCurrent && <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />}
+                    </div>
+                    <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                      {u.role === 'admin'
+                        ? '👑 ผอ.กอง (Admin)'
+                        : u.role === 'inspector'
+                        ? '🔍 นายตรวจ (Inspector)'
+                        : u.role === 'staff'
+                        ? '📋 เจ้าหน้าที่ (Staff)'
+                        : '👤 ประชาชน (Citizen)'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            {INITIAL_USERS.map((u) => {
-              const isCurrent = currentUser?.id === u.id;
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => handleQuickSwitch(u)}
-                  className={`p-2 rounded-lg border text-left transition-all ${
-                    isCurrent
-                      ? 'border-emerald-500 bg-emerald-50/80 font-bold text-emerald-900 ring-1 ring-emerald-400'
-                      : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold truncate text-[11px]">{u.username}</span>
-                    {isCurrent && <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />}
-                  </div>
-                  <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                    {u.role === 'admin'
-                      ? '👑 ผอ.กอง (Admin)'
-                      : u.role === 'inspector'
-                      ? '🔍 นายตรวจ (Inspector)'
-                      : u.role === 'staff'
-                      ? '📋 เจ้าหน้าที่ (Staff)'
-                      : '👤 ประชาชน (Citizen)'}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        )}
 
         {/* Tab switch between Login and Register */}
         <div className="flex border-b border-slate-200 text-xs font-semibold">
