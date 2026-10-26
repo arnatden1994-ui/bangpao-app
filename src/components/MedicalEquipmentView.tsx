@@ -262,8 +262,15 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   // Delivery Appointment Modal
   const [appointmentLoan, setAppointmentLoan] = useState<EquipmentLoan | null>(null);
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split('T')[0]);
-  const [deliveryStaff, setDeliveryStaff] = useState('พันจ่าเอกอานัส เด่นหมาด');
-  const [deliveryNotes, setDeliveryNotes] = useState('จัดเตรียมอุปกรณ์และยานพาหนะนำส่งถึงบ้านผู้ป่วย');
+  const [deliveryStaff, setDeliveryStaff] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+
+  const handleOpenAppointmentModal = (loan: EquipmentLoan) => {
+    setAppointmentLoan(loan);
+    setDeliveryDate(loan.deliveryDate || new Date().toISOString().split('T')[0]);
+    setDeliveryStaff(loan.deliveryStaff || '');
+    setDeliveryNotes('');
+  };
 
   // Return Inspection Modal
   const [returnModalLoan, setReturnModalLoan] = useState<EquipmentLoan | null>(null);
@@ -1355,10 +1362,12 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
   const handleConfirmDelivery = (loan: EquipmentLoan) => {
     if (onUpdateLoanStatus) {
+      const staffInfo = deliveryStaff.trim() ? ` โดย ${deliveryStaff.trim()}` : '';
+      const notesInfo = deliveryNotes.trim() ? ` [หมายเหตุ: ${deliveryNotes.trim()}]` : '';
       onUpdateLoanStatus(loan.id, 'borrowed', {
         deliveryDate: deliveryDate,
-        deliveryStaff: deliveryStaff,
-        notes: `${loan.notes || ''} [ส่งมอบแล้ว: ${deliveryDate} โดย ${deliveryStaff}]`,
+        deliveryStaff: deliveryStaff.trim(),
+        notes: `${loan.notes || ''} [ส่งมอบแล้ว: ${deliveryDate}${staffInfo}]${notesInfo}`.trim(),
       });
     }
     setAppointmentLoan(null);
@@ -1977,7 +1986,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                       {activeLoanPin.status !== 'borrowed' && activeLoanPin.status !== 'returned' && (
                         <button
                           type="button"
-                          onClick={() => setAppointmentLoan(activeLoanPin)}
+                          onClick={() => handleOpenAppointmentModal(activeLoanPin)}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-1 cursor-pointer shadow-2xs text-xs"
                         >
                           <Truck className="w-3.5 h-3.5" />
@@ -2213,7 +2222,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                           {loan.status !== 'borrowed' && (
                             <button
                               type="button"
-                              onClick={() => setAppointmentLoan(loan)}
+                              onClick={() => handleOpenAppointmentModal(loan)}
                               className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[11px] cursor-pointer"
                             >
                               ส่งมอบ
@@ -2469,7 +2478,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                             ) : loan.status !== 'returned' ? (
                               <button
                                 type="button"
-                                onClick={() => setAppointmentLoan(loan)}
+                                onClick={() => handleOpenAppointmentModal(loan)}
                                 className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[11px] cursor-pointer shadow-2xs"
                               >
                                 ส่งมอบ
@@ -3693,7 +3702,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                   {(loan.status === 'approved' || loan.status === 'pending') && (
                                     <button
                                       type="button"
-                                      onClick={() => setAppointmentLoan(loan)}
+                                      onClick={() => handleOpenAppointmentModal(loan)}
                                       className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                                       title="บันทึกนัดหมายส่งมอบอุปกรณ์"
                                     >
@@ -4147,7 +4156,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   type="text"
                   value={deliveryStaff}
                   onChange={(e) => setDeliveryStaff(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-lg bg-white"
+                  placeholder="ระบุชื่อเจ้าหน้าที่ผู้นำส่ง..."
+                  className="w-full p-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
               <div>
@@ -4156,7 +4166,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   type="text"
                   value={deliveryNotes}
                   onChange={(e) => setDeliveryNotes(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-lg bg-white"
+                  placeholder="ระบุบันทึกเพิ่มเติม (ถ้ามี)..."
+                  className="w-full p-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
             </div>
