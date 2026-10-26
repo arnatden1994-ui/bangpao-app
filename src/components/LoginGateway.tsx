@@ -18,6 +18,9 @@ import {
   Building2,
   MapPin,
   ArrowRight,
+  Key,
+  Phone,
+  Briefcase,
 } from 'lucide-react';
 import { User as UserType, UserRole } from '../types/index.ts';
 import { loginUser, registerUser } from '../services/authService.ts';
@@ -69,14 +72,17 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
     return `${hours}:${minutes}:${seconds} น.`;
   };
 
-  // Register Modal state
+  // Register Modal state (ตั้งชื่อผู้ใช้และรหัสผ่านเองได้อิสระ)
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [regFullName, setRegFullName] = useState('');
   const [regUsername, setRegUsername] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regDepartment, setRegDepartment] = useState('กองสาธารณสุขและสิ่งแวดล้อม');
+  const [regShowPassword, setRegShowPassword] = useState(false);
+  const [regRoleTitle, setRegRoleTitle] = useState('เจ้าหน้าที่ผู้ปฏิบัติงาน');
   const [regRole, setRegRole] = useState<UserRole>('staff');
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regDepartment, setRegDepartment] = useState('กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,8 +111,16 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regFullName.trim() || !regUsername.trim() || !regPassword.trim()) {
-      onShowToast('error', 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน');
+    if (!regFullName.trim()) {
+      onShowToast('error', 'กรุณาระบุชื่อ-นามสกุล จริง');
+      return;
+    }
+    if (!regUsername.trim()) {
+      onShowToast('error', 'กรุณากำหนดชื่อผู้ใช้งาน (Username) ที่ต้องการ');
+      return;
+    }
+    if (!regPassword.trim()) {
+      onShowToast('error', 'กรุณากำหนดรหัสผ่าน (Password)');
       return;
     }
 
@@ -115,19 +129,22 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
       username: regUsername.trim(),
       password: regPassword.trim(),
       email: regEmail.trim() || `${regUsername.trim()}@bangpao.go.th`,
-      phone: '',
+      phone: regPhone.trim(),
       department: regDepartment.trim(),
       role: regRole,
-      roleTitle: '',
+      roleTitle: regRoleTitle.trim() || (regRole === 'inspector' ? 'นายตรวจสุขลักษณะ' : regRole === 'executive' ? 'ผู้บริหารเทศบาล' : 'เจ้าหน้าที่ผู้ปฏิบัติงาน'),
       status: 'pending', // ต้องรอ Admin ยืนยันสิทธิ์
     });
 
-    if (res.success) {
+    if (res.success && res.user) {
       onShowToast('success', res.message);
+      // นำชื่อผู้ใช้ที่เพิ่งตั้งไปใส่ในช่องล็อกอินให้อัตโนมัติ เพื่อความสะดวก
+      setUsername(regUsername.trim());
       setShowRegisterModal(false);
       setRegFullName('');
       setRegUsername('');
       setRegPassword('');
+      setRegPhone('');
       setRegEmail('');
     } else {
       onShowToast('error', res.message);
@@ -401,118 +418,225 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
         </div>
       </footer>
 
-      {/* Modal: ลงทะเบียนขอเปิดบัญชีเจ้าหน้าที่ใหม่ (ต้องรอ Admin อนุมัติ) */}
+      {/* Modal: ลงทะเบียนขอเปิดบัญชีเจ้าหน้าที่ใหม่ (ตั้งชื่อผู้ใช้และรหัสผ่านเองได้อิสระ) */}
       {showRegisterModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border-2 border-emerald-200 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3.5 border-b border-slate-200 mb-4">
-              <div className="flex items-center gap-2.5">
-                <UserPlus className="w-6 h-6 text-emerald-800" />
-                <h3 className="font-black text-lg text-slate-900">
-                  ลงทะเบียนขอสิทธิ์เข้าใช้งานเจ้าหน้าที่
-                </h3>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white text-slate-900 rounded-3xl max-w-2xl w-full shadow-2xl border-2 border-emerald-400/50 overflow-hidden my-auto">
+            {/* Header: Dignified Municipal Branding */}
+            <div className="bg-gradient-to-r from-[#064e3b] via-[#043d2e] to-[#022c22] px-6 py-5 text-white flex items-start justify-between border-b border-emerald-600/30">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shrink-0 shadow-inner">
+                  <UserPlus className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg sm:text-xl text-white tracking-wide">
+                    ลงทะเบียนขอสิทธิ์เข้าใช้งานเจ้าหน้าที่
+                  </h3>
+                  <p className="text-xs sm:text-sm text-emerald-200/90 font-medium mt-0.5">
+                    กำหนดชื่อผู้ใช้งาน (Username) และรหัสผ่าน (Password) ได้ด้วยตนเอง
+                  </p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowRegisterModal(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 font-bold text-lg cursor-pointer"
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-100 flex items-center justify-center text-lg font-bold transition-colors cursor-pointer shrink-0"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-300 text-amber-950 text-xs sm:text-sm mb-4 flex items-start gap-2.5">
-              <Clock className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-              <span className="font-medium leading-relaxed">
-                <strong>เงื่อนไขความปลอดภัย:</strong> บัญชีที่ลงทะเบียนใหม่จะอยู่ในสถานะ <strong>"รอการอนุมัติ"</strong> 
-                โดยผู้อำนวยการกองสาธารณสุข (Admin) จะเป็นผู้ตรวจสอบและยืนยันสิทธิ์ก่อนจึงจะสามารถล็อกอินได้
-              </span>
-            </div>
-
-            <form onSubmit={handleRegisterSubmit} className="space-y-3.5 text-xs sm:text-sm">
-              <div>
-                <label className="font-bold text-slate-800 block mb-1">ชื่อ-นามสกุล จริง *</label>
-                <input
-                  type="text"
-                  value={regFullName}
-                  onChange={(e) => setRegFullName(e.target.value)}
-                  placeholder="กรอกชื่อ-นามสกุล พร้อมคำนำหน้า"
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm font-semibold"
-                  required
-                />
+            {/* Form Content */}
+            <form onSubmit={handleRegisterSubmit} className="p-6 sm:p-7 space-y-5 max-h-[82vh] overflow-y-auto">
+              {/* Notice Card: Security Guidelines */}
+              <div className="p-4 bg-amber-50/90 rounded-2xl border-2 border-amber-300/80 text-amber-950 text-xs sm:text-sm flex items-start gap-3 shadow-xs">
+                <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-black text-amber-900 text-sm">
+                    เงื่อนไขความปลอดภัยและระเบียบสิทธิ์ราชการ
+                  </div>
+                  <p className="font-medium text-amber-900/90 leading-relaxed text-xs sm:text-sm">
+                    เมื่อท่านกรอกข้อมูลลงทะเบียนเรียบร้อยแล้ว บัญชีจะถูกส่งไปยังระบบของ <strong>ผู้อำนวยการกองสาธารณสุข (Admin)</strong> เพื่อตรวจสอบและกดยืนยันอนุมัติสิทธิ์เข้าใช้งาน จึงจะสามารถล็อกอินได้
+                  </p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Highlighted Credentials Card (ตั้ง Username & Password เอง) */}
+              <div className="p-5 bg-gradient-to-br from-emerald-50/90 via-teal-50/60 to-emerald-50/90 rounded-2xl border-2 border-emerald-400/80 space-y-4 shadow-sm">
+                <div className="flex items-center gap-2 pb-2 border-b border-emerald-200">
+                  <Key className="w-5 h-5 text-emerald-800" />
+                  <span className="font-black text-sm sm:text-base text-emerald-950">
+                    ข้อมูลสำหรับเข้าสู่ระบบ (กำหนดเองได้อิสระ)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Custom Username */}
+                  <div>
+                    <label className="font-black text-slate-800 text-xs sm:text-sm block mb-1.5 flex items-center gap-1.5">
+                      <User className="w-4 h-4 text-emerald-700" />
+                      <span>ชื่อผู้ใช้งาน (Username) ที่ต้องการตั้ง *</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={regUsername}
+                      onChange={(e) => setRegUsername(e.target.value)}
+                      placeholder="เช่น anas, somchai, kor.ph1"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-emerald-300 bg-white text-slate-900 font-bold text-sm sm:text-base focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs font-mono"
+                      required
+                    />
+                    <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium">
+                      ภาษาอังกฤษหรือตัวเลข สำหรับพิมพ์ล็อกอิน
+                    </p>
+                  </div>
+
+                  {/* Custom Password */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="font-black text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                        <Lock className="w-4 h-4 text-emerald-700" />
+                        <span>รหัสผ่าน (Password) ที่ต้องการตั้ง *</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setRegShowPassword(!regShowPassword)}
+                        className="text-[11px] font-bold text-emerald-800 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+                      >
+                        {regShowPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        <span>{regShowPassword ? 'ซ่อนรหัส' : 'แสดงรหัส'}</span>
+                      </button>
+                    </div>
+                    <input
+                      type={regShowPassword ? 'text' : 'password'}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="กำหนดรหัสผ่าน เช่น 1234 หรือรหัสส่วนตัว"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-emerald-300 bg-white text-slate-900 font-bold text-sm sm:text-base focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs font-mono"
+                      required
+                    />
+                    <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium">
+                      รหัสผ่านสำหรับเข้าสู่ระบบของท่าน
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Personal & Official Details */}
+              <div className="space-y-4 pt-1">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                  <Briefcase className="w-4 h-4 text-slate-700" />
+                  <span className="font-black text-sm sm:text-base text-slate-900">
+                    ข้อมูลบุคลากรและตำแหน่งงาน
+                  </span>
+                </div>
+
                 <div>
-                  <label className="font-bold text-slate-800 block mb-1">ชื่อผู้ใช้งาน (Username) *</label>
+                  <label className="font-bold text-slate-800 text-xs sm:text-sm block mb-1.5">
+                    ชื่อ-นามสกุล จริง (พร้อมคำนำหน้า) *
+                  </label>
                   <input
                     type="text"
-                    value={regUsername}
-                    onChange={(e) => setRegUsername(e.target.value)}
-                    placeholder="เช่น somchai.staff"
-                    className="w-full p-3 rounded-xl border border-slate-300 text-sm font-semibold"
+                    value={regFullName}
+                    onChange={(e) => setRegFullName(e.target.value)}
+                    placeholder="เช่น พันจ่าเอกอานัส เด่นหมาด หรือ นางสาวปฐมาภรณ์ จันทร์แจ่ม"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 bg-slate-50/50 text-slate-900 font-bold text-sm sm:text-base focus:bg-white focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs"
                     required
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bold text-slate-800 text-xs sm:text-sm block mb-1.5">
+                      ตำแหน่งงาน / หน้าที่รับผิดชอบ
+                    </label>
+                    <input
+                      type="text"
+                      value={regRoleTitle}
+                      onChange={(e) => setRegRoleTitle(e.target.value)}
+                      placeholder="เช่น เจ้าพนักงานสาธารณสุข, พนักงานขับรถ, ธุรการ"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 bg-slate-50/50 text-slate-900 font-semibold text-sm sm:text-base focus:bg-white focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-800 text-xs sm:text-sm block mb-1.5">
+                      บทบาทสิทธิ์ที่ขอเปิด (Role) *
+                    </label>
+                    <select
+                      value={regRole}
+                      onChange={(e) => {
+                        const r = e.target.value as UserRole;
+                        setRegRole(r);
+                        if (r === 'inspector') setRegRoleTitle('เจ้าพนักงานสาธารณสุข / นายตรวจ');
+                        else if (r === 'executive') setRegRoleTitle('ผู้บริหารเทศบาล');
+                        else if (r === 'staff') setRegRoleTitle('เจ้าหน้าที่ผู้ปฏิบัติงาน (Staff)');
+                      }}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-900 font-bold text-sm sm:text-base focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs cursor-pointer"
+                    >
+                      <option value="staff">เจ้าหน้าที่ผู้ปฏิบัติงาน (Staff)</option>
+                      <option value="inspector">นายตรวจสุขลักษณะสถานประกอบการ (Inspector)</option>
+                      <option value="executive">ผู้บริหารเทศบาลตำบลบางเป้า (Executive)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="font-bold text-slate-800 text-xs sm:text-sm block mb-1.5 flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5 text-slate-600" />
+                      <span>เบอร์โทรศัพท์ติดต่อ</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      placeholder="เช่น 081-234-5678 (สำหรับยืนยันสิทธิ์)"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 bg-slate-50/50 text-slate-900 font-semibold text-sm sm:text-base focus:bg-white focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-800 text-xs sm:text-sm block mb-1.5">
+                      อีเมลติดต่อราชการ (ถ้ามี)
+                    </label>
+                    <input
+                      type="email"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="เช่น officer@bangpao.go.th"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 bg-slate-50/50 text-slate-900 font-semibold text-sm sm:text-base focus:bg-white focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="font-bold text-slate-800 block mb-1">รหัสผ่านที่ต้องการ *</label>
+                  <label className="font-bold text-slate-800 text-xs sm:text-sm block mb-1.5">
+                    กลุ่มงาน / สังกัด
+                  </label>
                   <input
-                    type="password"
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="กำหนดรหัสผ่าน"
-                    className="w-full p-3 rounded-xl border border-slate-300 text-sm font-semibold"
-                    required
+                    type="text"
+                    value={regDepartment}
+                    onChange={(e) => setRegDepartment(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 bg-slate-50/50 text-slate-900 font-semibold text-sm sm:text-base focus:bg-white focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 shadow-xs"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="font-bold text-slate-800 block mb-1">อีเมลติดต่อ</label>
-                <input
-                  type="email"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="name@bangpao.go.th"
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-800 block mb-1">กลุ่มงาน / สังกัด</label>
-                <input
-                  type="text"
-                  value={regDepartment}
-                  onChange={(e) => setRegDepartment(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-800 block mb-1">บทบาทหน้าที่ที่ขอเปิดสิทธิ์</label>
-                <select
-                  value={regRole}
-                  onChange={(e) => setRegRole(e.target.value as UserRole)}
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm font-semibold bg-white"
-                >
-                  <option value="staff">เจ้าหน้าที่ผู้ปฏิบัติงาน (Staff)</option>
-                  <option value="inspector">นายตรวจสุขลักษณะ (Inspector)</option>
-                  <option value="executive">ผู้บริหารเทศบาล (Executive)</option>
-                </select>
-              </div>
-
-              <div className="pt-3 flex gap-2.5 justify-end">
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowRegisterModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 font-bold text-slate-700 cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3 rounded-2xl border-2 border-slate-300 hover:bg-slate-100 font-bold text-slate-700 text-sm sm:text-base cursor-pointer transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-black cursor-pointer shadow-md"
+                  className="w-full sm:w-auto px-7 py-3 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-black text-sm sm:text-base cursor-pointer shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
                 >
-                  ส่งคำขอเปิดบัญชี
+                  <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+                  <span>ส่งคำขอเปิดบัญชี (รอ Admin ยืนยันสิทธิ์)</span>
                 </button>
               </div>
             </form>

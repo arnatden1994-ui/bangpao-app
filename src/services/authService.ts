@@ -322,11 +322,11 @@ export function registerUser(
   const exists = users.find(
     (u) =>
       u.username.toLowerCase() === newUser.username.toLowerCase() ||
-      u.email.toLowerCase() === newUser.email.toLowerCase()
+      (newUser.email && u.email && u.email.toLowerCase() === newUser.email.toLowerCase())
   );
 
   if (exists) {
-    return { success: false, message: 'ชื่อผู้ใช้ (Username) หรืออีเมลนี้มีอยู่ในระบบแล้ว' };
+    return { success: false, message: `ชื่อผู้ใช้ "${newUser.username}" หรืออีเมลนี้มีอยู่ในระบบแล้ว กรุณาเลือกชื่ออื่น` };
   }
 
   const roleTitleMap: Record<UserRole, string> = {
@@ -352,8 +352,8 @@ export function registerUser(
   localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updatedUsers));
 
   const message = isCreatedByAdmin
-    ? `เพิ่มบัญชีเจ้าหน้าที่ "${createdUser.fullName}" เรียบร้อยแล้ว`
-    : `ส่งคำขอเปิดบัญชีสำเร็จ! บัญชีของคุณอยู่ระหว่างรอ ผอ.กองสาธารณสุข ตรวจสอบและยืนยันสิทธิ์`;
+    ? `เพิ่มบัญชีเจ้าหน้าที่ "${createdUser.fullName}" เรียบร้อยแล้ว (Username: ${createdUser.username})`
+    : `ส่งคำขอเปิดบัญชีสำเร็จ! (Username: ${createdUser.username}) กรุณาแจ้ง ผอ.กองสาธารณสุข เพื่อยืนยันสิทธิ์เปิดใช้งาน`;
 
   return { success: true, message, user: createdUser };
 }
@@ -364,6 +364,21 @@ export function updateUser(updated: User): { success: boolean; message: string; 
   if (idx < 0) {
     return { success: false, message: 'ไม่พบข้อมูลบุคลากรที่ต้องการแก้ไข' };
   }
+
+  // ป้องกัน Username ซ้ำกับเจ้าหน้าที่คนอื่น
+  if (updated.username) {
+    const trimmedUsername = updated.username.trim().toLowerCase();
+    const dup = users.find(
+      (u) => u.id !== updated.id && u.username.toLowerCase() === trimmedUsername
+    );
+    if (dup) {
+      return {
+        success: false,
+        message: `ชื่อผู้ใช้งาน (Username) "${updated.username}" มีผู้อื่นใช้งานแล้ว กรุณาเลือกชื่ออื่น`,
+      };
+    }
+  }
+
   const updatedList = [...users];
   updatedList[idx] = { ...updated };
   localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updatedList));
