@@ -128,11 +128,44 @@ import {
 
 import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 
+const isCitizenDirectLink = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const p = new URLSearchParams(window.location.search);
+  return (
+    p.get('portal') === 'citizen' ||
+    p.get('mode') === 'citizen' ||
+    p.get('service') === 'med_loan' ||
+    p.get('tab') === 'med_loan' ||
+    p.get('service') === 'sewage' ||
+    p.get('tab') === 'sewage' ||
+    p.get('tab') === 'tracking' ||
+    window.location.hash.includes('citizen') ||
+    window.location.hash.includes('med_loan')
+  );
+};
+
+const CITIZEN_GUEST_USER: User = {
+  id: 'USR-CITIZEN-ONLINE',
+  username: 'citizen',
+  fullName: 'ประชาชนทั่วไป / ผู้รับบริการออนไลน์',
+  email: 'citizen@bangpao.go.th',
+  role: 'citizen',
+  roleTitle: 'ประชาชนตำบลบางเป้า (Citizen)',
+  department: 'ประชาชนตำบลบางเป้า',
+  phone: '',
+  createdAt: new Date().toISOString(),
+  status: 'active',
+};
+
 export default function App() {
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   // Current logged in officer (Default: พันจ่าเอกอานัส เด่นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
-  const [currentUser, setCurrentUserState] = useState<User | null>(() => getActiveSession());
+  const [currentUser, setCurrentUserState] = useState<User | null>(() => {
+    if (isCitizenDirectLink()) return CITIZEN_GUEST_USER;
+    return getActiveSession();
+  });
   const [isCitizenMode, setIsCitizenMode] = useState<boolean>(() => {
+    if (isCitizenDirectLink()) return true;
     const s = getActiveSession();
     return s?.role === 'citizen';
   });
@@ -434,6 +467,9 @@ unsubLicenses();
     logoutUser();
     setCurrentUserState(null);
     setIsCitizenMode(false);
+    if (typeof window !== 'undefined' && window.location.search) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     showToast('info', 'ออกจากระบบเรียบร้อยแล้ว');
   };
 
@@ -861,9 +897,16 @@ unsubLicenses();
         )}
         <CitizenPortalView
           petitions={petitions}
+          loans={loans}
+          equipmentList={equipmentList}
           onAddPetition={(newP) => {
             setPetitions([newP, ...petitions]);
             saveToFirestore(COLLECTIONS.PETITIONS, newP).catch(() => {});
+          }}
+          onAddEquipmentLoan={(newLoan) => {
+            setLoans([newLoan, ...loans]);
+            saveToFirestore(COLLECTIONS.LOANS, newLoan).catch(() => {});
+            showToast('success', 'ส่งคำขอยืมอุปกรณ์เรียบร้อยแล้ว เจ้าหน้าที่จะโทรประสานนัดหมายส่งของ');
           }}
           onExitCitizenMode={handleLogout}
           onShowToast={showToast}

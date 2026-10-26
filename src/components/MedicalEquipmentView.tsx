@@ -233,7 +233,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const [isOverviewMapFullscreen, setIsOverviewMapFullscreen] = useState(false);
   const [activeLoanPin, setActiveLoanPin] = useState<EquipmentLoan | null>(null);
   const [queueToastMsg, setQueueToastMsg] = useState<string | null>(null);
-  const [tableTabMode, setTableTabMode] = useState<'borrowed' | 'returned' | 'queue' | 'all'>('borrowed');
+  const [tableTabMode, setTableTabMode] = useState<'borrowed' | 'returned' | 'queue' | 'online' | 'all'>('borrowed');
+
+  const onlineRequestsCount = useMemo(() => {
+    return loans.filter((l) => l.isPublicCitizenRequest || l.status === 'pending').length;
+  }, [loans]);
   const [mapPinStatusFilter, setMapPinStatusFilter] = useState<'all' | 'borrowed' | 'returned' | 'pending'>('all');
 
   // Leaflet Map Refs
@@ -2190,6 +2194,22 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                             <MapPin className="w-3 h-3" />
                             <span>ดูบนแผนที่</span>
                           </button>
+                          {loan.latitude && loan.longitude && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                window.open(
+                                  `https://www.google.com/maps/dir/?api=1&destination=${loan.latitude},${loan.longitude}`,
+                                  '_blank'
+                                );
+                              }}
+                              className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
+                              title="เปิด Google Maps นำทางพนักงานขับรถส่งของ"
+                            >
+                              <Navigation className="w-3 h-3 text-blue-600" />
+                              <span>นำทาง</span>
+                            </button>
+                          )}
                           {loan.status !== 'borrowed' && (
                             <button
                               type="button"
@@ -2240,6 +2260,20 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   <span>🔄 ส่งคืนแล้ว ({returnedCount} ราย)</span>
                 </button>
 
+                {/* Tab: Online Requests */}
+                <button
+                  type="button"
+                  onClick={() => setTableTabMode('online')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    tableTabMode === 'online'
+                      ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
+                      : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100 border border-indigo-200'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                  <span>🌐 คำขอออนไลน์ ({onlineRequestsCount} ราย)</span>
+                </button>
+
                 {/* Tab 3: Delivery Queue */}
                 <button
                   type="button"
@@ -2280,6 +2314,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     className="text-xs font-bold px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-800 cursor-pointer focus:ring-2 focus:ring-teal-500"
                   >
                     <option value="borrowed">🟢 เฉพาะที่ยืมใช้งานอยู่ ({activeBorrowedCount} ราย)</option>
+                    <option value="online">🌐 คำขอออนไลน์รอตรวจสอบ ({onlineRequestsCount} ราย)</option>
                     <option value="returned">🔄 เฉพาะที่ส่งคืนแล้ว ({returnedCount} ราย)</option>
                     <option value="queue">🚗 เฉพาะในคิวจัดส่ง ({orderedSelectedLoans.length} ราย)</option>
                     <option value="all">📋 แสดงทั้งหมด ({filteredLoans.length} ราย)</option>
@@ -2315,6 +2350,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                         ? filteredLoans.filter((l) => l.status === 'borrowed')
                         : tableTabMode === 'returned'
                         ? filteredLoans.filter((l) => l.status === 'returned')
+                        : tableTabMode === 'online'
+                        ? filteredLoans.filter((l) => l.isPublicCitizenRequest || l.status === 'pending')
                         : filteredLoans;
 
                     if (displayList.length === 0) {
@@ -2327,6 +2364,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                               ? 'ไม่พบรายการที่ส่งคืนอุปกรณ์แล้ว'
                               : tableTabMode === 'queue'
                               ? 'ยังไม่มีรายการในคิวนำส่ง'
+                              : tableTabMode === 'online'
+                              ? 'ไม่มีคำขอขอยืมออนไลน์ที่รอตรวจสอบ'
                               : 'ไม่พบข้อมูลรายการขอยืมอุปกรณ์'}
                           </td>
                         </tr>
@@ -2409,6 +2448,13 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                 <span>⏳ รอส่งมอบ</span>
                               </span>
                             )}
+                            {loan.isPublicCitizenRequest && (
+                              <div className="mt-1">
+                                <span className="px-2 py-0.5 rounded text-[9px] font-black bg-indigo-100 text-indigo-800 border border-indigo-200 inline-flex items-center gap-1">
+                                  🌐 ยื่นออนไลน์
+                                </span>
+                              </div>
+                            )}
                           </td>
                         <td className="py-2.5 px-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
@@ -2429,6 +2475,23 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                 ส่งมอบ
                               </button>
                             ) : null}
+
+                            {loan.latitude && loan.longitude && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.open(
+                                    `https://www.google.com/maps/dir/?api=1&destination=${loan.latitude},${loan.longitude}`,
+                                    '_blank'
+                                  );
+                                }}
+                                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                title="เปิด Google Maps นำทางพนักงานขับรถส่งของไปยังบ้านผู้ป่วย"
+                              >
+                                <Navigation className="w-3 h-3 text-blue-600" />
+                                <span>นำทาง</span>
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -3652,7 +3715,25 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                     </button>
                                   )}
 
-                                  {/* 4. พิมพ์สัญญา A4 */}
+                                  {/* ปุ่มเปิด Google Maps นำทาง */}
+                                   {loan.latitude && loan.longitude && (
+                                     <button
+                                       type="button"
+                                       onClick={() => {
+                                         window.open(
+                                           `https://www.google.com/maps/dir/?api=1&destination=${loan.latitude},${loan.longitude}`,
+                                           '_blank'
+                                         );
+                                       }}
+                                       className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                       title="เปิด Google Maps นำทางพนักงานขับรถส่งของไปยังบ้านผู้ป่วย"
+                                     >
+                                       <Navigation className="w-3.5 h-3.5 text-blue-600" />
+                                       <span>นำทาง</span>
+                                     </button>
+                                   )}
+
+                                   {/* 4. พิมพ์สัญญา A4 */}
                                   <button
                                     type="button"
                                     onClick={() => setPrintModalLoan(loan)}
@@ -3984,25 +4065,35 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
             <div className="py-2 flex justify-center">
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                  `${window.location.origin}/#equipment?mode=citizen`
-                )}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`${window.location.origin}/?portal=citizen&tab=med_loan`)}`}
                 alt="QR Code"
                 className="w-44 h-44 rounded-xl border border-slate-200 shadow-xs"
               />
+            </div>
+
+            <div className="pt-2">
+              <a
+                href={`${window.location.origin}/?portal=citizen&tab=med_loan`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>เปิดดูหน้าจอที่ประชาชนจะเห็น (พรีวิว)</span>
+              </a>
             </div>
 
             <div className="flex gap-2">
               <input
                 type="text"
                 readOnly
-                value={`${window.location.origin}/#equipment?mode=citizen`}
+                value={`${window.location.origin}/?portal=citizen&tab=med_loan`}
                 className="flex-1 p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono select-all"
               />
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/#equipment?mode=citizen`).then(() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/?portal=citizen&tab=med_loan`).then(() => {
                     setIsCopiedShareLink(true);
                     setTimeout(() => setIsCopiedShareLink(false), 3000);
                   });
