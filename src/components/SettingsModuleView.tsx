@@ -1425,143 +1425,130 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
 
       {/* Modal: Add New User */}
       {showAddUserModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl border border-emerald-500/30 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-gradient-to-r from-[#064e3b] via-[#043d2e] to-[#022c22] px-6 py-4.5 text-white flex items-center justify-between border-b border-emerald-600/30">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-emerald-300">
-                  <UserPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-black text-base text-white">ลงทะเบียนเจ้าหน้าที่คนใหม่</h3>
-                  <p className="text-xs text-emerald-200">กำหนดชื่อผู้ใช้ รหัสผ่าน และสิทธิ์การทำงาน</p>
-                </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden font-sarabun text-slate-900">
+            <div className="bg-[#064e3b] px-6 py-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <UserPlus className="w-5 h-5 text-emerald-300" />
+                <h3 className="font-bold text-base sm:text-lg text-white font-sarabun">ลงทะเบียนเจ้าหน้าที่คนใหม่</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAddUserModal(false)}
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-base cursor-pointer"
+                className="text-emerald-200 hover:text-white p-1 text-base font-bold cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleRegisterNewUser} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
-              {/* Highlighted Credentials (Username & Password) */}
-              <div className="p-4 bg-emerald-50/80 rounded-2xl border-2 border-emerald-300/80 space-y-3">
-                <div className="text-xs sm:text-sm font-black text-emerald-950 flex items-center gap-1.5 pb-1 border-b border-emerald-200">
-                  <Key className="w-4 h-4 text-emerald-800" />
-                  <span>ข้อมูลบัญชีสำหรับเข้าสู่ระบบ (กำหนดเองได้อิสระ)</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block mb-1">
-                      ชื่อผู้ใช้ (Username) *
-                    </label>
-                    <input
-                      type="text"
-                      value={newUserForm.username}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
-                      placeholder="เช่น anas, somchai, kor.ph1"
-                      className="w-full text-sm font-mono font-bold px-3.5 py-2.5 bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 shadow-xs"
-                      required
-                    />
-                    <p className="text-[11px] text-slate-500 mt-0.5">ภาษาอังกฤษหรือตัวเลขสำหรับล็อกอิน</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block mb-1">
-                      รหัสผ่าน (Password / PIN) *
-                    </label>
-                    <input
-                      type="text"
-                      value={newUserForm.password}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                      placeholder="เช่น 1234 หรือรหัสส่วนตัว"
-                      className="w-full text-sm font-mono font-bold px-3.5 py-2.5 bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 shadow-xs"
-                    />
-                    <p className="text-[11px] text-slate-500 mt-0.5">หากไม่ระบุ ระบบจะใช้ 1234</p>
-                  </div>
-                </div>
-              </div>
-
+            <form onSubmit={handleRegisterNewUser} className="p-6 space-y-3.5 max-h-[82vh] overflow-y-auto font-sarabun text-base">
               <div>
-                <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                   ชื่อ-นามสกุล (พร้อมคำนำหน้า) *
                 </label>
                 <input
                   type="text"
                   value={newUserForm.fullName}
                   onChange={(e) => setNewUserForm({ ...newUserForm, fullName: e.target.value })}
-                  placeholder="เช่น นายสมพงษ์ ใจภักดี หรือ พ.จ.อ.อานัส เด่นหมาด"
-                  className="w-full text-sm font-bold px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  placeholder="กรอกชื่อ-นามสกุล"
+                  className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 font-sarabun"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
-                    ระดับสิทธิ์ (Role) *
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
+                    ชื่อผู้ใช้ (Username) *
+                  </label>
+                  <input
+                    type="text"
+                    value={newUserForm.username}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                    placeholder="กรอกชื่อผู้ใช้งาน"
+                    className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 font-sarabun"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
+                    รหัสผ่าน (Password / PIN) *
+                  </label>
+                  <input
+                    type="text"
+                    value={newUserForm.password}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    placeholder="กรอกรหัสผ่าน"
+                    className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 font-sarabun"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
+                    บทบาทสิทธิ์ (Role) *
                   </label>
                   <select
                     value={newUserForm.role}
                     onChange={(e) => {
                       const r = e.target.value as UserRole;
                       const roleTitles: Record<UserRole, string> = {
-                        admin: 'นายกเทศมนตรี / ผู้บริหารระดับสูง (Admin)',
+                        admin: 'นายกเทศมนตรี / ผู้บริหารระดับสูง',
                         executive: 'ผู้บริหารเทศบาลตำบลบางเป้า',
-                        inspector: 'เจ้าพนักงานสาธารณสุข / นายตรวจ',
+                        inspector: 'นายตรวจ / เจ้าพนักงานสาธารณสุข',
                         staff: 'เจ้าหน้าที่ธุรการ / LTC (Staff)',
                         citizen: 'ประชาชน / ผู้ประกอบการ',
                       };
                       setNewUserForm({ ...newUserForm, role: r, roleTitle: roleTitles[r] || 'เจ้าหน้าที่' });
                     }}
-                    className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold cursor-pointer"
+                    className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun cursor-pointer"
                   >
                     <option value="inspector">นายตรวจ (Inspector)</option>
                     <option value="admin">ผู้บริหาร / Admin</option>
-                    <option value="staff">เจ้าหน้าที่ธุรการ / Staff</option>
+                    <option value="staff">เจ้าหน้าที่ธุรการ / LTC (Staff)</option>
                     <option value="executive">ผู้บริหารเทศบาล (Executive)</option>
                     <option value="citizen">ประชาชน / ผู้ประกอบการ</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
-                    เบอร์โทรศัพท์ติดต่อ
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
+                    เบอร์โทรศัพท์
                   </label>
                   <input
                     type="tel"
                     value={newUserForm.phone}
                     onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
-                    placeholder="เช่น 081-234-5678"
-                    className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-mono"
+                    placeholder="กรอกเบอร์โทรศัพท์"
+                    className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
-                  ตำแหน่งงาน / หน้าที่ในเอกสารราชการ
+                <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
+                  ตำแหน่งงาน / ชื่อตำแหน่งในเอกสารราชการ
                 </label>
                 <input
                   type="text"
                   value={newUserForm.roleTitle}
                   onChange={(e) => setNewUserForm({ ...newUserForm, roleTitle: e.target.value })}
-                  placeholder="เช่น เจ้าพนักงานสาธารณสุขชำนาญงาน"
-                  className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold"
+                  placeholder="กรอกตำแหน่งงาน"
+                  className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun"
                 />
               </div>
 
               <div>
-                <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                   กลุ่มงาน / สังกัด
                 </label>
                 <input
                   type="text"
                   value={newUserForm.department}
                   onChange={(e) => setNewUserForm({ ...newUserForm, department: e.target.value })}
-                  className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl"
+                  placeholder="กรอกสังกัดกลุ่มงาน"
+                  className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun"
                 />
               </div>
 
@@ -1569,15 +1556,14 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddUserModal(false)}
-                  className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-base font-bold text-slate-600 hover:bg-slate-50 cursor-pointer font-sarabun"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-sm font-black shadow-md cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 bg-[#064e3b] hover:bg-[#043d2e] text-white rounded-xl text-base font-bold shadow-md cursor-pointer flex items-center gap-1.5 font-sarabun"
                 >
-                  <Save className="w-4 h-4" />
                   <span>บันทึกเจ้าหน้าที่ใหม่</span>
                 </button>
               </div>
@@ -1586,111 +1572,92 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
         </div>
       )}
 
-      {/* Modal: Edit Existing Staff (แก้ไขข้อมูลและตำแหน่งเจ้าหน้าที่ - รองรับตั้ง Username และ Password เอง) */}
+      {/* Modal: Edit Existing Staff (แก้ไขข้อมูลและตำแหน่งเจ้าหน้าที่ - ตามภาพที่ 1 และ 2) */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl border border-emerald-500/30 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-[#064e3b] via-[#043d2e] to-[#022c22] px-6 py-4.5 text-white flex items-center justify-between border-b border-emerald-600/30">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-emerald-300">
-                  <UserCog className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-black text-base sm:text-lg text-white">
-                    แก้ไขข้อมูลและตำแหน่งเจ้าหน้าที่
-                  </h3>
-                  <p className="text-xs text-emerald-200">
-                    กำหนดชื่อผู้ใช้ (Username) และรหัสผ่าน (Password) ได้ด้วยตนเอง
-                  </p>
-                </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden font-sarabun text-slate-900">
+            <div className="bg-[#064e3b] px-6 py-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <UserCog className="w-5 h-5 text-emerald-300" />
+                <h3 className="font-bold text-base sm:text-lg text-white font-sarabun">แก้ไขข้อมูลและตำแหน่งเจ้าหน้าที่</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-base cursor-pointer"
+                className="text-emerald-200 hover:text-white p-1 text-base font-bold cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleEditUserSubmit} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
-              {/* Highlighted Credentials (Username & Password) */}
-              <div className="p-4 bg-emerald-50/80 rounded-2xl border-2 border-emerald-300/80 space-y-3">
-                <div className="text-xs sm:text-sm font-black text-emerald-950 flex items-center gap-1.5 pb-1 border-b border-emerald-200">
-                  <Key className="w-4 h-4 text-emerald-800" />
-                  <span>ข้อมูลบัญชีเข้าสู่ระบบ (กำหนดชื่อผู้ใช้และรหัสผ่านเอง)</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block mb-1 flex items-center gap-1">
-                      <UserIcon className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>ชื่อผู้ใช้งาน (Username) *</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={editingUser.username || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
-                      placeholder="เช่น anas, padamaporn"
-                      className="w-full text-sm font-mono font-bold px-3.5 py-2.5 bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 shadow-xs"
-                      required
-                    />
-                    <p className="text-[11px] text-slate-500 mt-0.5">ใช้สำหรับกรอกเข้าสู่ระบบ</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block mb-1 flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>รหัสผ่านเข้าสู่ระบบ (Password / PIN) *</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={editingUser.password || '1234'}
-                      onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                      placeholder="เช่น 1234 หรือรหัสส่วนตัว"
-                      className="w-full text-sm font-mono font-bold px-3.5 py-2.5 bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 shadow-xs"
-                      required
-                    />
-                    <p className="text-[11px] text-slate-500 mt-0.5">รหัสผ่านสำหรับเข้าใช้งาน</p>
-                  </div>
-                </div>
-              </div>
-
+            <form onSubmit={handleEditUserSubmit} className="p-6 space-y-3.5 max-h-[82vh] overflow-y-auto font-sarabun text-base">
               <div>
-                <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                   ชื่อ-นามสกุล (พร้อมคำนำหน้า) *
                 </label>
                 <input
                   type="text"
                   value={editingUser.fullName}
                   onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
-                  className="w-full text-sm font-bold px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  placeholder="กรอกชื่อ-นามสกุล"
+                  className="w-full text-base font-bold px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 font-sarabun"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                   ตำแหน่งงาน / ชื่อตำแหน่งในเอกสารราชการ *
                 </label>
                 <input
                   type="text"
                   value={editingUser.roleTitle}
                   onChange={(e) => setEditingUser({ ...editingUser, roleTitle: e.target.value })}
-                  placeholder="เช่น เจ้าพนักงานสาธารณสุขชำนาญงาน"
-                  className="w-full text-sm font-semibold px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                  placeholder="กรอกตำแหน่งงาน"
+                  className="w-full text-base font-semibold px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 font-sarabun"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
+                    ชื่อผู้ใช้งาน (Username) *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingUser.username || ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
+                    placeholder="กรอกชื่อผู้ใช้งาน"
+                    className="w-full text-base font-bold px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 font-sarabun"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
+                    รหัสผ่านเข้าสู่ระบบ (PIN / Password) *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingUser.password || '1234'}
+                    onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                    placeholder="กรอกรหัสผ่าน"
+                    className="w-full text-base font-bold px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 font-sarabun"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                     ระดับสิทธิ์ (Role)
                   </label>
                   <select
                     value={editingUser.role}
                     onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRole })}
-                    className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold cursor-pointer"
+                    className="w-full text-base px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-semibold font-sarabun cursor-pointer"
                   >
                     <option value="inspector">นายตรวจ (Inspector)</option>
                     <option value="admin">ผู้บริหาร / ผอ.กอง (Admin)</option>
@@ -1701,13 +1668,13 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                     สถานะการให้สิทธิ์ (Account Status)
                   </label>
                   <select
                     value={editingUser.status || 'active'}
                     onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as any })}
-                    className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-semibold cursor-pointer"
+                    className="w-full text-base px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-semibold font-sarabun cursor-pointer"
                   >
                     <option value="active">✓ เปิดใช้งาน (อนุมัติสิทธิ์แล้ว)</option>
                     <option value="pending">⏳ รอการอนุมัติ (Pending)</option>
@@ -1718,39 +1685,42 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                     เบอร์โทรศัพท์
                   </label>
                   <input
                     type="tel"
                     value={editingUser.phone}
                     onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
-                    className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-mono"
+                    placeholder="กรอกเบอร์โทรศัพท์"
+                    className="w-full text-base px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                  <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                     อีเมลติดต่อ
                   </label>
                   <input
                     type="email"
                     value={editingUser.email}
                     onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                    className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl"
+                    placeholder="กรอกอีเมล"
+                    className="w-full text-base px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
+                <label className="text-sm sm:text-base font-bold text-slate-700 block mb-1">
                   สังกัดกลุ่มงาน / ฝ่าย
                 </label>
                 <input
                   type="text"
                   value={editingUser.department}
                   onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
-                  className="w-full text-sm px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl"
+                  placeholder="กรอกสังกัดกลุ่มงาน"
+                  className="w-full text-base px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun"
                 />
               </div>
 
@@ -1758,13 +1728,13 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingUser(null)}
-                  className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-base font-bold text-slate-600 hover:bg-slate-50 cursor-pointer font-sarabun"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-sm font-black shadow-md cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 bg-[#064e3b] hover:bg-[#043d2e] text-white rounded-xl text-base font-bold shadow-md cursor-pointer flex items-center gap-1.5 font-sarabun"
                 >
                   <Save className="w-4 h-4" />
                   <span>บันทึกการเปลี่ยนแปลง</span>

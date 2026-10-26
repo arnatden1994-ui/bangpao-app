@@ -45,8 +45,16 @@
 }
 
 /* Official Government Documents font override (A4 Print / Petitions / Certificates) */
-.font-sarabun {
-  font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
+.font-sarabun,
+.font-sarabun input,
+.font-sarabun select,
+.font-sarabun button,
+.font-sarabun label,
+.font-sarabun textarea,
+.font-sarabun span,
+.font-sarabun p,
+.font-sarabun div {
+  font-family: 'TH Sarabun New', 'TH Sarabun PSK', 'Sarabun', sans-serif !important;
 }
 
 /* Custom Sleek Scrollbar */
