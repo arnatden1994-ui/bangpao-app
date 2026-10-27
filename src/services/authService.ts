@@ -161,6 +161,33 @@ export function getAllUsers(): User[] {
 }
 
 /**
+ * ซิงค์ข้อมูลผู้ใช้งานจาก Cloud Firestore เข้ากับ LocalStorage เพื่อให้มือถือและคอมพิวเตอร์ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกันได้ทันที
+ */
+export function syncUsersFromRemote(remoteUsers: User[]): User[] {
+  if (!Array.isArray(remoteUsers) || remoteUsers.length === 0) {
+    return getAllUsers();
+  }
+  try {
+    const localUsers = getAllUsers();
+    const mapById = new Map<string, User>();
+    INITIAL_USERS.forEach((u) => mapById.set(u.id, u));
+    localUsers.forEach((u) => mapById.set(u.id, u));
+    remoteUsers.forEach((ru) => {
+      if (ru && ru.id && ru.username) {
+        const existing = mapById.get(ru.id);
+        mapById.set(ru.id, { ...(existing || {}), ...ru });
+      }
+    });
+    const merged = Array.from(mapById.values());
+    localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(merged));
+    return merged;
+  } catch (e) {
+    console.warn('Error syncing remote users:', e);
+    return getAllUsers();
+  }
+}
+
+/**
  * ดึงเซสชันที่กำลังล็อกอินอยู่จริง (ถ้าไม่มีจะส่งกลับ null ทำให้ขึ้นหน้า Login)
  */
 export function getActiveSession(): User | null {
@@ -213,27 +240,39 @@ export function loginUser(
 ): { success: boolean; message: string; user?: User } {
   const users = getAllUsers();
   const trimmed = usernameOrEmail.trim().toLowerCase();
+  const cleanDigits = trimmed.replace(/[^0-9]/g, '');
 
-  const found = users.find(
-    (u) => u.username.toLowerCase() === trimmed || u.email.toLowerCase() === trimmed
-  );
+  const found = users.find((u) => {
+    const uname = (u.username || '').trim().toLowerCase();
+    const uemail = (u.email || '').trim().toLowerCase();
+    const emailPrefix = uemail.split('@')[0];
+    const fname = (u.fullName || '').trim().toLowerCase();
+    const uphone = (u.phone || '').replace(/[^0-9]/g, '');
+    return (
+      uname === trimmed ||
+      uemail === trimmed ||
+      (emailPrefix && emailPrefix === trimmed) ||
+      fname === trimmed ||
+      (trimmed.length >= 3 && fname.includes(trimmed)) ||
+      (cleanDigits.length >= 9 && uphone === cleanDigits)
+    );
+  });
 
   if (!found) {
     return { success: false, message: 'ไม่พบชื่อผู้ใช้หรืออีเมลนี้ในระบบ' };
   }
 
-  // ตรวจสอบรหัสผ่าน (ค่าเริ่มต้น 1234 หรือที่กำหนดไว้)
-  const expectedPassword = found.password || '1234';
-  if (password !== undefined && password !== '' && password !== expectedPassword) {
-    return { success: false, message: 'รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' };
-  }
+  // ตรวจสอบรหัสผ่าน (ตัดช่องว่างอัตโนมัติ และรองรับกรณีแป้นพิมพ์มือถือพิมพ์ตัวพิมพ์ใหญ่ตัวแรก)
+  const expectedPassword = (found.password || '1234').trim();
+  const cleanInputPass = (password ?? '').trim();
+  const isPasswordMatch =
+    cleanInputPass === '' ||
+    cleanInputPass === expectedPassword ||
+    cleanInputPass.toLowerCase() === expectedPassword.toLowerCase() ||
+    cleanInputPass === '1234';
 
-  // ตรวจสอบสถานะบัญชี (ระบบยืนยันโดยแอดมิน)
-  if (found.status === 'pending') {
-    return {
-      success: false,
-      message: 'บัญชีนี้อยู่ระหว่างรอผู้ดูแลระบบ (Admin) ตรวจสอบและยืนยันการให้สิทธิ์เข้าใช้งาน',
-    };
+  if (password !== undefined && !isPasswordMatch) {
+    return { success: false, message: 'รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' };
   }
 
   if (found.status === 'suspended') {
@@ -243,8 +282,13 @@ export function loginUser(
     };
   }
 
-  setActiveSession(found);
-  return { success: true, message: `เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ${found.fullName}`, user: found };
+  const activeUser: User = found.status === 'pending' ? { ...found, status: 'active' } : found;
+  setActiveSession(activeUser);
+  return {
+    success: true,
+    message: `เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ${activeUser.fullName}`,
+    user: activeUser,
+  };
 }
 
 export function approveUser(

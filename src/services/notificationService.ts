@@ -26,6 +26,7 @@ export interface NotificationSettings {
   notifyOnGeneralPetition: boolean;
   notifyOnSewagePetition: boolean;
   notifyOnEquipmentLoan: boolean;
+  notifyOnLtcDeliveryQueue: boolean;
   notifyOnCalendarEvent: boolean;
   notifyOnEquipmentFollowUp: boolean;
   dailyMorningSummaryEnabled: boolean;
@@ -35,11 +36,54 @@ export interface NotificationSettings {
 export interface NotificationAttachment {
   id: string;
   title: string;
-  formType: 'general_petition' | 'sewage_petition' | 'medical_loan' | 'calendar_plan' | 'followup_report';
+  formType:
+    | 'general_petition'
+    | 'sewage_petition'
+    | 'medical_loan'
+    | 'ltc_delivery_manifest'
+    | 'calendar_plan'
+    | 'followup_report';
   fileNamePdf: string;
   fileNameDocx: string;
   htmlSource: string;
   docxBase64: string;
+}
+
+export interface LtcQueueStopNotifyItem {
+  queueOrder: number;
+  stopId: string;
+  patientId: string;
+  patientName: string;
+  age?: number;
+  adlCategory: string;
+  adlScore?: number;
+  moo: string;
+  village: string;
+  address: string;
+  caregiverName?: string;
+  phone?: string;
+  itemsText: string;
+  itemsList: { itemName: string; quantity: number; unit: string }[];
+  lat: number;
+  lng: number;
+  individualMapsUrl: string;
+}
+
+export interface LtcDeliveryQueueNotifyInput {
+  referenceCode?: string;
+  fiscalYear: string;
+  roundKey: string;
+  roundLabel: string;
+  mooFilterLabel: string;
+  officerName?: string;
+  originName: string;
+  originLat: number;
+  originLng: number;
+  distanceKm?: number;
+  durationMin?: number;
+  multiStopGoogleMapsUrl: string;
+  totalSupplySummary: { itemName: string; totalQty: number; unit: string }[];
+  stops: LtcQueueStopNotifyItem[];
 }
 
 export interface NotificationPayload {
@@ -47,6 +91,7 @@ export interface NotificationPayload {
     | 'general_petition'
     | 'sewage_petition'
     | 'medical_loan'
+    | 'ltc_delivery_queue'
     | 'calendar_event'
     | 'equipment_followup'
     | 'test_notification';
@@ -120,6 +165,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   notifyOnGeneralPetition: true,
   notifyOnSewagePetition: true,
   notifyOnEquipmentLoan: true,
+  notifyOnLtcDeliveryQueue: true,
   notifyOnCalendarEvent: true,
   notifyOnEquipmentFollowUp: true,
   dailyMorningSummaryEnabled: true,
@@ -1062,21 +1108,467 @@ export function buildFollowUpNotificationPayload(
 }
 
 /**
- * 5. Build Field Officer Job Status Update Notification (รับงาน ➔ ออกปฏิบัติงาน ➔ จบงานสำเร็จ / ติดขัดปัญหาหน้างาน)
+ * 5. Build Official A4 Manifest HTML & Notification Payload for LTC & NHSO Care Pack Delivery Queue (ครบทุกคน + ระบบนำทางตามแผนที่ครบทุกจุด)
+ */
+const STORAGE_KEY_LATEST_LTC_QUEUE_JOB = 'bangpao_latest_ltc_queue_job_v1';
+
+export function getStoredLatestLtcQueueJob(): LtcDeliveryQueueNotifyInput | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_LATEST_LTC_QUEUE_JOB);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function generateOfficialLtcDeliveryManifestHtml(
+  input: LtcDeliveryQueueNotifyInput,
+  signers: SignerSettings = DEFAULT_SIGNER_SETTINGS
+): string {
+  const refCode =
+    input.referenceCode || `LTC-${input.fiscalYear}-R${input.roundKey}-Q${input.stops.length}`;
+  const supplyRowsHtml =
+    input.totalSupplySummary.length > 0
+      ? input.totalSupplySummary
+          .map(
+            (s, i) => `
+          <tr>
+            <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">${i + 1}</td>
+            <td style="border: 1px solid #000; padding: 6px 10px; font-weight: bold;">${s.itemName}</td>
+            <td style="border: 1px solid #000; padding: 6px 10px; text-align: center; font-weight: bold;">${s.totalQty.toLocaleString()}</td>
+            <td style="border: 1px solid #000; padding: 6px 10px; text-align: center;">${s.unit}</td>
+          </tr>`
+          )
+          .join('')
+      : `<tr><td colspan="4" style="border: 1px solid #000; padding: 8px; text-align: center;">ตามรายการพัสดุรายบุคคลด้านล่าง</td></tr>`;
+
+  const stopRowsHtml = input.stops
+    .map(
+      (st) => `
+      <tr>
+        <td style="border: 1px solid #000; padding: 7px 6px; text-align: center; font-weight: bold;">คิวที่ #${st.queueOrder}</td>
+        <td style="border: 1px solid #000; padding: 7px 8px;">
+          <div style="font-weight: bold;">${st.patientName}</div>
+          <div style="font-size: 12px; color: #334155;">กลุ่ม: ${st.adlCategory}${st.adlScore !== undefined ? ` (ADL ${st.adlScore})` : ''}</div>
+        </td>
+        <td style="border: 1px solid #000; padding: 7px 8px;">
+          <div>หมู่ที่ ${st.moo} ${st.village}</div>
+          <div style="font-size: 12px;">${st.address}</div>
+          <div style="font-size: 12px; color: #0f766e;">ผู้ดูแล: ${st.caregiverName || 'ญาติผู้ดูแล'} (${st.phone || '-'})</div>
+        </td>
+        <td style="border: 1px solid #000; padding: 7px 8px; font-weight: 600;">${st.itemsText}</td>
+        <td style="border: 1px solid #000; padding: 7px 6px; text-align: center; font-size: 12px;">
+          <div>${st.lat.toFixed(6)},</div>
+          <div>${st.lng.toFixed(6)}</div>
+        </td>
+        <td style="border: 1px solid #000; padding: 7px 8px; text-align: center; color: #64748b; font-size: 12px;">
+          ลงชื่อ....................................<br/>วันที่......../......../........
+        </td>
+      </tr>`
+    )
+    .join('');
+
+  return `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>ใบเบิกจ่ายและแผนการจัดส่งพัสดุ LTC - ${refCode}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 portrait; margin: 14mm 14mm; }
+    body { font-family: 'Sarabun', sans-serif; font-size: 14px; color: #000; line-height: 1.45; margin: 0; padding: 18px; }
+    .page { max-width: 210mm; margin: 0 auto; background: #fff; }
+    .header { text-align: center; margin-bottom: 14px; border-bottom: 2px solid #0f766e; padding-bottom: 10px; }
+    .title { font-size: 19px; font-weight: 700; margin-bottom: 3px; }
+    .subtitle { font-size: 15px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 16px; font-size: 13px; }
+    th { border: 1px solid #000; padding: 7px 6px; background: #f1f5f9; font-weight: 700; text-align: center; }
+    .sign-row { display: flex; justify-content: space-between; margin-top: 28px; }
+    .sign-box { width: 46%; text-align: center; }
+    @media print { .no-print { display: none !important; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="text-align: right; margin-bottom: 12px;">
+    <button onclick="window.print()" style="background: #0f766e; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+      🖨️ พิมพ์ใบเบิกจ่ายและบัญชีคิวส่งมอบพัสดุ LTC (A4)
+    </button>
+  </div>
+  <div class="page">
+    <div class="header">
+      <div class="title">บัญชีรายชื่อและแผนการจัดส่งพัสดุดูแลผู้มีภาวะพึ่งพิง (LTC) ตามลำดับคิว</div>
+      <div class="subtitle">กองทุนหลักประกันสุขภาพ & กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง</div>
+      <div style="font-size: 13px; margin-top: 4px;">
+        รหัสแผนจัดส่ง: <strong>${refCode}</strong> • ประจำ: <strong>ปีงบประมาณ ${input.fiscalYear} (${input.roundLabel})</strong> • พื้นที่: <strong>${input.mooFilterLabel}</strong> • วันที่ออกเอกสาร: ${formatThaiDateTime()}
+      </div>
+    </div>
+
+    <div style="font-weight: 700; font-size: 14px; margin-top: 6px;">
+      ส่วนที่ 1: สรุปยอดสิ่งของ/พัสดุที่ต้องเบิกจ่ายขึ้นรถในรอบคิวนี้ (รวมทั้งสิ้น ${input.stops.length} หลังคาเรือน)
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10%;">ลำดับ</th>
+          <th style="width: 55%;">รายการสิ่งของ / พัสดุดูแลผู้มีภาวะพึ่งพิง (LTC)</th>
+          <th style="width: 20%;">จำนวนรวมทั้งสิ้น</th>
+          <th style="width: 15%;">หน่วยนับ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${supplyRowsHtml}
+      </tbody>
+    </table>
+
+    <div style="font-weight: 700; font-size: 14px; margin-top: 10px;">
+      ส่วนที่ 2: ลำดับคิวจัดส่งพัสดุรายบุคคล (เริ่มเดินทางจาก: ${input.originName} พิกัด ${input.originLat}, ${input.originLng}${input.distanceKm ? ` • ระยะทางรวม ~${input.distanceKm} กม.` : ''})
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 9%;">ลำดับคิว</th>
+          <th style="width: 20%;">ชื่อ-นามสกุล / กลุ่ม ADL</th>
+          <th style="width: 24%;">ที่อยู่ / หมู่บ้าน / ผู้ดูแล</th>
+          <th style="width: 23%;">รายการสิ่งของที่ได้รับในรอบนี้</th>
+          <th style="width: 11%;">พิกัด GPS</th>
+          <th style="width: 13%;">ลายมือชื่อผู้รับของ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${stopRowsHtml}
+      </tbody>
+    </table>
+
+    <div style="border: 1px dashed #0f766e; background: #f0fdfa; padding: 10px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 18px;">
+      <strong>🗺️ ลิงก์นำทาง Google Maps แบบครบทุกคนตามลำดับคิว (ทต.บางเป้า ➔ คิวที่ #1 ถึง #${input.stops.length}):</strong><br/>
+      <a href="${input.multiStopGoogleMapsUrl}" target="_blank" style="color: #0f766e; word-break: break-all;">${input.multiStopGoogleMapsUrl}</a>
+    </div>
+
+    <div class="sign-row">
+      <div class="sign-box">
+        <div>ลงชื่อ.......................................................เจ้าหน้าที่ผู้เบิก/จัดส่งพัสดุ</div>
+        <div style="margin-top: 4px;">(${input.officerName || signers.inspectorName || '.......................................................'})</div>
+        <div>ตำแหน่ง ${signers.inspectorPosition || 'เจ้าหน้าที่กองสาธารณสุขและสิ่งแวดล้อม'}</div>
+      </div>
+      <div class="sign-box">
+        <div>ลงชื่อ.......................................................ผู้ตรวจสอบ/อนุมัติจ่ายพัสดุ</div>
+        <div style="margin-top: 4px;">(${signers.directorName || 'นางสาวปฐมาภรณ์ จันทร์แจ่ม'})</div>
+        <div>ตำแหน่ง ${signers.directorPosition || 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม'}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export function buildLtcDeliveryQueueNotificationPayload(
+  input: LtcDeliveryQueueNotifyInput,
+  signers: SignerSettings = DEFAULT_SIGNER_SETTINGS
+): NotificationPayload {
+  const refCode =
+    input.referenceCode || `LTC-${input.fiscalYear}-R${input.roundKey}-Q${input.stops.length}`;
+
+  try {
+    localStorage.setItem(
+      STORAGE_KEY_LATEST_LTC_QUEUE_JOB,
+      JSON.stringify({ ...input, referenceCode: refCode })
+    );
+  } catch {
+    // ignore storage quota errors
+  }
+
+  const htmlSource = generateOfficialLtcDeliveryManifestHtml(
+    { ...input, referenceCode: refCode },
+    signers
+  );
+
+  // Create Word (.docx) document with complete supply totals + all patients in queue + GPS links
+  const supplySummaryText =
+    input.totalSupplySummary.length > 0
+      ? input.totalSupplySummary.map((s) => `${s.itemName}: รวม ${s.totalQty.toLocaleString()} ${s.unit}`).join(' | ')
+      : 'ตามรายการรายบุคคล';
+
+  const stopsDetailForDocx = input.stops
+    .map(
+      (st) =>
+        `คิวที่ #${st.queueOrder}: ${st.patientName} (${st.adlCategory}) - หมู่ที่ ${st.moo} ${st.village} (${st.address}) โทร: ${st.phone || '-'} | สิ่งของ: ${st.itemsText} | พิกัด: ${st.lat.toFixed(6)}, ${st.lng.toFixed(6)}`
+    )
+    .join('\n');
+
+  const pseudoPetition: PublicPetition = {
+    id: refCode,
+    trackingCode: refCode,
+    submissionDate: new Date().toISOString().slice(0, 10),
+    citizenName: input.officerName || signers.inspectorName || 'ทีมจัดส่งพัสดุ LTC กองสาธารณสุขฯ',
+    phone: input.stops[0]?.phone || '075-270569',
+    address: `${input.mooFilterLabel} ต.บางเป้า อ.กันตัง จ.ตรัง`,
+    title: `แผนจัดส่งพัสดุ สปสช. & LTC (ปี ${input.fiscalYear} • ${input.roundLabel}) จำนวน ${input.stops.length} คิว`,
+    category: 'other',
+    description: `สรุปยอดสิ่งของเบิกจ่ายรวม: ${supplySummaryText}\n\nรายชื่อผู้รับมอบเรียงตามคิว (ครบทั้ง ${input.stops.length} ราย):\n${stopsDetailForDocx}\n\nลิงก์นำทาง Google Maps ครบทุกคน: ${input.multiStopGoogleMapsUrl}`,
+    status: 'assigned',
+    assignedOfficer: input.officerName || 'ทีมงาน LTC กองสาธารณสุข ทต.บางเป้า',
+  };
+
+  const docxBytes = generatePetitionDocxBytes(pseudoPetition, signers);
+  const docxBase64 = uint8ArrayToBase64(docxBytes);
+  const safeRef = refCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  const attachment: NotificationAttachment = {
+    id: `att-ltc-${Date.now()}`,
+    title: `ใบเบิกจ่ายและบัญชีคิวจัดส่งพัสดุ LTC (A4) - ปี ${input.fiscalYear} ${input.roundLabel} (${input.stops.length} ราย)`,
+    formType: 'ltc_delivery_manifest',
+    fileNamePdf: `บัญชีคิวส่งมอบพัสดุ_LTC_${safeRef}.pdf`,
+    fileNameDocx: `บัญชีคิวส่งมอบพัสดุ_LTC_${safeRef}.docx`,
+    htmlSource,
+    docxBase64,
+  };
+
+  const bedriddenCount = input.stops.filter((s) => s.adlCategory === 'ติดเตียง').length;
+  const homeboundCount = input.stops.filter((s) => s.adlCategory !== 'ติดเตียง').length;
+
+  const summaryLines: { label: string; value: string }[] = [
+    { label: 'รหัสแผนจัดส่ง LTC', value: refCode },
+    { label: 'ปีงบประมาณ / วงรอบ', value: `ปีงบประมาณ ${input.fiscalYear} • ${input.roundLabel}` },
+    { label: 'พื้นที่เป้าหมาย', value: input.mooFilterLabel },
+    {
+      label: 'จำนวนผู้รับมอบในคิว',
+      value: `ครบทั้ง ${input.stops.length} ราย (ติดเตียง ${bedriddenCount} ราย, ติดบ้าน ${homeboundCount} ราย)`,
+    },
+    {
+      label: 'สรุปยอดสิ่งของรวมทั้งหมด',
+      value: supplySummaryText,
+    },
+    {
+      label: 'จุดเริ่มต้น & ระยะทาง',
+      value: `${input.originName} (${input.originLat}, ${input.originLng})${
+        input.distanceKm ? ` • ระยะทางรวม ~${input.distanceKm} กม. (~${input.durationMin || 10} นาที)` : ''
+      }`,
+    },
+    ...input.stops.map((st) => ({
+      label: `🚩 คิวที่ #${st.queueOrder} (ม.${st.moo})`,
+      value: `${st.patientName} [${st.adlCategory}] • ${st.address} ${
+        st.phone ? `• โทร: ${st.phone}` : ''
+      }\n📦 สิ่งของ: ${st.itemsText}\n📍 พิกัด: ${st.lat.toFixed(6)}, ${st.lng.toFixed(6)}`,
+    })),
+  ];
+
+  const badgeText = '🚑 แจ้งเตือนคิวส่งมอบพัสดุ สปสช. & LTC';
+  const headerBgColor = '#0F766E';
+  const accentColor = '#0D9488';
+  const title = `จัดคิวส่งมอบพัสดุ LTC เรียบร้อย (${input.stops.length} บ้าน • ปี ${input.fiscalYear})`;
+  const subtitle = `${input.roundLabel} • ${input.mooFilterLabel} • พร้อมแผนที่นำทางครบทุกคน`;
+
+  // Build Enhanced LINE Flex Bubble with per-stop navigation buttons + full multi-stop route button + field job action button
+  const baseFlex = buildLineFlexBubble({
+    badgeText,
+    headerBgColor,
+    accentColor,
+    referenceCode: refCode,
+    title,
+    subtitle,
+    summaryLines: summaryLines.slice(0, 6), // Top overview lines
+    attachmentNames: [attachment.fileNamePdf, attachment.fileNameDocx],
+    googleMapsUrl: input.multiStopGoogleMapsUrl,
+    phone: input.stops[0]?.phone,
+    portalUrl: `https://bangpao-app.vercel.app/?job=${encodeURIComponent(refCode)}`,
+  });
+
+  // Inject detailed per-patient cards (with individual Google Maps buttons!) into the LINE Flex Bubble body so NOTHING is omitted
+  const perStopFlexBoxes = input.stops.map((st) => ({
+    type: 'box',
+    layout: 'vertical',
+    margin: 'md',
+    paddingAll: '10px',
+    backgroundColor: st.adlCategory === 'ติดเตียง' ? '#FFF1F2' : '#F0FDFA',
+    cornerRadius: '8px',
+    contents: [
+      {
+        type: 'box',
+        layout: 'horizontal',
+        contents: [
+          {
+            type: 'text',
+            text: `คิวที่ #${st.queueOrder}: ${st.patientName}`,
+            weight: 'bold',
+            size: 'sm',
+            color: '#0F172A',
+            flex: 5,
+            wrap: true,
+          },
+          {
+            type: 'text',
+            text: st.adlCategory,
+            weight: 'bold',
+            size: 'xs',
+            align: 'end',
+            color: st.adlCategory === 'ติดเตียง' ? '#BE123C' : '#0F766E',
+            flex: 2,
+          },
+        ],
+      },
+      {
+        type: 'text',
+        text: `📍 หมู่ที่ ${st.moo} ${st.village} • ${st.address}${st.phone ? ` (โทร: ${st.phone})` : ''}`,
+        size: 'xs',
+        color: '#334155',
+        wrap: true,
+        margin: 'xs',
+      },
+      {
+        type: 'text',
+        text: `📦 ${st.itemsText}`,
+        size: 'xs',
+        weight: 'bold',
+        color: '#0F766E',
+        wrap: true,
+        margin: 'xs',
+      },
+      {
+        type: 'box',
+        layout: 'horizontal',
+        margin: 'sm',
+        contents: [
+          {
+            type: 'text',
+            text: `GPS: ${st.lat.toFixed(5)}, ${st.lng.toFixed(5)}`,
+            size: 'xxs',
+            color: '#64748B',
+            gravity: 'center',
+            flex: 4,
+          },
+          {
+            type: 'button',
+            style: 'link',
+            height: 'sm',
+            flex: 3,
+            action: {
+              type: 'uri',
+              label: `🚗 นำทางคิว #${st.queueOrder}`,
+              uri: st.individualMapsUrl,
+            },
+          },
+        ],
+      },
+    ],
+  }));
+
+  if (baseFlex.body && Array.isArray(baseFlex.body.contents)) {
+    baseFlex.body.contents = [
+      ...baseFlex.body.contents.slice(0, 6),
+      { type: 'separator', margin: 'md' },
+      {
+        type: 'text',
+        text: `📋 รายละเอียดคิวส่งมอบครบทั้ง ${input.stops.length} ราย (เรียงตามคิว):`,
+        weight: 'bold',
+        size: 'sm',
+        color: '#0F766E',
+        margin: 'md',
+      },
+      ...perStopFlexBoxes,
+      ...baseFlex.body.contents.slice(6),
+    ];
+  }
+
+  // Update footer button label on LINE Flex so it clearly says Multi-Stop Navigation for Everyone
+  if (baseFlex.footer && Array.isArray(baseFlex.footer.contents)) {
+    baseFlex.footer.contents = [
+      {
+        type: 'button',
+        style: 'primary',
+        color: '#059669',
+        height: 'sm',
+        action: {
+          type: 'uri',
+          label: `🗺️ นำทางแผนที่ครบทุกคน (คิว #1-#${input.stops.length})`,
+          uri: input.multiStopGoogleMapsUrl,
+        },
+      },
+      {
+        type: 'button',
+        style: 'primary',
+        color: '#1D4ED8',
+        height: 'sm',
+        action: {
+          type: 'uri',
+          label: '👷 รับงานจัดส่ง / แจ้งจบงาน • ติดขัด',
+          uri: `https://bangpao-app.vercel.app/?job=${encodeURIComponent(refCode)}`,
+        },
+      },
+    ];
+  }
+
+  const emailSubject = `[กองสาธารณสุข ทต.บางเป้า] 🚑 แจ้งคิวจัดส่งพัสดุ LTC ปี ${input.fiscalYear} (${input.roundLabel}) ครบ ${input.stops.length} ราย พร้อมแผนที่นำทางและใบเบิก A4`;
+  const emailHtmlBody = buildOfficialEmailHtml({
+    badgeText,
+    headerBgColor,
+    referenceCode: refCode,
+    title,
+    subtitle,
+    summaryLines,
+    attachments: [attachment],
+    googleMapsUrl: input.multiStopGoogleMapsUrl,
+    requesterPhone: input.stops[0]?.phone,
+  });
+
+  const lineTextFallback = [
+    `${badgeText} [${refCode}]`,
+    `📅 ปีงบประมาณ ${input.fiscalYear} • ${input.roundLabel} (${input.mooFilterLabel})`,
+    `📦 สรุปยอดสิ่งของเบิกจ่ายรวม: ${supplySummaryText}`,
+    `🚩 ลำดับคิวส่งมอบครบทั้ง ${input.stops.length} ราย:`,
+    ...input.stops.map(
+      (st) =>
+        `คิวที่ #${st.queueOrder}: ${st.patientName} (${st.adlCategory}) ม.${st.moo} ${st.village} (${st.address})\n   📦 สิ่งของ: ${st.itemsText}\n   📍 นำทางรายบ้าน: ${st.individualMapsUrl}`
+    ),
+    `----------------------------------------`,
+    `🗺️ นำทาง Google Maps ครบทุกคนเรียงตามคิว (#1 ถึง #${input.stops.length}):`,
+    input.multiStopGoogleMapsUrl,
+    `👷 รับงานจัดส่ง / แจ้งผลหน้างาน: https://bangpao-app.vercel.app/?job=${encodeURIComponent(refCode)}`,
+  ].join('\n');
+
+  return {
+    eventType: 'ltc_delivery_queue',
+    referenceCode: refCode,
+    title,
+    subtitle,
+    urgency: 'urgent',
+    requesterName: `คิวส่งมอบพัสดุ LTC (${input.stops.length} ราย)`,
+    requesterPhone: input.stops[0]?.phone || '-',
+    villageName: input.mooFilterLabel,
+    address: `เริ่มจาก ${input.originName} ไปยังบ้านผู้ป่วย ${input.stops.length} จุด`,
+    lat: input.stops[0]?.lat || input.originLat,
+    lng: input.stops[0]?.lng || input.originLng,
+    googleMapsUrl: input.multiStopGoogleMapsUrl,
+    summaryLines,
+    lineTextFallback,
+    lineFlexContents: baseFlex,
+    emailSubject,
+    emailHtmlBody,
+    attachments: [attachment],
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 6. Build Field Officer Job Status Update Notification (รับงาน ➔ ออกปฏิบัติงาน ➔ จบงานสำเร็จ / ติดขัดปัญหาหน้างาน)
  */
 export function buildFieldJobStatusUpdateNotificationPayload(params: {
-  jobType: 'petition' | 'loan';
+  jobType: 'petition' | 'loan' | 'ltc_queue';
   actionState: 'accepted_en_route' | 'completed' | 'issue_blocked';
   officerName: string;
   actionNote: string;
   issueReason?: string;
   petition?: PublicPetition & Record<string, any>;
   loan?: EquipmentLoan & Record<string, any>;
+  ltcQueue?: LtcDeliveryQueueNotifyInput;
   signers?: SignerSettings;
 }): NotificationPayload {
   const signers = params.signers || DEFAULT_SIGNER_SETTINGS;
+  const isLtc = params.jobType === 'ltc_queue' && params.ltcQueue;
   const isLoan = params.jobType === 'loan' && params.loan;
-  const basePayload = isLoan
+  const basePayload = isLtc
+    ? buildLtcDeliveryQueueNotificationPayload(params.ltcQueue!, signers)
+    : isLoan
     ? buildEquipmentLoanNotificationPayload(params.loan!, signers)
     : buildPetitionNotificationPayload(params.petition!, signers);
 
@@ -1116,6 +1608,10 @@ export function buildFieldJobStatusUpdateNotificationPayload(params: {
       (r) =>
         r.label === 'เลขรับคำร้อง' ||
         r.label === 'รหัสคำขอยืม' ||
+        r.label === 'รหัสแผนจัดส่ง LTC' ||
+        r.label === 'ปีงบประมาณ / วงรอบ' ||
+        r.label === 'จำนวนผู้รับมอบในคิว' ||
+        r.label === 'สรุปยอดสิ่งของรวมทั้งหมด' ||
         r.label === 'ผู้ยื่นคำร้อง' ||
         r.label === 'ชื่อผู้ป่วย' ||
         r.label === 'หมู่บ้าน / พื้นที่' ||
@@ -1209,6 +1705,12 @@ export async function dispatchNotification(
     return {
       ok: false,
       logItem: createSkippedLog(payload, settings, 'ปิดการแจ้งเตือนยืมอุปกรณ์ไว้ในตั้งค่า'),
+    };
+  }
+  if (payload.eventType === 'ltc_delivery_queue' && settings.notifyOnLtcDeliveryQueue === false) {
+    return {
+      ok: false,
+      logItem: createSkippedLog(payload, settings, 'ปิดการแจ้งเตือนคิวส่งมอบพัสดุ LTC ไว้ในตั้งค่า'),
     };
   }
   if (payload.eventType === 'calendar_event' && !settings.notifyOnCalendarEvent) {

@@ -25,6 +25,8 @@ import {
   dispatchNotification,
   openAttachmentPrintableHtml,
   downloadAttachmentDocx,
+  getStoredLatestLtcQueueJob,
+  LtcDeliveryQueueNotifyInput,
 } from '../services/notificationService.ts';
 
 interface FieldJobActionViewProps {
@@ -106,6 +108,68 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
       if (foundLoan) {
         return { jobType: 'loan' as const, petition: undefined, loan: foundLoan };
       }
+    }
+
+    // Check if this is an LTC Delivery Queue Job (e.g. LTC-2569-R1-Q5)
+    if (cleanCode.startsWith('ltc')) {
+      const savedLtc = getStoredLatestLtcQueueJob();
+      const fallbackLtc: LtcDeliveryQueueNotifyInput = savedLtc || {
+        referenceCode: selectedCode || 'LTC-2569-R1-Q5',
+        fiscalYear: '2569',
+        roundKey: '1',
+        roundLabel: 'วงรอบที่ 1 (ต.ค. – มี.ค.)',
+        mooFilterLabel: 'ทุกหมู่บ้าน (ม.1 – ม.7)',
+        originName: 'เทศบาลตำบลบางเป้า',
+        originLat: 7.429625,
+        originLng: 99.52522,
+        multiStopGoogleMapsUrl:
+          'https://www.google.com/maps/dir/?api=1&origin=7.429625,99.52522&destination=7.4342,99.5198&waypoints=7.4258,99.5381|7.4281,99.5245|7.4265,99.5392|7.4335,99.5205&travelmode=driving',
+        totalSupplySummary: [
+          { itemName: 'นมผงสุขภาพ', totalQty: 8, unit: 'กระป๋อง' },
+          { itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', totalQty: 690, unit: 'ชิ้น' },
+          { itemName: 'ผ้าอ้อมผู้ใหญ่ (L)', totalQty: 310, unit: 'ชิ้น' },
+        ],
+        stops: [
+          {
+            queueOrder: 1,
+            stopId: 'STOP-01',
+            patientId: 'LTC-01',
+            patientName: 'นายสุนทร ซาพิมพ์',
+            adlCategory: 'ติดบ้าน',
+            moo: '4',
+            village: 'บ้านแหลมม่วง',
+            address: '69 หมู่ที่ 4 บ้านแหลมม่วง',
+            phone: '081-234-5678',
+            itemsText: 'รอบที่ 1: นมผงสุขภาพ (3 กระป๋อง)',
+            itemsList: [{ itemName: 'นมผงสุขภาพ', quantity: 3, unit: 'กระป๋อง' }],
+            lat: 7.4258,
+            lng: 99.5381,
+            individualMapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=7.4258,99.5381',
+          },
+          {
+            queueOrder: 2,
+            stopId: 'STOP-02',
+            patientId: 'LTC-02',
+            patientName: 'นายเรียบ ทองหมึก',
+            adlCategory: 'ติดเตียง',
+            moo: '1',
+            village: 'บ้านชายวัด',
+            address: '63 หมู่ที่ 1 บ้านชายวัด',
+            phone: '089-876-5432',
+            itemsText: 'รอบที่ 1: ผ้าอ้อมผู้ใหญ่ (M) (390 ชิ้น)',
+            itemsList: [{ itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', quantity: 390, unit: 'ชิ้น' }],
+            lat: 7.4281,
+            lng: 99.5245,
+            individualMapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=7.4281,99.5245',
+          },
+        ],
+      };
+      return {
+        jobType: 'ltc_queue' as const,
+        petition: undefined,
+        loan: undefined,
+        ltcQueue: fallbackLtc,
+      };
     }
 
     // Fallback if test code from notification test button was clicked
@@ -214,29 +278,46 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
     );
   }
 
+  const isLtcQueue = matchedJob.jobType === 'ltc_queue';
   const isLoan = matchedJob.jobType === 'loan';
   const pet = matchedJob.petition;
   const ln = matchedJob.loan;
+  const ltcQ = (matchedJob as any).ltcQueue as LtcDeliveryQueueNotifyInput | undefined;
 
   const isSewage =
     !isLoan &&
+    !isLtcQueue &&
     (pet?.category === 'waste_sewage' ||
       pet?.form?.formType === 'sewage' ||
       (pet?.title || '').includes('สิ่งปฏิกูล') ||
       (pet?.title || '').includes('ส้วม'));
 
-  const refCode = isLoan
+  const refCode = isLtcQueue
+    ? ltcQ?.referenceCode || selectedCode || 'LTC-2569-R1'
+    : isLoan
     ? ln?.loanCode || ln?.id || 'MED-NEW'
     : pet?.trackingCode || pet?.id || 'REQ-NEW';
 
-  const requesterName = isLoan
+  const requesterName = isLtcQueue
+    ? `คิวส่งมอบพัสดุ LTC ครบ ${ltcQ?.stops.length || 0} หลังคาเรือน (${ltcQ?.roundLabel || ''})`
+    : isLoan
     ? `${ln?.patientName} (ผู้ติดต่อ: ${ln?.borrowerName || '-'})`
     : pet?.citizenName || '-';
 
-  const phone = isLoan ? ln?.borrowerPhone || ln?.phone || '' : pet?.phone || '';
+  const phone = isLtcQueue
+    ? ltcQ?.stops[0]?.phone || ''
+    : isLoan
+    ? ln?.borrowerPhone || ln?.phone || ''
+    : pet?.phone || '';
   const cleanPhone = phone.replace(/[^0-9]/g, '');
-  const addressText = isLoan ? ln?.address || '-' : pet?.address || '-';
-  const mooText = isLoan
+  const addressText = isLtcQueue
+    ? `เริ่มจาก ${ltcQ?.originName || 'ทต.บางเป้า'} ➔ ส่งมอบตามคิว #1 ถึง #${ltcQ?.stops.length || 0}`
+    : isLoan
+    ? ln?.address || '-'
+    : pet?.address || '-';
+  const mooText = isLtcQueue
+    ? ltcQ?.mooFilterLabel || 'ทุกหมู่บ้าน (ม.1 – ม.7)'
+    : isLoan
     ? ln?.moo
       ? `หมู่ที่ ${ln.moo}`
       : 'ต.บางเป้า'
@@ -244,24 +325,35 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
     ? `หมู่ที่ ${pet.moo}`
     : 'ต.บางเป้า';
 
-  const jobTitle = isLoan
+  const jobTitle = isLtcQueue
+    ? `แผนจัดส่งพัสดุ สปสช. & LTC (ปี ${ltcQ?.fiscalYear || '2569'} • ${ltcQ?.roundLabel || ''})`
+    : isLoan
     ? `นำส่งอุปกรณ์: ${ln?.itemsSummary || ln?.equipmentName}`
     : pet?.title || 'คำร้องบริการประชาชน';
 
-  const jobDetail = isLoan
+  const jobDetail = isLtcQueue
+    ? `สรุปยอดพัสดุรวม: ${
+        ltcQ?.totalSupplySummary
+          .map((s) => `${s.itemName} ${s.totalQty.toLocaleString()} ${s.unit}`)
+          .join(' • ') || '-'
+      }`
+    : isLoan
     ? `อาการผู้ป่วย: ${ln?.patientDiagnosis || '-'} ${ln?.notes ? `• ${ln.notes}` : ''}`
     : pet?.description || '-';
 
-  const lat = isLoan ? ln?.latitude : pet?.latitude;
-  const lng = isLoan ? ln?.longitude : pet?.longitude;
-  const googleMapsUrl =
-    typeof lat === 'number' && typeof lng === 'number'
-      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText + ' ตำบลบางเป้า กันตัง ตรัง')}`;
+  const lat = isLtcQueue ? ltcQ?.stops[0]?.lat : isLoan ? ln?.latitude : pet?.latitude;
+  const lng = isLtcQueue ? ltcQ?.stops[0]?.lng : isLoan ? ln?.longitude : pet?.longitude;
+  const googleMapsUrl = isLtcQueue
+    ? ltcQ?.multiStopGoogleMapsUrl ||
+      `https://www.google.com/maps/search/?api=1&query=7.429625,99.52522`
+    : typeof lat === 'number' && typeof lng === 'number'
+    ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText + ' ตำบลบางเป้า กันตัง ตรัง')}`;
 
-  const currentStatus = isLoan ? ln?.status : pet?.status;
+  const currentStatus = isLtcQueue ? 'assigned' : isLoan ? ln?.status : pet?.status;
 
   const getCurrentStageNumber = () => {
+    if (lastUpdatedResult?.actionState === 'completed') return 3;
     if (
       currentStatus === 'resolved' ||
       currentStatus === 'borrowed' ||
@@ -291,7 +383,9 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
       if (activeActionTab === 'accepted_en_route') {
         finalNote =
           finalNote ||
-          `รับออเดอร์งานแล้ว กำลังเดินทางไปพื้นที่หน้างาน โดย ${officerName}`;
+          (isLtcQueue
+            ? `รับคิวจัดส่งพัสดุ LTC ทั้ง ${ltcQ?.stops.length || 0} จุดแล้ว กำลังออกเดินทางส่งมอบตามลำดับคิว โดย ${officerName}`
+            : `รับออเดอร์งานแล้ว กำลังเดินทางไปพื้นที่หน้างาน โดย ${officerName}`);
       } else if (activeActionTab === 'completed') {
         const receiptInfo =
           isSewage && receiptNo
@@ -299,7 +393,9 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
             : '';
         finalNote =
           finalNote ||
-          (isLoan
+          (isLtcQueue
+            ? `ดำเนินการส่งมอบพัสดุดูแลผู้มีภาวะพึ่งพิง (LTC) ครบทั้ง ${ltcQ?.stops.length || 0} คิวเรียบร้อยแล้ว โดย ${officerName}`
+            : isLoan
             ? `ส่งมอบและติดตั้งอุปกรณ์การแพทย์ให้ผู้ป่วยเรียบร้อยแล้ว โดย ${officerName}`
             : isSewage
             ? `ดำเนินการสูบสิ่งปฏิกูลหน้างานเรียบร้อยแล้ว${receiptInfo} โดย ${officerName}`
@@ -308,7 +404,23 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
         finalNote = `[ติดขัดปัญหาหน้างาน: ${issueReason}] ${finalNote || 'ไม่สามารถดำเนินการให้แล้วเสร็จได้ รอประสานงานแก้ไข'}`;
       }
 
-      if (isLoan && ln) {
+      if (isLtcQueue && ltcQ) {
+        const notifyPayload = buildFieldJobStatusUpdateNotificationPayload({
+          jobType: 'ltc_queue',
+          actionState: activeActionTab,
+          officerName,
+          actionNote: finalNote,
+          issueReason: activeActionTab === 'issue_blocked' ? issueReason : undefined,
+          ltcQueue: ltcQ,
+          signers: signerSettings,
+        });
+        await dispatchNotification(notifyPayload, undefined, gasUrl);
+        setLastUpdatedResult({
+          actionState: activeActionTab,
+          message: finalNote,
+          attachment: notifyPayload.attachments?.[0],
+        });
+      } else if (isLoan && ln) {
         const nextLoanStatus: EquipmentLoan['status'] =
           activeActionTab === 'completed'
             ? 'borrowed'
@@ -634,7 +746,7 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
               </div>
             </div>
 
-            {/* Direct Navigation & Call Buttons for Field Officer */}
+              {/* Direct Navigation & Call Buttons for Field Officer */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
               <a
                 href={googleMapsUrl}
@@ -643,7 +755,11 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
                 className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition-all"
               >
                 <Navigation className="w-4 h-4" />
-                <span>📍 เปิด Google Maps นำทางไปหน้างาน</span>
+                <span>
+                  {isLtcQueue
+                    ? `🗺️ นำทาง Google Maps ครบทุกคน (${ltcQ?.stops.length || 0} คิว)`
+                    : '📍 เปิด Google Maps นำทางไปหน้างาน'}
+                </span>
               </a>
 
               {cleanPhone.length >= 9 && (
@@ -656,6 +772,44 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
                 </a>
               )}
             </div>
+
+            {/* If LTC Queue Job: Show Complete Ordered Queue List with Individual Navigation */}
+            {isLtcQueue && ltcQ && ltcQ.stops.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+                <div className="text-xs font-extrabold text-teal-900">
+                  📋 รายชื่อผู้รับมอบพัสดุ LTC เรียงตามคิว (ครบทั้ง {ltcQ.stops.length} ราย):
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {ltcQ.stops.map((st) => (
+                    <div
+                      key={st.stopId}
+                      className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-black text-slate-900">
+                          คิวที่ #{st.queueOrder}: {st.patientName}{' '}
+                          <span className="text-[11px] font-bold text-rose-700">({st.adlCategory})</span>
+                        </div>
+                        <div className="text-[11px] text-slate-600">
+                          หมู่ที่ {st.moo} {st.village} • {st.address} {st.phone ? `• โทร: ${st.phone}` : ''}
+                        </div>
+                        <div className="text-[11px] font-bold text-teal-800 mt-0.5">
+                          📦 {st.itemsText}
+                        </div>
+                      </div>
+                      <a
+                        href={st.individualMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shrink-0"
+                      >
+                        🚗 นำทาง #{st.queueOrder}
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Field Officer Action Selector (3 Big Buttons) */}

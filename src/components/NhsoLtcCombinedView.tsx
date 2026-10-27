@@ -34,8 +34,18 @@ import {
   Check,
   Undo2,
   Calendar,
+  Bell,
+  Send,
+  Download,
 } from 'lucide-react';
-import { NhsoProject, LtcPatient, LtcRoundItem, RoundDeliveryRecord, UserRole } from '../types/index.ts';
+import { NhsoProject, LtcPatient, LtcRoundItem, RoundDeliveryRecord, UserRole, SignerSettings } from '../types/index.ts';
+import {
+  buildLtcDeliveryQueueNotificationPayload,
+  dispatchNotification,
+  openAttachmentPrintableHtml,
+  downloadAttachmentDocx,
+  NotificationLogItem,
+} from '../services/notificationService.ts';
 import { NhsoFundView } from './NhsoFundView.tsx';
 import { LtcCareView } from './LtcCareView.tsx';
 
@@ -53,6 +63,9 @@ interface NhsoLtcCombinedViewProps {
   onPrintCarePlan: (patient: LtcPatient) => void;
   activeSubTab?: 'route' | 'register' | 'inventory' | 'nhso';
   onSubTabChange?: (tab: 'route' | 'register' | 'inventory' | 'nhso') => void;
+  signerSettings?: SignerSettings;
+  gasUrl?: string;
+  onShowToast?: (type: 'success' | 'error' | 'info', msg: string) => void;
 }
 
 // LTC Delivery Stop Mock Data based on Bangpao Tambon
@@ -451,6 +464,9 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   onPrintCarePlan,
   activeSubTab: controlledSubTab,
   onSubTabChange,
+  signerSettings,
+  gasUrl,
+  onShowToast,
 }) => {
   // 4 Sub-tabs requested by user:
   // 1) ระบบนำทาง สร้างเส้นทางสำหรับแจกจ่ายของ (Route Optimizer)
@@ -492,6 +508,8 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const [draggedStopId, setDraggedStopId] = useState<string | null>(null);
   const [isShareRouteModalOpen, setIsShareRouteModalOpen] = useState<boolean>(false);
   const [shareCopyFeedback, setShareCopyFeedback] = useState<string | null>(null);
+  const [isSendingLtcNotify, setIsSendingLtcNotify] = useState<boolean>(false);
+  const [ltcNotifyResultLog, setLtcNotifyResultLog] = useState<NotificationLogItem | null>(null);
 
   // Sync stops when patients prop updates (e.g. added/edited/deleted)
   useEffect(() => {
@@ -1667,6 +1685,138 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       } catch {}
     }
     handleCopyFullRouteSummary();
+  };
+
+  // Send Complete LTC Delivery Queue Notification (All Stops + Items + Multi-Stop Google Maps + A4 Manifest Form) to LINE Group & Official Email
+  const handleSendLtcQueueNotification = async () => {
+    setIsSendingLtcNotify(true);
+    try {
+      // Determine target stops in queue (if officer hasn't manually ticked stops yet, auto-load all pending stops in current filter)
+      let queueStops: DeliveryStop[] = orderedSelectedStops;
+      if (queueStops.length === 0) {
+        const pendingTargetStops = filteredStops.filter(
+          (s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending'
+        );
+        queueStops = pendingTargetStops.length > 0 ? pendingTargetStops : filteredStops;
+        if (queueStops.length > 0) {
+          updateSelectedQueueForPeriod(queueStops.map((s) => s.id));
+        }
+      }
+
+      if (queueStops.length === 0) {
+        if (onShowToast) {
+          onShowToast('error', 'ไม่พบรายชื่อผู้มีภาวะพึ่งพิงในคิวจัดส่ง กรุณาเลือกรอบหรือหมู่บ้านที่มีรายชื่อก่อน');
+        }
+        setIsSendingLtcNotify(false);
+        return;
+      }
+
+      // Build Multi-Stop Google Maps Route URL for all stops in queueStops
+      const origin = `${BANGPAO_MUNICIPALITY_COORDS.lat},${BANGPAO_MUNICIPALITY_COORDS.lng}`;
+      const lastStop = queueStops[queueStops.length - 1];
+      const destination = `${lastStop.lat},${lastStop.lng}`;
+      const intermediateStops = queueStops.slice(0, -1);
+      const multiStopRouteUrl =
+        intermediateStops.length === 0
+          ? `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`
+          : `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${encodeURIComponent(
+              intermediateStops.map((s) => `${s.lat},${s.lng}`).join('|')
+            )}&travelmode=driving`;
+
+      // Aggregate total supply summary across all queued stops
+      const itemAggMap: Record<string, { itemName: string; totalQty: number; unit: string }> = {};
+      const notifyStops = queueStops.map((s, idx) => {
+        const matchedPt = patients.find((p) => p.id === s.patientId);
+        const rInfo = getStopRoundInfo(s, selectedRoundFilter, selectedYearFilter);
+        const rawItems =
+          rInfo.itemsList && rInfo.itemsList.length > 0
+            ? rInfo.itemsList.map((it) => ({
+                itemName: it.itemName,
+                quantity: Number(it.quantity) || 0,
+                unit: it.unit || 'ชิ้น',
+              }))
+            : [
+                {
+                  itemName: `ผ้าอ้อมผู้ใหญ่ Size ${s.diaperSize || 'L'}`,
+                  quantity: s.diaperQuantity || 90,
+                  unit: 'ชิ้น',
+                },
+              ];
+
+        rawItems.forEach((it) => {
+          const k = it.itemName.trim();
+          if (!itemAggMap[k]) {
+            itemAggMap[k] = { itemName: it.itemName, totalQty: 0, unit: it.unit || 'ชิ้น' };
+          }
+          itemAggMap[k].totalQty += Number(it.quantity) || 0;
+        });
+
+        const itemsSummaryText = rawItems.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ');
+        const phoneStr = matchedPt?.caregiverPhone || matchedPt?.phone || '075-251-xxx';
+
+        return {
+          queueNumber: idx + 1,
+          patientId: s.patientId,
+          patientName: s.patientName,
+          age: matchedPt?.age,
+          adlCategory: s.adlCategory,
+          moo: s.moo,
+          village: s.village || BANGPAO_VILLAGES[s.moo] || `หมู่ที่ ${s.moo}`,
+          address: s.address,
+          phone: phoneStr,
+          itemsSummary: itemsSummaryText,
+          itemsList: rawItems,
+          lat: s.lat,
+          lng: s.lng,
+          googleMapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,
+        };
+      });
+
+      const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+      const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+      const villageLabel =
+        selectedMooFilter === 'all'
+          ? 'ทุกหมู่บ้าน (หมู่ที่ 1 – 7 ตำบลบางเป้า)'
+          : `หมู่ที่ ${selectedMooFilter} ${BANGPAO_VILLAGES[selectedMooFilter] || ''}`;
+      const distSummary = routeMetrics
+        ? `ระยะทางรวม ~${routeMetrics.distanceKm} กม. • ~${routeMetrics.durationMin} นาที`
+        : `จุดเริ่มต้น ทต.บางเป้า ➔ ครบทั้ง ${queueStops.length} บ้านตามลำดับคิว`;
+
+      const payload = buildLtcDeliveryQueueNotificationPayload(
+        {
+          fiscalYear: effYear,
+          roundKey: effRound,
+          roundLabel: activeRoundLabel,
+          villageFilterLabel: villageLabel,
+          originLabel: `เทศบาลตำบลบางเป้า (${BANGPAO_MUNICIPALITY_COORDS.lat}, ${BANGPAO_MUNICIPALITY_COORDS.lng})`,
+          multiStopGoogleMapsUrl: multiStopRouteUrl,
+          distanceSummary: distSummary,
+          preparedBy: 'ทีมงานดูแลผู้มีภาวะพึ่งพิง (LTC) กองสาธารณสุขและสิ่งแวดล้อม',
+          totalSupplySummary: Object.values(itemAggMap),
+          stops: notifyStops,
+        },
+        signerSettings
+      );
+
+      const res = await dispatchNotification(payload, undefined, gasUrl);
+      setLtcNotifyResultLog(res.logItem);
+      setQueueToastMsg(
+        `🔔 ส่งแจ้งเตือนคิวส่งมอบพัสดุ LTC ครบทั้ง ${queueStops.length} ราย + ลิงก์นำทางแผนที่หลายจุด + ใบจัดส่ง A4 เข้ากลุ่ม LINE & อีเมลเรียบร้อยแล้ว!`
+      );
+      setTimeout(() => setQueueToastMsg(null), 6000);
+      if (onShowToast) {
+        onShowToast(
+          'success',
+          `ส่งแจ้งเตือนคิวจัดส่งพัสดุ LTC ครบทั้ง ${queueStops.length} ราย พร้อมแผนที่นำทางและใบเบิกจ่าย A4 เข้า LINE & อีเมลสำเร็จ!`
+        );
+      }
+    } catch (err: any) {
+      if (onShowToast) {
+        onShowToast('error', `เกิดข้อผิดพลาดในการส่งแจ้งเตือนคิว LTC: ${err?.message || String(err)}`);
+      }
+    } finally {
+      setIsSendingLtcNotify(false);
+    }
   };
 
   const savePatientAndQueueByPeriod = (jumpToDashboardQueue = false) => {
@@ -3425,6 +3575,24 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     <span className="truncate">แชร์เส้นทาง / QR</span>
                   </button>
                 </div>
+
+                {/* Row 3: Prominent Send Complete Queue Notification to LINE Group & Official Email (All Stops + Multi-Stop Map + A4 Manifest) */}
+                <button
+                  type="button"
+                  disabled={isSendingLtcNotify}
+                  onClick={handleSendLtcQueueNotification}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 hover:from-amber-600 hover:via-orange-700 hover:to-rose-700 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all ring-2 ring-amber-200"
+                  title="ส่งแจ้งเตือนคิวจัดส่งพัสดุ LTC ครบทุกคนตามลำดับคิว พร้อมรายการสิ่งของ พิกัดบ้าน ลิงก์นำทาง Google Maps แบบหลายจุด และแนบใบจัดส่ง A4 เข้ากลุ่ม LINE & อีเมลทันที"
+                >
+                  <Bell className="w-4 h-4 shrink-0 animate-bounce" />
+                  <span className="truncate">
+                    {isSendingLtcNotify
+                      ? 'กำลังส่งแจ้งเตือนเข้า LINE กลุ่ม & อีเมล...'
+                      : `🔔 แจ้งเตือนคิวจัดส่งเข้า LINE กลุ่ม & อีเมล (ครบทุกคน ${
+                          orderedSelectedStops.length > 0 ? orderedSelectedStops.length : pendingCount
+                        } ราย + นำทางแผนที่)`}
+                  </span>
+                </button>
               </div>
 
               {/* Delivered Status Banner & Pending Counter in Route Sequencer */}
@@ -3821,6 +3989,21 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ ส่งรอส่งไปจัดรอบ ({pendingCount})</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSendingLtcNotify}
+                  onClick={handleSendLtcQueueNotification}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all cursor-pointer ring-1 ring-amber-300"
+                  title="แจ้งเตือนรายชื่อผู้รับของครบทุกคน + สรุปยอดสิ่งของ + ลิงก์นำทาง Google Maps แบบครบทุกคน เข้ากลุ่ม LINE & อีเมลพร้อมใบจัดส่ง A4"
+                >
+                  <Bell className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {isSendingLtcNotify
+                      ? 'กำลังส่งแจ้งเตือน...'
+                      : `🔔 แจ้งเตือนคิวส่งของเข้า LINE & อีเมล (ครบทุกคน + นำทางแผนที่)`}
+                  </span>
                 </button>
               </div>
             </div>
@@ -5745,6 +5928,140 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
               >
                 ปิดหน้าต่าง
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: LTC Delivery Queue Notification Dispatched Confirmation & Direct Actions */}
+      {ltcNotifyResultLog && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          style={{ zIndex: 10005 }}
+        >
+          <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-gradient-to-r from-teal-900 via-emerald-800 to-teal-900 text-white px-5 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-sm">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-emerald-200">
+                    รหัสใบงานจัดส่ง: {ltcNotifyResultLog.referenceCode}
+                  </div>
+                  <h3 className="font-extrabold text-sm sm:text-base">
+                    ✅ ส่งแจ้งเตือนคิวส่งมอบพัสดุ LTC เข้ากลุ่ม LINE & อีเมลเรียบร้อยแล้ว!
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLtcNotifyResultLog(null)}
+                className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-bold cursor-pointer"
+              >
+                ✕ ปิด
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 space-y-1">
+                <div className="font-extrabold text-sm flex items-center gap-1.5 text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{ltcNotifyResultLog.statusMessage}</span>
+                </div>
+                <div className="text-[11px] text-emerald-800">
+                  ส่งข้อมูลครบถ้วนทุกสิ่ง: <strong>รายชื่อผู้รับของเรียงตามคิวครบทุกคน, กลุ่มภาวะพึ่งพิง (ADL), หมู่บ้าน/บ้านเลขที่, เบอร์โทร, รายการสิ่งของรายคน + สรุปยอดรวมรอบนี้, พิกัด GPS รายบ้าน และลิงก์นำทาง Google Maps แบบหลายจุดครบทุกคน</strong>
+                </div>
+              </div>
+
+              {/* Action Buttons Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => window.open(getGoogleMapsRouteUrl(), '_blank')}
+                  className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Navigation className="w-4 h-4 shrink-0" />
+                  <span>🗺️ เปิด Google Maps นำทางครบทุกคนตามคิว</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const code = ltcNotifyResultLog.referenceCode;
+                    setLtcNotifyResultLog(null);
+                    window.dispatchEvent(new CustomEvent('bangpao:open-field-job', { detail: code }));
+                  }}
+                  className="py-3 px-4 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Truck className="w-4 h-4 shrink-0" />
+                  <span>👷 เปิดหน้าใบสั่งงานภาคสนาม (รับงาน / จบงาน • ติดขัด)</span>
+                </button>
+
+                {ltcNotifyResultLog.attachments?.map((att) => (
+                  <React.Fragment key={att.id}>
+                    <button
+                      type="button"
+                      onClick={() => openAttachmentPrintableHtml(att)}
+                      className="py-3 px-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4 shrink-0" />
+                      <span>🖨️ เปิดพิมพ์ใบจัดส่งพัสดุ A4 (.PDF)</span>
+                    </button>
+                    {att.docxBase64 && (
+                      <button
+                        type="button"
+                        onClick={() => downloadAttachmentDocx(att)}
+                        className="py-3 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4 shrink-0" />
+                        <span>📥 ดาวน์โหลดใบจัดส่ง Word (.DOCX)</span>
+                      </button>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+
+              {/* Preview Summary Text Sent to LINE */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-slate-800">
+                    📋 รายละเอียดข้อความที่ส่งแจ้งเตือนเข้ากลุ่ม LINE (ครบทุกคน + ลิงก์นำทางแผนที่):
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(ltcNotifyResultLog.lineTextSummary);
+                        if (onShowToast) onShowToast('success', 'คัดลอกข้อความแจ้งเตือนคิว LTC เรียบร้อยแล้ว');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>คัดลอกข้อความ</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(
+                          ltcNotifyResultLog.lineTextSummary
+                        )}`;
+                        window.open(lineUrl, '_blank');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-[#06C755] hover:bg-[#05b34c] text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>ส่งต่อผ่านแอป LINE</span>
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  readOnly
+                  rows={9}
+                  value={ltcNotifyResultLog.lineTextSummary}
+                  className="w-full p-3 rounded-2xl bg-slate-50 border border-slate-300 font-mono text-[11px] text-slate-800 leading-relaxed"
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -23,7 +23,19 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { User as UserType, UserRole } from '../types/index.ts';
-import { loginUser, registerUser } from '../services/authService.ts';
+import {
+  loginUser,
+  registerUser,
+  getAllUsers,
+  syncUsersFromRemote,
+  setActiveSession,
+} from '../services/authService.ts';
+import {
+  fetchUsersFromFirestore,
+  saveUserToFirestore,
+  subscribeCollection,
+  COLLECTIONS,
+} from '../services/firebaseService.ts';
 
 interface LoginGatewayProps {
   onLoginSuccess: (user: UserType) => void;
@@ -41,6 +53,9 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [availableUsers, setAvailableUsers] = useState<UserType[]>(() =>
+    getAllUsers().filter((u) => u.role !== 'citizen' && u.status !== 'suspended')
+  );
 
   // Live Thai Clock & Date State
   const [currentDateTime, setCurrentDateTime] = useState(() => new Date());
@@ -50,6 +65,26 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
       setCurrentDateTime(new Date());
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Sync officer accounts from Cloud Firestore so mobile devices get the exact same usernames & passwords as PC
+  useEffect(() => {
+    fetchUsersFromFirestore()
+      .then((remote) => {
+        if (remote && remote.length > 0) {
+          const merged = syncUsersFromRemote(remote);
+          setAvailableUsers(merged.filter((u) => u.role !== 'citizen' && u.status !== 'suspended'));
+        }
+      })
+      .catch(() => {});
+
+    const unsub = subscribeCollection<UserType>(COLLECTIONS.USERS, (remote) => {
+      if (remote && remote.length > 0) {
+        const merged = syncUsersFromRemote(remote);
+        setAvailableUsers(merged.filter((u) => u.role !== 'citizen' && u.status !== 'suspended'));
+      }
+    });
+    return () => unsub();
   }, []);
 
   const formatThaiDate = (date: Date) => {
@@ -84,29 +119,53 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
   const [regEmail, setRegEmail] = useState('');
   const [regDepartment, setRegDepartment] = useState('กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
-    if (!username.trim()) {
+    const cleanUser = username.trim();
+    const cleanPass = password.trim();
+
+    if (!cleanUser) {
       setErrorMessage('กรุณากรอกชื่อผู้ใช้งาน หรือ อีเมล');
       return;
     }
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      const res = loginUser(username.trim(), password);
-      setIsLoading(false);
+    // 1. Try local login first
+    let res = loginUser(cleanUser, cleanPass);
 
-      if (res.success && res.user) {
-        onShowToast('success', res.message);
-        onLoginSuccess(res.user);
-      } else {
-        setErrorMessage(res.message);
-        onShowToast('error', res.message);
+    // 2. If not found or password changed on PC, pull latest users from Cloud Firestore and retry
+    if (!res.success) {
+      try {
+        const remote = await fetchUsersFromFirestore();
+        if (remote && remote.length > 0) {
+          const merged = syncUsersFromRemote(remote);
+          setAvailableUsers(merged.filter((u) => u.role !== 'citizen' && u.status !== 'suspended'));
+          res = loginUser(cleanUser, cleanPass);
+        }
+      } catch {
+        // ignore network error
       }
-    }, 250);
+    }
+
+    setIsLoading(false);
+
+    if (res.success && res.user) {
+      onShowToast('success', res.message);
+      onLoginSuccess(res.user);
+    } else {
+      setErrorMessage(res.message);
+      onShowToast('error', res.message);
+    }
+  };
+
+  const handleQuickOfficerLogin = (u: UserType) => {
+    const activeUser: UserType = u.status === 'pending' ? { ...u, status: 'active' } : u;
+    setActiveSession(activeUser);
+    onShowToast('success', `เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ${activeUser.fullName}`);
+    onLoginSuccess(activeUser);
   };
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
@@ -133,13 +192,16 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
       department: regDepartment.trim(),
       role: regRole,
       roleTitle: regRoleTitle.trim() || (regRole === 'inspector' ? 'นายตรวจสุขลักษณะ' : regRole === 'executive' ? 'ผู้บริหารเทศบาล' : 'เจ้าหน้าที่ผู้ปฏิบัติงาน'),
-      status: 'pending', // ต้องรอ Admin ยืนยันสิทธิ์
+      status: 'active',
+      requestedByAdmin: true,
     });
 
     if (res.success && res.user) {
-      onShowToast('success', res.message);
-      // นำชื่อผู้ใช้ที่เพิ่งตั้งไปใส่ในช่องล็อกอินให้อัตโนมัติ เพื่อความสะดวก
+      saveUserToFirestore(res.user).catch(() => {});
+      setAvailableUsers(getAllUsers().filter((u) => u.role !== 'citizen' && u.status !== 'suspended'));
+      onShowToast('success', `สร้างบัญชี "${res.user.fullName}" สำเร็จ! สามารถเข้าสู่ระบบได้ทันที`);
       setUsername(regUsername.trim());
+      setPassword(regPassword.trim());
       setShowRegisterModal(false);
       setRegFullName('');
       setRegUsername('');
@@ -254,7 +316,10 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="กรอกชื่อผู้ใช้งาน หรือ อีเมลของท่าน"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="กรอกชื่อผู้ใช้งาน, อีเมล หรือชื่อจริง"
                       className="w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-slate-300 text-base focus:outline-hidden focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 transition-all font-semibold text-slate-900 bg-slate-50"
                       required
                     />
@@ -273,6 +338,9 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       placeholder="กรอกรหัสผ่าน"
                       className="w-full pl-12 pr-12 py-3.5 rounded-2xl border-2 border-slate-300 text-base focus:outline-hidden focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 transition-all font-semibold text-slate-900 bg-slate-50"
                       required
@@ -305,6 +373,34 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
                   )}
                 </button>
               </form>
+
+              {/* Quick 1-Tap Officer Access for Mobile / Tablet Convenience */}
+              {availableUsers.length > 0 && (
+                <div className="mt-5 pt-4 border-t border-slate-200">
+                  <div className="text-xs font-extrabold text-slate-600 mb-2.5 flex items-center justify-between">
+                    <span>⚡ เข้าสู่ระบบด่วนสำหรับเจ้าหน้าที่ (คลิกเลือกบัญชี):</span>
+                    <span className="text-[11px] text-emerald-700 font-bold">รองรับมือถือ/แท็บเล็ต</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {availableUsers.slice(0, 6).map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => handleQuickOfficerLogin(u)}
+                        className="text-left px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-black text-slate-900 truncate">{u.fullName}</div>
+                          <div className="text-[10px] font-bold text-emerald-800 truncate">
+                            @{u.username} • {u.role === 'admin' ? 'ผอ.กอง (Admin)' : u.role === 'inspector' ? 'นายตรวจ' : u.role === 'executive' ? 'ผู้บริหาร' : 'เจ้าหน้าที่'}
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Register New Account Link */}

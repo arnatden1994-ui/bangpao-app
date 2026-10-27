@@ -28,6 +28,7 @@ import {
   getRolePermissions,
   getActiveSession,
   setActiveSession,
+  syncUsersFromRemote,
 } from './services/authService.ts';
 import {
   getStoredConfig,
@@ -454,6 +455,9 @@ export default function App() {
     const unsubLtc = subscribeCollection<LtcPatient>(COLLECTIONS.LTC, (items) => {
       if (items && items.length > 0) setLtcPatients(items);
     });
+    const unsubUsers = subscribeCollection<User>(COLLECTIONS.USERS, (items) => {
+      if (items && items.length > 0) syncUsersFromRemote(items);
+    });
 
     return () => {
 unsubLicenses();
@@ -465,6 +469,47 @@ unsubLicenses();
       unsubLoans();
       unsubNhso();
       unsubLtc();
+      unsubUsers();
+    };
+  }, []);
+
+
+  // Global Field Job (?job=...) URL & In-App Click Interceptor
+  useEffect(() => {
+    const handleCustomJobOpen = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail === 'string') {
+        setActiveFieldJobCode(detail);
+      }
+    };
+    const handlePopState = () => {
+      const j = new URLSearchParams(window.location.search).get('job');
+      setActiveFieldJobCode(j);
+    };
+    const handleDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const anchor = target?.closest?.('a') as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') || '';
+      if (href.includes('?job=') || href.includes('&job=')) {
+        try {
+          const urlObj = new URL(href, window.location.origin);
+          const jobParam = urlObj.searchParams.get('job');
+          if (jobParam) {
+            e.preventDefault();
+            e.stopPropagation();
+            setActiveFieldJobCode(jobParam);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('bangpao:open-field-job', handleCustomJobOpen);
+    window.addEventListener('popstate', handlePopState);
+    document.addEventListener('click', handleDocClick, true);
+    return () => {
+      window.removeEventListener('bangpao:open-field-job', handleCustomJobOpen);
+      window.removeEventListener('popstate', handlePopState);
+      document.removeEventListener('click', handleDocClick, true);
     };
   }, []);
 
@@ -864,6 +909,55 @@ unsubLicenses();
     ltcPatients: ltcPatients.length,
   };
 
+  // 0. If Field Officer opened a Job Action Link (?job=...), show FieldJobActionView directly without requiring login
+  if (activeFieldJobCode) {
+    return (
+      <div className="relative min-h-screen">
+        {toast && (
+          <div
+            className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl border text-sm animate-in slide-in-from-bottom-5 duration-200 ${
+              toast.type === 'success'
+                ? 'bg-emerald-900 border-emerald-500 text-emerald-100'
+                : toast.type === 'error'
+                ? 'bg-rose-900 border-rose-500 text-rose-100'
+                : 'bg-teal-900 border-teal-500 text-teal-100'
+            }`}
+          >
+            <span className="font-medium">{toast.message}</span>
+          </div>
+        )}
+        <FieldJobActionView
+          initialJobCode={activeFieldJobCode}
+          petitions={petitions}
+          loans={loans}
+          signerSettings={signerSettings}
+          gasUrl={config.appsScriptUrl}
+          onUpdatePetition={(updatedP) => {
+            setPetitions((prev) => {
+              const exists = prev.some((p) => p.id === updatedP.id);
+              return exists ? prev.map((p) => (p.id === updatedP.id ? updatedP : p)) : [updatedP, ...prev];
+            });
+            saveToFirestore(COLLECTIONS.PETITIONS, updatedP).catch(() => {});
+          }}
+          onUpdateLoan={(updatedL) => {
+            setLoans((prev) => {
+              const exists = prev.some((l) => l.id === updatedL.id);
+              return exists ? prev.map((l) => (l.id === updatedL.id ? updatedL : l)) : [updatedL, ...prev];
+            });
+            saveToFirestore(COLLECTIONS.LOANS, updatedL).catch(() => {});
+          }}
+          onClose={() => {
+            setActiveFieldJobCode(null);
+            if (typeof window !== 'undefined' && window.location.search.includes('job=')) {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          }}
+          onShowToast={showToast}
+        />
+      </div>
+    );
+  }
+
   // 1. If not authenticated, require identity verification via LoginGateway
   if (!currentUser) {
     return (
@@ -1088,6 +1182,9 @@ unsubLicenses();
             {(currentTab === 'nhso_ltc' || currentTab === 'ltc') && (
               <NhsoLtcCombinedView
                 projects={nhsoProjects}
+                signerSettings={signerSettings}
+                gasUrl={config.appsScriptUrl}
+                onShowToast={showToast}
                 patients={ltcPatients}
                 userRole={currentUser.role}
                 activeSubTab={nhsoLtcSubTab}

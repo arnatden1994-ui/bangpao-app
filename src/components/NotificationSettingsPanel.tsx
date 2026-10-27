@@ -34,6 +34,7 @@ import {
   buildPetitionNotificationPayload,
   buildEquipmentLoanNotificationPayload,
   buildCalendarNotificationPayload,
+  buildLtcDeliveryQueueNotificationPayload,
   dispatchNotification,
   downloadAttachmentDocx,
   openAttachmentPrintableHtml,
@@ -69,7 +70,12 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
   };
 
   const handleSendTest = async (
-    testType: 'general_petition' | 'sewage_petition' | 'medical_loan' | 'calendar_event'
+    testType:
+      | 'general_petition'
+      | 'sewage_petition'
+      | 'medical_loan'
+      | 'calendar_event'
+      | 'ltc_delivery_queue'
   ) => {
     setIsSendingTest(testType);
     saveStoredNotificationSettings(settings);
@@ -150,6 +156,122 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
           longitude: 99.529104,
         };
         payload = buildEquipmentLoanNotificationPayload(sampleLoan, signerSettings);
+      } else if (testType === 'ltc_delivery_queue') {
+        const multiStopRouteUrl =
+          'https://www.google.com/maps/dir/?api=1&origin=7.402139,99.527028&destination=7.429812,99.526105&waypoints=' +
+          encodeURIComponent(
+            '7.429578,99.525737|7.421512,99.529104|7.416288,99.519842|7.411645,99.531215'
+          ) +
+          '&travelmode=driving';
+        payload = buildLtcDeliveryQueueNotificationPayload(
+          {
+            fiscalYear: '2569',
+            roundKey: '1',
+            roundLabel: 'วงรอบที่ 1 (ต.ค. – มี.ค.)',
+            villageFilterLabel: 'ทุกหมู่บ้าน (หมู่ที่ 1 – 7)',
+            originLabel: 'เทศบาลตำบลบางเป้า (7.402139, 99.527028)',
+            multiStopGoogleMapsUrl: multiStopRouteUrl,
+            distanceSummary: 'ระยะทางรวม ~8.4 กม. • ~18 นาที',
+            preparedBy: 'ทีมงานดูแลผู้มีภาวะพึ่งพิง (LTC) กองสาธารณสุขและสิ่งแวดล้อม',
+            totalSupplySummary: [
+              { itemName: 'นมผงสุขภาพสำหรับผู้สูงอายุ', totalQty: 8, unit: 'กระป๋อง' },
+              { itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', totalQty: 690, unit: 'ชิ้น' },
+              { itemName: 'ผ้าอ้อมผู้ใหญ่ (L)', totalQty: 310, unit: 'ชิ้น' },
+            ],
+            stops: [
+              {
+                queueNumber: 1,
+                patientId: 'LTC-01',
+                patientName: 'นายสุนทร ซาพิมพ์',
+                age: 78,
+                adlCategory: 'ติดเตียง',
+                moo: '1',
+                village: 'บ้านชายวัด',
+                address: 'บ้านเลขที่ 11 หมู่ที่ 1 บ้านชายวัด ต.บางเป้า',
+                phone: '089-999-9999',
+                itemsSummary: 'นมผงสุขภาพสำหรับผู้สูงอายุ (4 กระป๋อง), ผ้าอ้อมผู้ใหญ่ (M) (160 ชิ้น)',
+                itemsList: [
+                  { itemName: 'นมผงสุขภาพสำหรับผู้สูงอายุ', quantity: 4, unit: 'กระป๋อง' },
+                  { itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', quantity: 160, unit: 'ชิ้น' },
+                ],
+                lat: 7.429578,
+                lng: 99.525737,
+                googleMapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=7.429578,99.525737',
+              },
+              {
+                queueNumber: 2,
+                patientId: 'LTC-02',
+                patientName: 'นายเรียบ ทองหมึก',
+                age: 82,
+                adlCategory: 'ติดเตียง',
+                moo: '2',
+                village: 'บ้านเกาะปอม',
+                address: 'บ้านเลขที่ 34 หมู่ที่ 2 บ้านเกาะปอม ต.บางเป้า',
+                phone: '088-999-9999',
+                itemsSummary: 'ผ้าอ้อมผู้ใหญ่ (L) (210 ชิ้น)',
+                itemsList: [{ itemName: 'ผ้าอ้อมผู้ใหญ่ (L)', quantity: 210, unit: 'ชิ้น' }],
+                lat: 7.421512,
+                lng: 99.529104,
+                googleMapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=7.421512,99.529104',
+              },
+              {
+                queueNumber: 3,
+                patientId: 'LTC-03',
+                patientName: 'นายชี แซ่จุ้ย',
+                age: 80,
+                adlCategory: 'ติดเตียง',
+                moo: '3',
+                village: 'บ้านตลาดใหม่',
+                address: 'บ้านเลขที่ 56 หมู่ที่ 3 บ้านตลาดใหม่ ต.บางเป้า',
+                phone: '095-454-4411',
+                itemsSummary: 'ผ้าอ้อมผู้ใหญ่ (M) (200 ชิ้น)',
+                itemsList: [{ itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', quantity: 200, unit: 'ชิ้น' }],
+                lat: 7.416288,
+                lng: 99.519842,
+                googleMapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=7.416288,99.519842',
+              },
+              {
+                queueNumber: 4,
+                patientId: 'LTC-04',
+                patientName: 'นางพริ้ง ดำหนูจันทร์',
+                age: 84,
+                adlCategory: 'ติดเตียง',
+                moo: '4',
+                village: 'บ้านแหลมม่วง',
+                address: 'บ้านเลขที่ 78 หมู่ที่ 4 บ้านแหลมม่วง ต.บางเป้า',
+                phone: '081-225-6520',
+                itemsSummary: 'ผ้าอ้อมผู้ใหญ่ (M) (160 ชิ้น), นมผงสุขภาพสำหรับผู้สูงอายุ (4 กระป๋อง)',
+                itemsList: [
+                  { itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', quantity: 160, unit: 'ชิ้น' },
+                  { itemName: 'นมผงสุขภาพสำหรับผู้สูงอายุ', quantity: 4, unit: 'กระป๋อง' },
+                ],
+                lat: 7.411645,
+                lng: 99.531215,
+                googleMapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=7.411645,99.531215',
+              },
+              {
+                queueNumber: 5,
+                patientId: 'LTC-05',
+                patientName: 'นางแดง อัตตศุภผลินทร์',
+                age: 79,
+                adlCategory: 'ติดเตียง',
+                moo: '1',
+                village: 'บ้านชายวัด',
+                address: 'บ้านเลขที่ 92 หมู่ที่ 1 บ้านชายวัด ต.บางเป้า',
+                phone: '089-999-9999',
+                itemsSummary: 'ผ้าอ้อมผู้ใหญ่ (M) (170 ชิ้น), ผ้าอ้อมผู้ใหญ่ (L) (100 ชิ้น)',
+                itemsList: [
+                  { itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', quantity: 170, unit: 'ชิ้น' },
+                  { itemName: 'ผ้าอ้อมผู้ใหญ่ (L)', quantity: 100, unit: 'ชิ้น' },
+                ],
+                lat: 7.429812,
+                lng: 99.526105,
+                googleMapsUrl: 'https://www.google.com/maps/dir/?api=1&destination=7.429812,99.526105',
+              },
+            ],
+          },
+          signerSettings
+        );
       } else {
         payload = buildCalendarNotificationPayload(
           [
@@ -245,7 +367,7 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
             <Send className="w-3.5 h-3.5" />
             <span>ทดสอบส่งแจ้งเตือนจริง + สร้างไฟล์แนบแบบฟอร์มราชการ A4 ทันที (คลิกเพื่อทดสอบและดูตัวอย่างไฟล์แนบ):</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2.5">
             <button
               type="button"
               disabled={!!isSendingTest}
@@ -571,6 +693,11 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
                   desc: 'แนบสัญญาให้ยืมอุปกรณ์ 2 หน้า A4',
                 },
                 {
+                  key: 'notifyOnLtcDeliveryQueue' as const,
+                  label: '🚑 จัดคิวส่งมอบพัสดุ สปสช. & LTC (ครบทุกคน)',
+                  desc: 'ส่งรายชื่อครบทุกคิว + สิ่งของ + นำทางแผนที่หลายจุด + ใบเบิกจ่าย A4',
+                },
+                {
                   key: 'notifyOnCalendarEvent' as const,
                   label: '📅 นัดหมายปฏิทิน & แผนปฏิบัติงาน',
                   desc: 'แนบตารางแผนปฏิบัติงาน A4',
@@ -711,10 +838,12 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
                   <button
                     type="button"
                     onClick={() => {
-                      window.location.href = `/?job=${encodeURIComponent(log.referenceCode)}`;
+                      window.dispatchEvent(
+                        new CustomEvent('bangpao:open-field-job', { detail: log.referenceCode })
+                      );
                     }}
                     className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
-                    title="เปิดหน้าใบสั่งงานภาคสนามสำหรับเจ้าหน้าที่ (รับงาน / จบงาน / แจ้งติดขัด)"
+                    title="เปิดหน้าใบสั่งงานภาคสนามสำหรับเจ้าหน้าที่ทันที (รับงาน / จบงาน / แจ้งติดขัด)"
                   >
                     <Truck className="w-3.5 h-3.5" />
                     <span>👷 รับงาน / แจ้งจบงาน • ติดขัด</span>
@@ -816,12 +945,19 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
                     </div>
 
                     <div className="p-3 pt-0 space-y-1.5">
-                      <a
-                        href={`/?job=${encodeURIComponent(previewLog.referenceCode)}`}
-                        className="block w-full py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-center font-extrabold text-xs shadow-sm transition-colors"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const code = previewLog.referenceCode;
+                          setPreviewLog(null);
+                          window.dispatchEvent(
+                            new CustomEvent('bangpao:open-field-job', { detail: code })
+                          );
+                        }}
+                        className="block w-full py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-center font-extrabold text-xs shadow-sm transition-colors cursor-pointer"
                       >
                         👷 รับงาน / แจ้งจบงาน • ติดขัด (คลิกทดสอบหน้างาน)
-                      </a>
+                      </button>
                       <div className="w-full py-2 rounded-xl bg-emerald-600 text-white text-center font-bold text-xs">
                         📍 เปิด Google Maps นำทาง
                       </div>
