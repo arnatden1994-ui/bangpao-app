@@ -65,13 +65,13 @@ interface VillagePreset {
 }
 
 const BANGPAO_VILLAGES: VillagePreset[] = [
-  { moo: '1', name: 'บ้านบางเป้า', landmark: 'ที่ทำการเทศบาล / วัดบางเป้า', lat: 7.3985, lng: 99.4920 },
-  { moo: '2', name: 'บ้านคลองชีล้อม', landmark: 'ชุมชนท่าเรือ / ร้านค้า', lat: 7.3912, lng: 99.4880 },
-  { moo: '3', name: 'บ้านปากปรน', landmark: 'ปากน้ำกันตัง / ชุมชนประมง', lat: 7.3820, lng: 99.4750 },
-  { moo: '4', name: 'บ้านทุ่งค่าย', landmark: 'ถนนสายหลัก / สวนยางพารา', lat: 7.4100, lng: 99.5050 },
-  { moo: '5', name: 'บ้านหลังควน', landmark: 'เชิงเขาควน / โรงเรียน', lat: 7.4050, lng: 99.4990 },
-  { moo: '6', name: 'บ้านแหลมมะขาม', landmark: 'คลองบางเป้า / มัสยิด', lat: 7.3750, lng: 99.4650 },
-  { moo: '7', name: 'บ้านควนโต๊ะพราน', landmark: 'เขตต่อเชื่อมตำบล / ศาลากลางหมู่บ้าน', lat: 7.4150, lng: 99.5120 },
+  { moo: '1', name: 'บ้านชายวัด', landmark: 'ที่ทำการเทศบาล / วัดบางเป้า', lat: 7.429578, lng: 99.525737 },
+  { moo: '2', name: 'บ้านเกาะปอม', landmark: 'ชุมชนบ้านเกาะปอม', lat: 7.421512, lng: 99.529104 },
+  { moo: '3', name: 'บ้านตลาดใหม่', landmark: 'ย่านการค้าตลาดใหม่ / ถนนสายหลัก', lat: 7.416288, lng: 99.519842 },
+  { moo: '4', name: 'บ้านแหลมม่วง', landmark: 'ชุมชนบ้านแหลมม่วง', lat: 7.411645, lng: 99.531215 },
+  { moo: '5', name: 'บ้านป่าเตียว', landmark: 'ชุมชนบ้านป่าเตียว', lat: 7.405812, lng: 99.524109 },
+  { moo: '6', name: 'บ้านควนทองสีห์', landmark: 'ชุมชนบ้านควนทองสีห์', lat: 7.419320, lng: 99.538410 },
+  { moo: '7', name: 'บ้านท่าเรือ', landmark: 'ชุมชนบ้านท่าเรือ / ปากน้ำ', lat: 7.402190, lng: 99.514280 },
 ];
 
 export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
@@ -155,9 +155,9 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
   const [submittedCode, setSubmittedCode] = useState<string | null>(null);
 
   // General Pinning State
-  const [pinLat, setPinLat] = useState<number>(7.3985);
-  const [pinLng, setPinLng] = useState<number>(99.4920);
-  const [pinLandmark, setPinLandmark] = useState<string>('บ้านบางเป้า (หมู่ 1)');
+  const [pinLat, setPinLat] = useState<number>(7.429578);
+  const [pinLng, setPinLng] = useState<number>(99.525737);
+  const [pinLandmark, setPinLandmark] = useState<string>('บ้านชายวัด (หมู่ 1)');
   const [isLocating, setIsLocating] = useState<boolean>(false);
 
   // ===================== MEDICAL EQUIPMENT LOAN FORM STATE =====================
@@ -181,9 +181,9 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
 
   const [medDeliveryAddress, setMedDeliveryAddress] = useState('');
   const [medMoo, setMedMoo] = useState('1');
-  const [medLandmark, setMedLandmark] = useState('บ้านบางเป้า (หมู่ 1)');
-  const [medPinLat, setMedPinLat] = useState<number>(7.3985);
-  const [medPinLng, setMedPinLng] = useState<number>(99.4920);
+  const [medLandmark, setMedLandmark] = useState('บ้านชายวัด (หมู่ 1)');
+  const [medPinLat, setMedPinLat] = useState<number>(7.429578);
+  const [medPinLng, setMedPinLng] = useState<number>(99.525737);
   const [isMedLocating, setIsMedLocating] = useState<boolean>(false);
 
   const [medDocPhoto1, setMedDocPhoto1] = useState<string | null>(null);
@@ -861,12 +861,22 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                       <label className="text-base font-bold text-slate-800 block mb-2">หมู่ที่ (ต.บางเป้า) *</label>
                       <select
                         value={petitionerMoo}
-                        onChange={(e) => setPetitionerMoo(e.target.value)}
-                        className="w-full p-3.5 rounded-2xl border-2 border-slate-300 text-base font-bold text-slate-900 bg-white"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPetitionerMoo(val);
+                          const found = BANGPAO_VILLAGES.find((v) => v.moo === val);
+                          if (found) {
+                            setPinLat(found.lat);
+                            setPinLng(found.lng);
+                            setPinLandmark('หมู่ ' + found.moo + ' ' + found.name + ' (' + found.landmark + ')');
+                          }
+                        }}
+                        className="w-full p-3.5 rounded-2xl border-2 border-slate-300 text-base font-bold text-slate-900 bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600"
                       >
+                        <option value="">-- เลือกโซน/หมู่บ้าน --</option>
                         {BANGPAO_VILLAGES.map((v) => (
                           <option key={v.moo} value={v.moo}>
-                            หมู่ {v.moo} {v.name}
+                            หมู่ที่ {v.moo} {v.name}
                           </option>
                         ))}
                       </select>
@@ -1076,12 +1086,22 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                       <label className="text-base font-bold text-slate-800 block mb-2">หมู่ที่ (ต.บางเป้า) *</label>
                       <select
                         value={petitionerMoo}
-                        onChange={(e) => setPetitionerMoo(e.target.value)}
-                        className="w-full p-3.5 rounded-2xl border-2 border-slate-300 text-base font-bold text-slate-900 bg-white"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPetitionerMoo(val);
+                          const found = BANGPAO_VILLAGES.find((v) => v.moo === val);
+                          if (found) {
+                            setPinLat(found.lat);
+                            setPinLng(found.lng);
+                            setPinLandmark('หมู่ ' + found.moo + ' ' + found.name + ' (' + found.landmark + ')');
+                          }
+                        }}
+                        className="w-full p-3.5 rounded-2xl border-2 border-slate-300 text-base font-bold text-slate-900 bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600"
                       >
+                        <option value="">-- เลือกโซน/หมู่บ้าน --</option>
                         {BANGPAO_VILLAGES.map((v) => (
                           <option key={v.moo} value={v.moo}>
-                            หมู่ {v.moo} {v.name}
+                            หมู่ที่ {v.moo} {v.name}
                           </option>
                         ))}
                       </select>
@@ -1769,12 +1789,22 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                           <label className="text-base font-bold text-slate-800 block mb-1">หมู่ที่ (ต.บางเป้า) *</label>
                           <select
                             value={medMoo}
-                            onChange={(e) => setMedMoo(e.target.value)}
-                            className="w-full p-3.5 rounded-2xl border-2 border-slate-300 text-base font-bold bg-white"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setMedMoo(val);
+                              const found = BANGPAO_VILLAGES.find((v) => v.moo === val);
+                              if (found) {
+                                setMedPinLat(found.lat);
+                                setMedPinLng(found.lng);
+                                setMedLandmark('หมู่ ' + found.moo + ' ' + found.name + ' (' + found.landmark + ')');
+                              }
+                            }}
+                            className="w-full p-3.5 rounded-2xl border-2 border-slate-300 text-base font-bold bg-white focus:border-teal-600 focus:ring-2 focus:ring-teal-600"
                           >
+                            <option value="">-- เลือกโซน/หมู่บ้าน --</option>
                             {BANGPAO_VILLAGES.map((v) => (
                               <option key={v.moo} value={v.moo}>
-                                หมู่ {v.moo} {v.name}
+                                หมู่ที่ {v.moo} {v.name}
                               </option>
                             ))}
                           </select>
