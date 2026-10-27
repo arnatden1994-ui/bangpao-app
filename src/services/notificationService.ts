@@ -280,6 +280,22 @@ function buildLineFlexBubble(params: {
   }));
 
   const footerButtons: any[] = [];
+  const jobActionUrl =
+    params.portalUrl ||
+    `https://bangpao-app.vercel.app/?job=${encodeURIComponent(params.referenceCode)}`;
+
+  footerButtons.push({
+    type: 'button',
+    style: 'primary',
+    color: '#1D4ED8',
+    height: 'sm',
+    action: {
+      type: 'uri',
+      label: '👷 รับงาน / แจ้งจบงาน • ติดขัด',
+      uri: jobActionUrl,
+    },
+  });
+
   if (params.googleMapsUrl) {
     footerButtons.push({
       type: 'button',
@@ -307,17 +323,6 @@ function buildLineFlexBubble(params: {
       },
     });
   }
-
-  footerButtons.push({
-    type: 'button',
-    style: 'link',
-    height: 'sm',
-    action: {
-      type: 'uri',
-      label: '📋 เปิดระบบกองสาธารณสุข ทต.บางเป้า',
-      uri: params.portalUrl || 'https://bangpao-app.vercel.app/',
-    },
-  });
 
   return {
     type: 'bubble',
@@ -508,6 +513,9 @@ function buildOfficialEmailHtml(params: {
 
       <!-- Action Buttons -->
       <div style="margin-top: 22px; text-align: center;">
+        <a href="https://bangpao-app.vercel.app/?job=${encodeURIComponent(params.referenceCode)}" target="_blank" style="display: inline-block; background-color: #1d4ed8; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 22px; border-radius: 10px; margin: 4px 6px;">
+          👷 รับงาน / รายงานผลหน้างาน (จบงาน • ติดขัด)
+        </a>
         ${
           params.googleMapsUrl
             ? `<a href="${params.googleMapsUrl}" target="_blank" style="display: inline-block; background-color: #059669; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 22px; border-radius: 10px; margin: 4px 6px;">
@@ -515,7 +523,7 @@ function buildOfficialEmailHtml(params: {
               </a>`
             : ''
         }
-        <a href="https://bangpao-app.vercel.app/" target="_blank" style="display: inline-block; background-color: #1e40af; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 22px; border-radius: 10px; margin: 4px 6px;">
+        <a href="https://bangpao-app.vercel.app/" target="_blank" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 12px 22px; border-radius: 10px; margin: 4px 6px;">
           📋 เปิดระบบบริหารงานกองสาธารณสุข ทต.บางเป้า
         </a>
       </div>
@@ -1049,6 +1057,124 @@ export function buildFollowUpNotificationPayload(
     emailSubject,
     emailHtmlBody,
     attachments,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 5. Build Field Officer Job Status Update Notification (รับงาน ➔ ออกปฏิบัติงาน ➔ จบงานสำเร็จ / ติดขัดปัญหาหน้างาน)
+ */
+export function buildFieldJobStatusUpdateNotificationPayload(params: {
+  jobType: 'petition' | 'loan';
+  actionState: 'accepted_en_route' | 'completed' | 'issue_blocked';
+  officerName: string;
+  actionNote: string;
+  issueReason?: string;
+  petition?: PublicPetition & Record<string, any>;
+  loan?: EquipmentLoan & Record<string, any>;
+  signers?: SignerSettings;
+}): NotificationPayload {
+  const signers = params.signers || DEFAULT_SIGNER_SETTINGS;
+  const isLoan = params.jobType === 'loan' && params.loan;
+  const basePayload = isLoan
+    ? buildEquipmentLoanNotificationPayload(params.loan!, signers)
+    : buildPetitionNotificationPayload(params.petition!, signers);
+
+  const refCode = basePayload.referenceCode;
+  const stateConfig =
+    params.actionState === 'completed'
+      ? {
+          badgeText: '✅ ปิดจบงานสำเร็จ (ดำเนินการเรียบร้อย)',
+          headerBgColor: '#059669',
+          accentColor: '#047857',
+          statusLabel: '✅ ดำเนินการเสร็จสิ้น / ปิดจบงาน',
+          titlePrefix: '✅ ปิดจบงานสำเร็จ:',
+        }
+      : params.actionState === 'issue_blocked'
+      ? {
+          badgeText: '⚠️ รายงานปัญหาติดขัดหน้างาน (ไม่สำเร็จ)',
+          headerBgColor: '#DC2626',
+          accentColor: '#B91C1C',
+          statusLabel: `⚠️ ติดขัดปัญหาหน้างาน (${params.issueReason || 'โปรดตรวจสอบ'})`,
+          titlePrefix: '⚠️ ติดขัดปัญหาหน้างาน:',
+        }
+      : {
+          badgeText: '🚚 เจ้าหน้าที่รับงานแล้ว (กำลังไปหน้างาน)',
+          headerBgColor: '#2563EB',
+          accentColor: '#1D4ED8',
+          statusLabel: '🚚 รับออเดอร์งานแล้ว / กำลังออกปฏิบัติงาน',
+          titlePrefix: '🚚 รับงานแล้ว:',
+        };
+
+  const updatedSummaryLines: { label: string; value: string }[] = [
+    { label: 'สถานะใบงานล่าสุด', value: stateConfig.statusLabel },
+    { label: 'เจ้าหน้าที่ผู้ปฏิบัติงาน', value: params.officerName || 'เจ้าหน้าที่กองสาธารณสุขฯ' },
+    ...(params.issueReason ? [{ label: 'สาเหตุที่ติดขัด', value: params.issueReason }] : []),
+    { label: 'รายงานผลหน้างาน', value: params.actionNote || '-' },
+    { label: 'เวลาที่อัปเดตสถานะ', value: formatThaiDateTime() },
+    ...basePayload.summaryLines.filter(
+      (r) =>
+        r.label === 'เลขรับคำร้อง' ||
+        r.label === 'รหัสคำขอยืม' ||
+        r.label === 'ผู้ยื่นคำร้อง' ||
+        r.label === 'ชื่อผู้ป่วย' ||
+        r.label === 'หมู่บ้าน / พื้นที่' ||
+        r.label === 'สถานที่จัดส่งอุปกรณ์' ||
+        r.label === 'เบอร์โทรศัพท์' ||
+        r.label === 'เบอร์โทรติดต่อนัดส่ง'
+    ),
+  ];
+
+  const title = `${stateConfig.titlePrefix} ${refCode}`;
+  const subtitle = `${basePayload.subtitle} • โดย ${params.officerName || 'เจ้าหน้าที่หน้างาน'}`;
+
+  const lineFlexContents = buildLineFlexBubble({
+    badgeText: stateConfig.badgeText,
+    headerBgColor: stateConfig.headerBgColor,
+    accentColor: stateConfig.accentColor,
+    referenceCode: refCode,
+    title,
+    subtitle,
+    summaryLines: updatedSummaryLines,
+    attachmentNames: basePayload.attachments.map((a) => a.fileNamePdf),
+    googleMapsUrl: basePayload.googleMapsUrl,
+    phone: basePayload.requesterPhone,
+  });
+
+  const emailSubject = `[อัปเดตสถานะหน้างาน ทต.บางเป้า] ${title} - ${basePayload.requesterName}`;
+  const emailHtmlBody = buildOfficialEmailHtml({
+    badgeText: stateConfig.badgeText,
+    headerBgColor: stateConfig.headerBgColor,
+    referenceCode: refCode,
+    title,
+    subtitle,
+    summaryLines: updatedSummaryLines,
+    attachments: basePayload.attachments,
+    googleMapsUrl: basePayload.googleMapsUrl,
+    requesterPhone: basePayload.requesterPhone,
+  });
+
+  const lineTextFallback = [
+    `${stateConfig.badgeText} [${refCode}]`,
+    `สถานะ: ${stateConfig.statusLabel}`,
+    `ผู้ปฏิบัติงาน: ${params.officerName || '-'}`,
+    params.issueReason ? `สาเหตุที่ติดขัด: ${params.issueReason}` : '',
+    `รายละเอียดผลการปฏิบัติงาน: ${params.actionNote || '-'}`,
+    `ผู้ขอรับบริการ: ${basePayload.requesterName} (${basePayload.villageName})`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    ...basePayload,
+    title,
+    subtitle,
+    urgency: params.actionState === 'issue_blocked' ? 'critical' : basePayload.urgency,
+    summaryLines: updatedSummaryLines,
+    lineTextFallback,
+    lineFlexContents,
+    emailSubject,
+    emailHtmlBody,
     createdAt: new Date().toISOString(),
   };
 }

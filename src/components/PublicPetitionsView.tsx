@@ -877,28 +877,45 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
   const sewageCount = petitions.filter((p) => p.category === 'waste_sewage').length;
   const generalCount = petitions.filter((p) => p.category !== 'waste_sewage').length;
 
-  // Filtered Petitions List
+  const getPetitionSortTimestamp = (p: PublicPetition): number => {
+    if (p.createdAt) {
+      const t = new Date(p.createdAt).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    const idCandidates = [p.id, p.trackingCode].filter(Boolean).join(' ');
+    const epochMatch = idCandidates.match(/17\d{11}/);
+    const dateMs = p.submissionDate ? new Date(p.submissionDate).getTime() : 0;
+    if (epochMatch) {
+      const epochMs = Number(epochMatch[0]);
+      return !isNaN(dateMs) && dateMs > 0 ? Math.max(dateMs, epochMs) : epochMs;
+    }
+    return !isNaN(dateMs) && dateMs > 0 ? dateMs : 0;
+  };
+
+  // Filtered Petitions List (Sorted Newest First!)
   const filteredPetitions = useMemo(() => {
-    return petitions.filter((p) => {
-      const q = search.toLowerCase();
-      const matchSearch =
-        !q ||
-        p.trackingCode.toLowerCase().includes(q) ||
-        p.title.toLowerCase().includes(q) ||
-        p.citizenName.toLowerCase().includes(q) ||
-        p.address.toLowerCase().includes(q) ||
-        (p.assignedOfficer && p.assignedOfficer.toLowerCase().includes(q));
+    return petitions
+      .filter((p) => {
+        const q = search.toLowerCase();
+        const matchSearch =
+          !q ||
+          p.trackingCode.toLowerCase().includes(q) ||
+          p.title.toLowerCase().includes(q) ||
+          p.citizenName.toLowerCase().includes(q) ||
+          p.address.toLowerCase().includes(q) ||
+          (p.assignedOfficer && p.assignedOfficer.toLowerCase().includes(q));
 
-      const matchStatus = selectedStatus === 'all' || p.status === selectedStatus;
-      const matchCategory = selectedCategory === 'all' || p.category === selectedCategory;
-      const matchMoo =
-        selectedMoo === 'all' ||
-        p.moo === selectedMoo ||
-        p.address.includes(`หมู่ ${selectedMoo}`) ||
-        p.address.includes(`หมู่ที่ ${selectedMoo}`);
+        const matchStatus = selectedStatus === 'all' || p.status === selectedStatus;
+        const matchCategory = selectedCategory === 'all' || p.category === selectedCategory;
+        const matchMoo =
+          selectedMoo === 'all' ||
+          p.moo === selectedMoo ||
+          p.address.includes(`หมู่ ${selectedMoo}`) ||
+          p.address.includes(`หมู่ที่ ${selectedMoo}`);
 
-      return matchSearch && matchStatus && matchCategory && matchMoo;
-    });
+        return matchSearch && matchStatus && matchCategory && matchMoo;
+      })
+      .sort((a, b) => getPetitionSortTimestamp(b) - getPetitionSortTimestamp(a));
   }, [petitions, search, selectedStatus, selectedCategory, selectedMoo]);
 
   // Active Queue Petitions (ตามขั้นตอนที่ 4: เมื่อเสร็จสิ้น/ปิดงาน ไม่ค้างไว้ในคิว แต่เก็บสถิติและประวัติไว้)
@@ -975,12 +992,12 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
     };
 
     return list.sort((a, b) => {
+      const dateA = getPetitionSortTimestamp(a);
+      const dateB = getPetitionSortTimestamp(b);
+      if (dateB !== dateA) return dateB - dateA;
       const prioA = getStatusPriority(a.status);
       const prioB = getStatusPriority(b.status);
-      if (prioA !== prioB) return prioA - prioB;
-      const dateA = new Date(a.createdAt || a.submissionDate || 0).getTime();
-      const dateB = new Date(b.createdAt || b.submissionDate || 0).getTime();
-      return dateB - dateA;
+      return prioA - prioB;
     });
   }, [petitions, regTableStatusTab, regTableCategoryFilter, regTableMooFilter, regTableStatusFilter, regTableSearch]);
 
@@ -1868,7 +1885,12 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
                         <td className="py-3.5 px-3.5 align-top text-right whitespace-nowrap">
                           <div className="space-y-2">
                             <div className="flex justify-end">
-                              {isResolved ? (
+                              {(p.resolutionNotes || '').includes('ติดขัด') || p.form?.operation?.pendingReason ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                                  <span>⚠️ ติดขัดปัญหาหน้างาน</span>
+                                </span>
+                              ) : isResolved ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                   <span>แก้ไขแล้วเสร็จ</span>
@@ -1893,6 +1915,16 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
 
                             {/* Action Buttons */}
                             <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.location.href = `/?job=${encodeURIComponent(p.trackingCode || p.id)}`;
+                                }}
+                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                title="เปิดหน้าใบสั่งงานภาคสนามสำหรับเจ้าหน้าที่ (กดรับงาน / ปิดจบงาน / รายงานปัญหาติดขัดเข้ากลุ่ม LINE)"
+                              >
+                                <span>👷 แจ้งผลหน้างาน</span>
+                              </button>
                               {/* 1. Direct Next Logical Action Button */}
                               {isResolved ? (
                                 <button

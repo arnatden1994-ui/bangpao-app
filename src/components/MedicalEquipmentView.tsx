@@ -345,9 +345,35 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const [regTableMooFilter, setRegTableMooFilter] = useState<string>('all');
   const [regTableStatusFilter, setRegTableStatusFilter] = useState<string>('all');
 
-  // Normalized Loans with Coords
+  // Helper to extract accurate timestamp for sorting newest loan requests first
+  const getLoanSortTimestamp = (loan: EquipmentLoan): number => {
+    // 1. Check createdAt ISO string if present
+    if (loan.createdAt) {
+      const t = new Date(loan.createdAt).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    // 2. Check 13-digit epoch timestamp inside id / loanCode / contractNumber (e.g., TR_1793075002129)
+    const idCandidates = [loan.id, loan.loanCode, loan.contractNumber, loan.docNo].filter(Boolean).join(' ');
+    const epochMatch = idCandidates.match(/17\d{11}/);
+    const dateStr = loan.borrowDate || loan.loanDate || '';
+    const dateMs = dateStr ? new Date(dateStr).getTime() : 0;
+
+    if (epochMatch) {
+      const epochMs = Number(epochMatch[0]);
+      // Combine dateMs and epochMs so newest date + newest creation timestamp always wins
+      if (!isNaN(dateMs) && dateMs > 0) {
+        return Math.max(dateMs, epochMs);
+      }
+      return epochMs;
+    }
+
+    if (!isNaN(dateMs) && dateMs > 0) return dateMs;
+    return 0;
+  };
+
+  // Normalized Loans with Coords (Sorted Newest First!)
   const normalizedLoans = useMemo(() => {
-    return loans.map((loan, idx) => {
+    const mapped = loans.map((loan, idx) => {
       let mooStr = loan.moo ? String(loan.moo).trim() : '';
       if (!mooStr || !BANGPAO_COORDS[mooStr]) {
         const match = (loan.address || loan.borrowerAddress || '').match(/หมู่\s*([1-7])/);
@@ -363,6 +389,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         longitude: lng,
       };
     });
+
+    return mapped.sort((a, b) => getLoanSortTimestamp(b) - getLoanSortTimestamp(a));
   }, [loans]);
 
   // Sync selectedStopIds initially
@@ -3727,7 +3755,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                             <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
                               <div className="space-y-2">
                                 <div className="flex justify-end">
-                                  {loan.status === 'borrowed' ? (
+                                  {(loan.notes || '').includes('ติดขัด') ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                      ⚠️ ติดขัดปัญหาหน้างาน
+                                    </span>
+                                  ) : loan.status === 'borrowed' ? (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                       🟢 ส่งมอบแล้ว / ใช้งานอยู่
                                     </span>
@@ -3745,6 +3777,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                     </span>
                                   )}
                                 </div>
+                                {(loan.notes || '').includes('ติดขัด') && (
+                                  <div className="text-[11px] text-rose-700 font-bold text-right max-w-[230px] ml-auto truncate" title={loan.notes}>
+                                    {loan.notes}
+                                  </div>
+                                )}
 
                                 {/* Action Buttons */}
                                 <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
@@ -3806,6 +3843,18 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                        <span>นำทาง</span>
                                      </button>
                                    )}
+
+                                   {/* ปุ่มใบงานภาคสนาม (รับงาน / จบงาน / ติดขัด) */}
+                                   <button
+                                     type="button"
+                                     onClick={() => {
+                                       window.location.href = `/?job=${encodeURIComponent(loan.loanCode || loan.contractNumber || loan.id)}`;
+                                     }}
+                                     className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                     title="เปิดหน้าใบงานภาคสนามสำหรับเจ้าหน้าที่ (กดรับงาน / ปิดจบงาน / รายงานปัญหาติดขัดเข้ากลุ่ม LINE)"
+                                   >
+                                     <span>👷 แจ้งผลหน้างาน</span>
+                                   </button>
 
                                    {/* 4. พิมพ์สัญญา A4 */}
                                   <button

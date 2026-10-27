@@ -118,6 +118,7 @@ import {
 } from './components/PublicHealthModals.tsx';
 import { FirebaseSyncModal } from './components/FirebaseSyncModal.tsx';
 import { CitizenPortalShareModal } from './components/CitizenPortalShareModal.tsx';
+import { FieldJobActionView } from './components/FieldJobActionView.tsx';
 import {
   buildPetitionNotificationPayload,
   buildEquipmentLoanNotificationPayload,
@@ -166,6 +167,10 @@ const CITIZEN_GUEST_USER: User = {
 export default function App() {
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   const [citizenShareModalOpen, setCitizenShareModalOpen] = useState(false);
+  const [activeFieldJobCode, setActiveFieldJobCode] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('job');
+  });
   // Current logged in officer (Default: พันจ่าเอกอานัส เด่นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
     if (isCitizenDirectLink()) return CITIZEN_GUEST_USER;

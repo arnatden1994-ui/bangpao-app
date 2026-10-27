@@ -710,6 +710,18 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
 
                   <button
                     type="button"
+                    onClick={() => {
+                      window.location.href = `/?job=${encodeURIComponent(log.referenceCode)}`;
+                    }}
+                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="เปิดหน้าใบสั่งงานภาคสนามสำหรับเจ้าหน้าที่ (รับงาน / จบงาน / แจ้งติดขัด)"
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    <span>👷 รับงาน / แจ้งจบงาน • ติดขัด</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setPreviewLog(log)}
                     className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                   >
@@ -804,6 +816,12 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
                     </div>
 
                     <div className="p-3 pt-0 space-y-1.5">
+                      <a
+                        href={`/?job=${encodeURIComponent(previewLog.referenceCode)}`}
+                        className="block w-full py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-center font-extrabold text-xs shadow-sm transition-colors"
+                      >
+                        👷 รับงาน / แจ้งจบงาน • ติดขัด (คลิกทดสอบหน้างาน)
+                      </a>
                       <div className="w-full py-2 rounded-xl bg-emerald-600 text-white text-center font-bold text-xs">
                         📍 เปิด Google Maps นำทาง
                       </div>
