@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Truck,
   CheckCircle2,
@@ -19,7 +19,9 @@ import {
   ClipboardCheck,
   X,
 } from 'lucide-react';
-import { PublicPetition, EquipmentLoan, SignerSettings, DEFAULT_SIGNER_SETTINGS } from '../types/index.ts';
+import { PublicPetition, EquipmentLoan, SignerSettings, DEFAULT_SIGNER_SETTINGS, User } from '../types/index.ts';
+import { getAllUsers, getCurrentUser, syncUsersFromRemote } from '../services/authService.ts';
+import { subscribeCollection, fetchUsersFromFirestore, COLLECTIONS } from '../services/firebaseService.ts';
 import {
   buildFieldJobStatusUpdateNotificationPayload,
   dispatchNotification,
@@ -70,7 +72,77 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
 }) => {
   const [selectedCode, setSelectedCode] = useState<string>(initialJobCode);
   const [activeActionTab, setActiveActionTab] = useState<'accepted_en_route' | 'completed' | 'issue_blocked'>('completed');
-  const [officerName, setOfficerName] = useState<string>(OFFICER_PRESETS[0]);
+  const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => getAllUsers());
+  const [isCustomOfficerInput, setIsCustomOfficerInput] = useState<boolean>(false);
+
+  // Sync officer list dynamically with ระบบลงทะเบียนใช้งานและจัดการสิทธิ์เจ้าหน้าที่ (LocalStorage + Cloud Firestore)
+  const officerOptions = useMemo(() => {
+    const activeStaff = registeredUsers.filter(
+      (u) => u.role !== 'citizen' && u.status !== 'suspended'
+    );
+    const formattedFromRegistry = activeStaff.map((u) => {
+      const cleanTitle = (u.roleTitle || '')
+        .replace(/\s*\(Staff\)/gi, '')
+        .replace(/\s*\(Citizen\)/gi, '')
+        .replace(/\s*\(รออนุมัติ\)/gi, '')
+        .trim();
+      return cleanTitle ? `${u.fullName} (${cleanTitle})` : u.fullName;
+    });
+
+    // Also include any inspectors from signerSettings if not already in the registry
+    const fromSigners = (signerSettings?.inspectors || [])
+      .filter((insp) => insp.name && !activeStaff.some((u) => u.fullName.trim() === insp.name.trim()))
+      .map((insp) => (insp.position ? `${insp.name} (${insp.position})` : insp.name));
+
+    const combined = Array.from(new Set([...formattedFromRegistry, ...fromSigners]));
+    return combined.length > 0 ? combined : OFFICER_PRESETS;
+  }, [registeredUsers, signerSettings]);
+
+  const [officerName, setOfficerName] = useState<string>(() => {
+    const loggedIn = getCurrentUser();
+    if (loggedIn && loggedIn.role !== 'citizen') {
+      const cleanTitle = (loggedIn.roleTitle || '').replace(/\s*\(Staff\)/gi, '').trim();
+      return cleanTitle ? `${loggedIn.fullName} (${cleanTitle})` : loggedIn.fullName;
+    }
+    const allStaff = getAllUsers().filter((u) => u.role !== 'citizen' && u.status !== 'suspended');
+    if (allStaff.length > 0) {
+      const first = allStaff[0];
+      const cleanTitle = (first.roleTitle || '').replace(/\s*\(Staff\)/gi, '').trim();
+      return cleanTitle ? `${first.fullName} (${cleanTitle})` : first.fullName;
+    }
+    return OFFICER_PRESETS[0];
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    fetchUsersFromFirestore()
+      .then((remoteUsers) => {
+        if (mounted && remoteUsers && remoteUsers.length > 0) {
+          syncUsersFromRemote(remoteUsers as any);
+          setRegisteredUsers(getAllUsers());
+        }
+      })
+      .catch(() => {});
+
+    const unsub = subscribeCollection<any>(COLLECTIONS.USERS, (remoteUsers) => {
+      if (mounted && remoteUsers && remoteUsers.length > 0) {
+        syncUsersFromRemote(remoteUsers);
+        setRegisteredUsers(getAllUsers());
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, []);
+
+  // Keep officerName synced when officerOptions updates from Firestore if not custom
+  useEffect(() => {
+    if (!isCustomOfficerInput && officerOptions.length > 0 && !officerOptions.includes(officerName)) {
+      setOfficerName(officerOptions[0]);
+    }
+  }, [officerOptions, isCustomOfficerInput]);
   const [actionNote, setActionNote] = useState<string>('');
   const [issueReason, setIssueReason] = useState<string>(ISSUE_REASON_PRESETS[0]);
   const [receiptBookNo, setReceiptBookNo] = useState<string>('01');
@@ -779,34 +851,49 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
                 <div className="text-xs font-extrabold text-teal-900">
                   📋 รายชื่อผู้รับมอบพัสดุ LTC เรียงตามคิว (ครบทั้ง {ltcQ.stops.length} ราย):
                 </div>
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {ltcQ.stops.map((st) => (
-                    <div
-                      key={st.stopId}
-                      className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-2 text-xs"
-                    >
-                      <div className="min-w-0">
-                        <div className="font-black text-slate-900">
-                          คิวที่ #{st.queueOrder}: {st.patientName}{' '}
-                          <span className="text-[11px] font-bold text-rose-700">({st.adlCategory})</span>
-                        </div>
-                        <div className="text-[11px] text-slate-600">
-                          หมู่ที่ {st.moo} {st.village} • {st.address} {st.phone ? `• โทร: ${st.phone}` : ''}
-                        </div>
-                        <div className="text-[11px] font-bold text-teal-800 mt-0.5">
-                          📦 {st.itemsText}
-                        </div>
-                      </div>
-                      <a
-                        href={st.individualMapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shrink-0"
+                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  {ltcQ.stops.map((st, idx) => {
+                    const qNum = st.queueOrder || (st as any).queueNumber || idx + 1;
+                    const itemsDesc = st.itemsText || (st as any).itemsSummary || 'ชุดดูแลผู้มีภาวะพึ่งพิง (LTC)';
+                    const mapLink =
+                      st.individualMapsUrl ||
+                      (st as any).googleMapsUrl ||
+                      `https://www.google.com/maps/dir/?api=1&destination=${st.lat},${st.lng}`;
+                    return (
+                      <div
+                        key={st.stopId || idx}
+                        className="p-3 rounded-xl bg-white border border-slate-200 flex items-start justify-between gap-2.5 text-xs shadow-2xs"
                       >
-                        🚗 นำทาง #{st.queueOrder}
-                      </a>
-                    </div>
-                  ))}
+                        <div className="min-w-0 space-y-1">
+                          <div className="font-black text-slate-900 text-sm">
+                            คิวที่ #{qNum}: {st.patientName}{' '}
+                            <span className="text-xs font-extrabold text-rose-700">
+                              ({st.adlCategory || 'ติดเตียง'})
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-700 font-medium">
+                            🏠 <strong>ที่ไหน:</strong> บ้านเลขที่ {st.address} (หมู่ที่ {st.moo} {st.village} ต.บางเป้า)
+                          </div>
+                          <div className="text-[11px] font-extrabold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 inline-block">
+                            📦 รับอะไร: {itemsDesc}
+                          </div>
+                          <div className="text-[11px] text-slate-600 font-semibold">
+                            📞 <strong>ติดต่อ:</strong> {st.phone || '-'}{' '}
+                            {st.caregiverName ? `(${st.caregiverName})` : ''} • 📍 พิกัด: {Number(st.lat).toFixed(5)},{' '}
+                            {Number(st.lng).toFixed(5)}
+                          </div>
+                        </div>
+                        <a
+                          href={mapLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] shrink-0 shadow-xs"
+                        >
+                          🚗 นำทาง #{qNum}
+                        </a>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

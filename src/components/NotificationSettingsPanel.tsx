@@ -915,19 +915,43 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
                       </div>
                     </div>
 
-                    <div className="p-4 space-y-2 text-xs">
+                    <div className="p-4 space-y-2.5 text-xs max-h-[420px] overflow-y-auto">
                       {(previewLog.lineFlexContents?.body?.contents || [])
                         .filter((c: any) => c.type === 'box' && c.layout === 'baseline')
-                        .map((row: any, i: number) => (
-                          <div key={i} className="grid grid-cols-12 gap-2">
-                            <span className="col-span-5 font-bold text-slate-500">
-                              {row.contents?.[0]?.text}:
-                            </span>
-                            <span className="col-span-7 font-semibold text-slate-900">
-                              {row.contents?.[1]?.text}
-                            </span>
-                          </div>
-                        ))}
+                        .map((row: any, i: number) => {
+                          const labelText = String(row.contents?.[0]?.text || '');
+                          const valText = String(row.contents?.[1]?.text || '');
+                          const isQueuePersonRow = labelText.includes('คิวที่ #');
+                          return (
+                            <div
+                              key={i}
+                              className={
+                                isQueuePersonRow
+                                  ? 'p-2.5 rounded-xl bg-teal-50/90 border border-teal-200 space-y-1'
+                                  : 'grid grid-cols-12 gap-2 border-b border-slate-100 pb-1.5'
+                              }
+                            >
+                              <div
+                                className={
+                                  isQueuePersonRow
+                                    ? 'font-black text-teal-900 text-xs'
+                                    : 'col-span-5 font-bold text-slate-500'
+                                }
+                              >
+                                {labelText}:
+                              </div>
+                              <div
+                                className={
+                                  isQueuePersonRow
+                                    ? 'font-semibold text-slate-800 text-[11px] whitespace-pre-line leading-relaxed'
+                                    : 'col-span-7 font-semibold text-slate-900 whitespace-pre-line'
+                                }
+                              >
+                                {valText}
+                              </div>
+                            </div>
+                          );
+                        })}
 
                       {previewLog.attachments?.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-slate-200 bg-emerald-50 p-2.5 rounded-xl">

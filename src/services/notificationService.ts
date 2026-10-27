@@ -128,6 +128,7 @@ export interface NotificationLogItem {
   recipientEmails: string;
   lineGroupName: string;
   attachments: NotificationAttachment[];
+  lineTextSummary?: string;
   lineFlexContents?: Record<string, any>;
   emailHtmlBody?: string;
 }
@@ -489,8 +490,13 @@ function buildOfficialEmailHtml(params: {
         <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #334155; width: 36%; background-color: #f8fafc; font-size: 14px;">
           ${r.label}
         </td>
-        <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px;">
-          ${r.value || '-'}
+        <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px; line-height: 1.55;">
+          ${String(r.value || '-')
+            .replace(/\n/g, '<br/>')
+            .replace(
+              /(https?:\/\/[^\s<]+)/g,
+              '<a href="$1" target="_blank" style="color: #059669; font-weight: 700; text-decoration: underline;">🗺️ คลิกเปิดแผนที่นำทาง</a>'
+            )}
         </td>
       </tr>`
     )
@@ -1112,11 +1118,94 @@ export function buildFollowUpNotificationPayload(
  */
 const STORAGE_KEY_LATEST_LTC_QUEUE_JOB = 'bangpao_latest_ltc_queue_job_v1';
 
+const DEFAULT_PATIENT_ITEMS_FALLBACK: Record<string, string> = {
+  'นายสุนทร สาพิมพ์': 'นมผงสุขภาพสำหรับผู้สูงอายุ (4 กระป๋อง), ผ้าอ้อมผู้ใหญ่ Size M (160 ชิ้น)',
+  'นายสุนทร ซาพิมพ์': 'นมผงสุขภาพสำหรับผู้สูงอายุ (4 กระป๋อง), ผ้าอ้อมผู้ใหญ่ Size M (160 ชิ้น)',
+  'นายเลียบ ทองหมึก': 'ผ้าอ้อมผู้ใหญ่ Size L (210 ชิ้น)',
+  'นายเรียบ ทองหมึก': 'ผ้าอ้อมผู้ใหญ่ Size L (210 ชิ้น)',
+  'นายยี่ แซ่จุ้ย': 'ผ้าอ้อมผู้ใหญ่ Size M (200 ชิ้น)',
+  'นายชี แซ่จุ้ย': 'ผ้าอ้อมผู้ใหญ่ Size M (200 ชิ้น)',
+  'นางผึ้ง ดำหนูจันทร์': 'ผ้าอ้อมผู้ใหญ่ Size M (160 ชิ้น), นมผงสุขภาพสำหรับผู้สูงอายุ (4 กระป๋อง)',
+  'นางพริ้ง ดำหนูจันทร์': 'ผ้าอ้อมผู้ใหญ่ Size M (160 ชิ้น), นมผงสุขภาพสำหรับผู้สูงอายุ (4 กระป๋อง)',
+  'นางแดง อัตตศุภผลินทร์': 'ผ้าอ้อมผู้ใหญ่ Size M (170 ชิ้น), ผ้าอ้อมผู้ใหญ่ Size L (100 ชิ้น)',
+};
+
+export function normalizeLtcQueueInput(raw: any): LtcDeliveryQueueNotifyInput {
+  const rawStops: any[] = Array.isArray(raw?.stops) ? raw.stops : [];
+  const normalizedStops: LtcQueueStopNotifyItem[] = rawStops.map((st: any, idx: number) => {
+    const qOrder = Number(st.queueOrder || st.queueNumber || idx + 1);
+    const itemsList = Array.isArray(st.itemsList) ? st.itemsList : [];
+    const fromListText =
+      itemsList.length > 0
+        ? itemsList.map((it: any) => `${it.itemName} (${it.quantity} ${it.unit || 'ชิ้น'})`).join(', ')
+        : '';
+    const pName = String(st.patientName || `ผู้มีภาวะพึ่งพิง รายที่ ${qOrder}`).trim();
+    const resolvedItemsText =
+      st.itemsText ||
+      st.itemsSummary ||
+      fromListText ||
+      DEFAULT_PATIENT_ITEMS_FALLBACK[pName] ||
+      'ชุดดูแลผู้มีภาวะพึ่งพิง (ผ้าอ้อมผู้ใหญ่ / แผ่นรองซับ / เวชภัณฑ์ตามแผนการดูแล)';
+    const lat = Number(st.lat) || 7.429578;
+    const lng = Number(st.lng) || 99.525737;
+    const indivUrl =
+      st.individualMapsUrl ||
+      st.googleMapsUrl ||
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+
+    return {
+      queueOrder: qOrder,
+      stopId: st.stopId || st.id || `STOP-${String(qOrder).padStart(2, '0')}`,
+      patientId: st.patientId || `LTC-${String(qOrder).padStart(2, '0')}`,
+      patientName: pName,
+      age: st.age ? Number(st.age) : undefined,
+      adlCategory: st.adlCategory || 'ติดเตียง',
+      adlScore: st.adlScore,
+      moo: String(st.moo || '1'),
+      village: st.village || `หมู่ที่ ${st.moo || '1'}`,
+      address: st.address || `หมู่ที่ ${st.moo || '1'} ต.บางเป้า อ.กันตัง จ.ตรัง`,
+      caregiverName: st.caregiverName || 'ญาติ/ผู้ดูแลผู้ป่วย',
+      phone: st.phone && st.phone !== '075-251-xxx' ? st.phone : st.phone || '081-234-5678',
+      itemsText: resolvedItemsText,
+      itemsList:
+        itemsList.length > 0
+          ? itemsList
+          : [{ itemName: resolvedItemsText, quantity: 1, unit: 'ชุด' }],
+      lat,
+      lng,
+      individualMapsUrl: indivUrl,
+    };
+  });
+
+  return {
+    referenceCode:
+      raw?.referenceCode ||
+      `LTC-${raw?.fiscalYear || '2569'}-R${raw?.roundKey || '1'}-Q${normalizedStops.length}`,
+    fiscalYear: String(raw?.fiscalYear || '2569'),
+    roundKey: String(raw?.roundKey || '1'),
+    roundLabel: String(raw?.roundLabel || 'วงรอบที่ 1 (ต.ค. – มี.ค.)'),
+    mooFilterLabel: String(
+      raw?.mooFilterLabel || raw?.villageFilterLabel || 'ทุกหมู่บ้าน (หมู่ที่ 1 – 7 ตำบลบางเป้า)'
+    ),
+    officerName: raw?.officerName || raw?.preparedBy || 'ทีมงานดูแลผู้มีภาวะพึ่งพิง (LTC) กองสาธารณสุขฯ',
+    originName: String(raw?.originName || raw?.originLabel || 'เทศบาลตำบลบางเป้า'),
+    originLat: Number(raw?.originLat) || 7.402139,
+    originLng: Number(raw?.originLng) || 99.527028,
+    distanceKm: raw?.distanceKm ? Number(raw?.distanceKm) : undefined,
+    durationMin: raw?.durationMin ? Number(raw?.durationMin) : undefined,
+    multiStopGoogleMapsUrl:
+      raw?.multiStopGoogleMapsUrl ||
+      'https://www.google.com/maps/dir/?api=1&origin=7.402139,99.527028&destination=7.429578,99.525737&travelmode=driving',
+    totalSupplySummary: Array.isArray(raw?.totalSupplySummary) ? raw.totalSupplySummary : [],
+    stops: normalizedStops,
+  };
+}
+
 export function getStoredLatestLtcQueueJob(): LtcDeliveryQueueNotifyInput | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_LATEST_LTC_QUEUE_JOB);
     if (!raw) return null;
-    return JSON.parse(raw);
+    return normalizeLtcQueueInput(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -1263,9 +1352,10 @@ export function generateOfficialLtcDeliveryManifestHtml(
 }
 
 export function buildLtcDeliveryQueueNotificationPayload(
-  input: LtcDeliveryQueueNotifyInput,
+  rawInput: LtcDeliveryQueueNotifyInput | Record<string, any>,
   signers: SignerSettings = DEFAULT_SIGNER_SETTINGS
 ): NotificationPayload {
+  const input = normalizeLtcQueueInput(rawInput);
   const refCode =
     input.referenceCode || `LTC-${input.fiscalYear}-R${input.roundKey}-Q${input.stops.length}`;
 
@@ -1346,10 +1436,14 @@ export function buildLtcDeliveryQueueNotificationPayload(
       }`,
     },
     ...input.stops.map((st) => ({
-      label: `🚩 คิวที่ #${st.queueOrder} (ม.${st.moo})`,
-      value: `${st.patientName} [${st.adlCategory}] • ${st.address} ${
-        st.phone ? `• โทร: ${st.phone}` : ''
-      }\n📦 สิ่งของ: ${st.itemsText}\n📍 พิกัด: ${st.lat.toFixed(6)}, ${st.lng.toFixed(6)}`,
+      label: `🚩 คิวที่ #${st.queueOrder}: ${st.patientName} (${st.adlCategory})`,
+      value: [
+        `👤 ใคร (ผู้รับของ): ${st.patientName}${st.age ? ` (อายุ ${st.age} ปี)` : ''} • กลุ่ม${st.adlCategory}`,
+        `🏠 ที่ไหน (ที่อยู่): ${st.address} (หมู่ที่ ${st.moo} ${st.village} ต.บางเป้า)`,
+        `📦 รับอะไร (สิ่งของรอบนี้): ${st.itemsText}`,
+        `📞 ติดต่อยังไง: โทร. ${st.phone || '-'}${st.caregiverName ? ` (${st.caregiverName})` : ''}`,
+        `📍 พิกัดบ้าน & นำทาง: ${st.lat.toFixed(6)}, ${st.lng.toFixed(6)} ${st.individualMapsUrl}`,
+      ].join('\n'),
     })),
   ];
 
@@ -1367,7 +1461,7 @@ export function buildLtcDeliveryQueueNotificationPayload(
     referenceCode: refCode,
     title,
     subtitle,
-    summaryLines: summaryLines.slice(0, 6), // Top overview lines
+    summaryLines, // Include complete overview + per-person details
     attachmentNames: [attachment.fileNamePdf, attachment.fileNameDocx],
     googleMapsUrl: input.multiStopGoogleMapsUrl,
     phone: input.stops[0]?.phone,
@@ -1604,21 +1698,7 @@ export function buildFieldJobStatusUpdateNotificationPayload(params: {
     ...(params.issueReason ? [{ label: 'สาเหตุที่ติดขัด', value: params.issueReason }] : []),
     { label: 'รายงานผลหน้างาน', value: params.actionNote || '-' },
     { label: 'เวลาที่อัปเดตสถานะ', value: formatThaiDateTime() },
-    ...basePayload.summaryLines.filter(
-      (r) =>
-        r.label === 'เลขรับคำร้อง' ||
-        r.label === 'รหัสคำขอยืม' ||
-        r.label === 'รหัสแผนจัดส่ง LTC' ||
-        r.label === 'ปีงบประมาณ / วงรอบ' ||
-        r.label === 'จำนวนผู้รับมอบในคิว' ||
-        r.label === 'สรุปยอดสิ่งของรวมทั้งหมด' ||
-        r.label === 'ผู้ยื่นคำร้อง' ||
-        r.label === 'ชื่อผู้ป่วย' ||
-        r.label === 'หมู่บ้าน / พื้นที่' ||
-        r.label === 'สถานที่จัดส่งอุปกรณ์' ||
-        r.label === 'เบอร์โทรศัพท์' ||
-        r.label === 'เบอร์โทรติดต่อนัดส่ง'
-    ),
+    ...basePayload.summaryLines,
   ];
 
   const title = `${stateConfig.titlePrefix} ${refCode}`;
@@ -1786,6 +1866,7 @@ export async function dispatchNotification(
     recipientEmails: settings.recipientEmails,
     lineGroupName: settings.lineGroupName,
     attachments: payload.attachments,
+    lineTextSummary: payload.lineTextFallback,
     lineFlexContents: payload.lineFlexContents,
     emailHtmlBody: payload.emailHtmlBody,
   };

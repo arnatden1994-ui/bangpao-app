@@ -1755,19 +1755,25 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         const phoneStr = matchedPt?.caregiverPhone || matchedPt?.phone || '075-251-xxx';
 
         return {
+          queueOrder: idx + 1,
           queueNumber: idx + 1,
+          stopId: s.id,
           patientId: s.patientId,
           patientName: s.patientName,
           age: matchedPt?.age,
           adlCategory: s.adlCategory,
+          adlScore: matchedPt?.adlScore,
           moo: s.moo,
           village: s.village || BANGPAO_VILLAGES[s.moo] || `หมู่ที่ ${s.moo}`,
           address: s.address,
+          caregiverName: matchedPt?.caregiverName || 'ญาติ/ผู้ดูแลผู้ป่วย',
           phone: phoneStr,
+          itemsText: itemsSummaryText,
           itemsSummary: itemsSummaryText,
           itemsList: rawItems,
           lat: s.lat,
           lng: s.lng,
+          individualMapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,
           googleMapsUrl: `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`,
         };
       });
