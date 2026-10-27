@@ -31,8 +31,14 @@ import {
   Shield,
   Package,
   Settings,
+  Share2,
+  Globe,
+  Copy,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 import { GoogleCalendarModal } from './GoogleCalendarModal.tsx';
+import { CitizenPortalShareModal } from './CitizenPortalShareModal.tsx';
 import {
   MunicipalCalendarPanel,
   CalendarEventItem,
@@ -64,6 +70,7 @@ interface ExecutiveCommandDashboardProps {
   inspections: InspectionRecord[];
   onNavigateTab: (tab: MainNavTab) => void;
   onOpenPrintModal: (petition?: PublicPetition) => void;
+  onOpenCitizenShareModal?: () => void;
 }
 
 export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps> = ({
@@ -75,6 +82,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   loans,
   onNavigateTab,
   onOpenPrintModal,
+  onOpenCitizenShareModal,
 }) => {
   // 1. KPI Calculations
   const pendingPetitions = petitions.filter((p) => p.status !== 'resolved');
@@ -160,6 +168,8 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
 
   const [isArtworkModalOpen, setIsArtworkModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isCitizenShareModalOpen, setIsCitizenShareModalOpen] = useState(false);
+  const [isCopiedDirectLink, setIsCopiedDirectLink] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
   // Shared Calendar Events State
@@ -460,8 +470,18 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
               <span>เมืองน่าอยู่ ชุมชนสุขภาพดี ทต.บางเป้า</span>
             </div>
 
-            {/* ปุ่มกดดูภาพขนาดใหญ่ด้านล่างขวา */}
-            <div className="flex items-center gap-2 mt-auto">
+            {/* ปุ่มกดดูภาพขนาดใหญ่ด้านล่างขวา & ปุ่มแชร์พอร์ทัลประชาชน */}
+            <div className="flex flex-wrap items-center gap-2 mt-auto">
+              <button
+                type="button"
+                onClick={() => (onOpenCitizenShareModal ? onOpenCitizenShareModal() : setIsCitizenShareModalOpen(true))}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-xs transition-all shadow-xl hover:scale-105 cursor-pointer ring-2 ring-amber-300/80 animate-pulse"
+                title="แชร์ลิงก์ศูนย์บริการประชาชนออนไลน์ (Citizen Portal) และ QR Code"
+              >
+                <Share2 className="w-4 h-4 text-slate-950" />
+                <span>แชร์พอร์ทัลประชาชน</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsArtworkModalOpen(true)}
@@ -472,6 +492,84 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
                 <span>ดูภาพวิสัยทัศน์เต็ม</span>
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* CITIZEN PORTAL SHARE & ACCESS BANNER (เด่นชัด แดชบอร์ดหลัก) */}
+      {/* ======================================================== */}
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 border-2 border-emerald-400/50 p-4 sm:p-5.5 text-white shadow-2xl">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          {/* Left Info */}
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-emerald-400 to-teal-300 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-emerald-500/30 shrink-0">
+              <Globe className="w-7 h-7 text-slate-950" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-400/20 text-emerald-300 border border-emerald-400/40">
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>พอร์ทัลบริการประชาชนออนไลน์ (Citizen Portal)</span>
+                </span>
+                <span className="text-[11px] text-emerald-200/80 font-medium hidden sm:inline">
+                  ไม่ต้องล็อกอิน • ประชาชนยื่นเรื่องและปักหมุดบ้านได้เอง 24 ชม.
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-white mt-1">
+                ลิงก์สำหรับแชร์ให้ประชาชนยื่นคำร้อง & ขอยืมอุปกรณ์ทางการแพทย์
+              </h3>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-emerald-300 font-mono bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-700/60 select-all font-semibold">
+                  https://bangpao-app.vercel.app/?portal=citizen
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Actions */}
+          <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText('https://bangpao-app.vercel.app/?portal=citizen');
+                setIsCopiedDirectLink(true);
+                setTimeout(() => setIsCopiedDirectLink(false), 2500);
+              }}
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              {isCopiedDirectLink ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-300">คัดลอกลิงก์แล้ว!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>คัดลอกลิงก์</span>
+                </>
+              )}
+            </button>
+
+            <a
+              href="https://bangpao-app.vercel.app/?portal=citizen"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-teal-800/80 hover:bg-teal-700 border border-teal-500/40 text-teal-100 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>เปิดดูมุมมองประชาชน</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={() => (onOpenCitizenShareModal ? onOpenCitizenShareModal() : setIsCitizenShareModalOpen(true))}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer transition-all hover:scale-105 active:scale-95 ring-2 ring-amber-300/80"
+            >
+              <Share2 className="w-4 h-4 text-slate-950" />
+              <span>📱 แชร์ลิงก์ & QR Code ให้ประชาชน</span>
+            </button>
           </div>
         </div>
       </div>
@@ -885,6 +983,12 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         isOpen={isCalendarModalOpen}
         onClose={() => setIsCalendarModalOpen(false)}
         onAddEvent={handleAddCalendarEvent}
+      />
+
+      {/* Modal: Citizen Portal Share Modal */}
+      <CitizenPortalShareModal
+        isOpen={isCitizenShareModalOpen}
+        onClose={() => setIsCitizenShareModalOpen(false)}
       />
     </div>
   );

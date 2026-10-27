@@ -117,6 +117,7 @@ import {
   NewEquipmentLoanModal,
 } from './components/PublicHealthModals.tsx';
 import { FirebaseSyncModal } from './components/FirebaseSyncModal.tsx';
+import { CitizenPortalShareModal } from './components/CitizenPortalShareModal.tsx';
 import {
   subscribeCollection,
   COLLECTIONS,
@@ -159,6 +160,7 @@ const CITIZEN_GUEST_USER: User = {
 
 export default function App() {
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
+  const [citizenShareModalOpen, setCitizenShareModalOpen] = useState(false);
   // Current logged in officer (Default: พันจ่าเอกอานัส เด่นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
     if (isCitizenDirectLink()) return CITIZEN_GUEST_USER;
@@ -951,6 +953,7 @@ unsubLicenses();
           isSyncing={isSyncing}
           onQuickSync={handleQuickSync}
           onOpenSignerSettings={() => setSignerSettingsModalOpen(true)}
+          onOpenCitizenShareModal={() => setCitizenShareModalOpen(true)}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           badgeCounts={badgeCounts}
         />
@@ -961,6 +964,7 @@ unsubLicenses();
             {/* 1. 🏠 แดชบอร์ดหลักทุกระบบ (Master Overview Dashboard) */}
             {currentTab === 'overview' && (
               <ExecutiveCommandDashboard
+                onOpenCitizenShareModal={() => setCitizenShareModalOpen(true)}
                 establishments={establishments}
                 licenses={licenses}
                 hazardousBusinesses={hazardousBusinesses}
@@ -1556,6 +1560,12 @@ unsubLicenses();
         onSyncPull={handleSyncPull}
         isSyncing={isSyncing}
         onResetMockData={handleResetMockData}
+      />
+
+      {/* Citizen Portal Share Modal */}
+      <CitizenPortalShareModal
+        isOpen={citizenShareModalOpen}
+        onClose={() => setCitizenShareModalOpen(false)}
       />
 
       {/* Firebase Cloud Firestore & AI Studio Modal */}

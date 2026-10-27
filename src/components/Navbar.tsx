@@ -7,6 +7,8 @@ import {
   ExternalLink,
   Flame,
   LogOut,
+  Share2,
+  Globe,
 } from 'lucide-react';
 import { GoogleSheetsConfig, MainNavTab, User } from '../types/index.ts';
 import { DEFAULT_GAS_URL } from '../services/sheetsSync.ts';
@@ -23,6 +25,7 @@ interface NavbarProps {
   isSyncing: boolean;
   onQuickSync: () => void;
   onOpenSignerSettings?: () => void;
+  onOpenCitizenShareModal?: () => void;
   onToggleSidebar?: () => void;
   badgeCounts?: {
     petitions?: number;
@@ -44,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isSyncing,
   onQuickSync,
   onOpenSignerSettings,
+  onOpenCitizenShareModal,
   onToggleSidebar,
 }) => {
   const officerName = currentUser?.fullName || 'พันจ่าเอกอานัส เด่นหมาด';
@@ -110,8 +114,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Right: [ตั้งค่าผู้ลงนาม] | [Firebase] | [Google Sheets] | [เปิดแท็บใหม่] | [รีเฟรช] | โปรไฟล์เจ้าหน้าที่ */}
+          {/* Right: [แชร์พอร์ทัลประชาชน] | [ตั้งค่าผู้ลงนาม] | [Firebase] | [Google Sheets] | [เปิดแท็บใหม่] | [รีเฟรช] | โปรไฟล์เจ้าหน้าที่ */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* Quick Action: แชร์พอร์ทัลประชาชน (Citizen Portal) */}
+            {onOpenCitizenShareModal && (
+              <button
+                onClick={onOpenCitizenShareModal}
+                title="แชร์ลิงก์ศูนย์บริการประชาชนออนไลน์ (Citizen Portal) และ QR Code"
+                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-[13px] font-black rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white shadow-sm transition-all cursor-pointer active:scale-95 ring-1 ring-emerald-300/60"
+              >
+                <Share2 className="w-4 h-4 text-emerald-100" />
+                <span className="hidden sm:inline">แชร์พอร์ทัลประชาชน</span>
+              </button>
+            )}
+
             {/* Quick Action: ตั้งค่าผู้ลงนาม */}
             {onOpenSignerSettings && (
               <button
