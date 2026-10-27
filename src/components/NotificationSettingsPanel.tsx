@@ -386,6 +386,44 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
               </div>
             </div>
 
+            {/* Dedicated Standalone Email Apps Script URL Box (No New Sheet Needed!) */}
+            <div className="p-4 rounded-2xl bg-blue-50/90 border-2 border-blue-300 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs sm:text-sm font-extrabold text-blue-950 flex items-center gap-1.5">
+                  <span>🔗 URL สคริปต์ส่งอีเมล (Apps Script Web App URL เฉพาะส่งเมล)</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <a
+                    href="https://script.google.com/home"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>1. เปิด script.google.com</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setShowGasCodeModal(true)}
+                    className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-extrabold flex items-center gap-1 cursor-pointer shadow-2xs"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>2. ดูโค้ด & วิธีวาง</span>
+                  </button>
+                </div>
+              </div>
+              <input
+                type="text"
+                value={settings.emailGasWebAppUrl || ''}
+                onChange={(e) => setSettings({ ...settings, emailGasWebAppUrl: e.target.value })}
+                placeholder="วางลิงก์ https://script.google.com/macros/s/....../exec ที่นี่"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-blue-300 text-xs font-mono text-slate-900 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+              />
+              <div className="text-[11px] text-blue-900 leading-relaxed">
+                💡 <strong>ไม่ต้องสร้าง Google Sheet ใหม่ และไม่กระทบชีตเดิม!</strong> เพียงเข้าเว็บ <code>script.google.com</code> กด <strong>+ โครงการใหม่ (New project)</strong> วางโค้ดแล้วกด Deploy เป็น Web App นำลิงก์มาวางช่องนี้ได้เลยครับ
+              </div>
+            </div>
+
             {/* Form Attachment Selection Box */}
             <div className="p-4 rounded-2xl bg-emerald-50/80 border-2 border-emerald-300 space-y-3">
               <div className="flex items-center gap-2 text-emerald-950 font-extrabold text-xs sm:text-sm">
@@ -850,17 +888,58 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
             </div>
 
             <div className="p-6 overflow-y-auto space-y-4">
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1.5">
-                <div className="font-extrabold text-sm">วิธีติดตั้งง่ายๆ ใน 3 ขั้นตอน:</div>
-                <div>
-                  1. เปิดไฟล์ Google Sheets ของกองสาธารณสุข ➔ ไปที่เมนู <strong>ส่วนขยาย (Extensions) &gt; Apps Script</strong>
+              <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-xs sm:text-sm text-amber-950 space-y-2">
+                <div className="font-extrabold text-sm sm:text-base text-emerald-950 flex items-center gap-2">
+                  <span>✅ ไม่ต้องสร้าง Google Sheet ใหม่! (แยกสคริปต์ส่งอีเมลอิสระ ไม่กระทบชีตเดิม 100%)</span>
                 </div>
                 <div>
-                  2. กดปุ่ม <strong>"คัดลอกโค้ดทั้งหมด"</strong> ด้านล่างนี้ ไปวางทับในไฟล์ <code>Code.gs</code> แล้วกดบันทึก (💾)
+                  <strong>ขั้นตอนที่ 1:</strong> คลิกเปิดเว็บ{' '}
+                  <a
+                    href="https://script.google.com/home"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-700 font-extrabold underline"
+                  >
+                    https://script.google.com/home
+                  </a>{' '}
+                  แล้วกดปุ่ม <strong>"+ โครงการใหม่ (New project)"</strong> มุมบนซ้าย
                 </div>
                 <div>
-                  3. กดปุ่ม <strong>การทำให้ใช้งานได้ (Deploy) &gt; การทำให้ใช้งานได้รายการใหม่ (New deployment)</strong> เลือกเป็น <strong>เว็บแอป (Web app)</strong> ตั้งค่าผู้มีสิทธิ์เข้าถึงเป็น <strong>ทุกคน (Anyone)</strong> แล้วนำ URL มาวางในแท็บเชื่อมต่อ Google Sheets
+                  <strong>ขั้นตอนที่ 2:</strong> กดปุ่ม <strong>"คัดลอกโค้ดทั้งหมด"</strong> ด้านล่างนี้ ไปวางทับในหน้าต่าง <code>Code.gs</code> แล้วกดปุ่มบันทึก (💾)
                 </div>
+                <div>
+                  <strong>ขั้นตอนที่ 3:</strong> กดปุ่มสีน้ำเงินมุมขวาบน <strong>การทำให้ใช้งานได้ (Deploy) &gt; การทำให้ใช้งานได้รายการใหม่ (New deployment)</strong>
+                  <ul className="list-disc pl-5 mt-1 space-y-0.5 text-xs">
+                    <li>ตรงไอคอนฟันเฟือง (เลือกประเภท) เลือกเป็น <strong>เว็บแอป (Web app)</strong></li>
+                    <li>ช่องดำเนินการในฐานะ: เลือก <strong>ฉัน (Me)</strong></li>
+                    <li>ช่องผู้มีสิทธิ์เข้าถึง: เลือกเป็น <strong>ทุกคน (Anyone)</strong> แล้วกดปุ่ม Deploy (และกดอนุญาตสิทธิ์ส่งอีเมล 1 ครั้ง)</li>
+                  </ul>
+                </div>
+                <div>
+                  <strong>ขั้นตอนที่ 4:</strong> คัดลอก <strong>Web App URL</strong> (ที่ลงท้ายด้วย <code>/exec</code>) มาวางในช่องด้านล่างนี้แล้วกดบันทึกได้เลยครับ!
+                </div>
+              </div>
+
+              {/* Direct Paste URL Input Inside Modal */}
+              <div className="p-4 rounded-2xl bg-blue-50 border border-blue-300 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <input
+                  type="text"
+                  value={settings.emailGasWebAppUrl || ''}
+                  onChange={(e) => setSettings({ ...settings, emailGasWebAppUrl: e.target.value })}
+                  placeholder="วาง Web App URL (https://script.google.com/macros/s/....../exec) ที่นี่..."
+                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-blue-300 text-xs font-mono text-slate-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSaveSettings();
+                    setShowGasCodeModal(false);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>บันทึก URL ส่งอีเมล</span>
+                </button>
               </div>
 
               <div className="flex justify-end">

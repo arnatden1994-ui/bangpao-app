@@ -15,6 +15,7 @@ export interface NotificationSettings {
 
   // Official Email Notification
   emailEnabled: boolean;
+  emailGasWebAppUrl: string; // Dedicated Apps Script URL for Email + PDF/DOCX attachments (standalone, no new sheet needed)
   departmentEmailName: string;
   recipientEmails: string; // Comma-separated emails
   ccEmails: string;
@@ -109,8 +110,9 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   lineWebhookUrl: '',
 
   emailEnabled: true,
+  emailGasWebAppUrl: '',
   departmentEmailName: 'กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า',
-  recipientEmails: 'health@bangpao.go.th',
+  recipientEmails: 'arnatden1994@gmail.com',
   ccEmails: '',
   attachOfficialPdfForm: true,
   attachOfficialDocxForm: true,
@@ -1096,10 +1098,10 @@ export async function dispatchNotification(
     };
   }
 
-  let gasUrl = customGasUrl || '';
+  let gasUrl = (settings.emailGasWebAppUrl || '').trim() || customGasUrl || '';
   if (!gasUrl) {
     try {
-      const savedConfig = JSON.parse(localStorage.getItem('bangpao_sheets_config') || '{}');
+      const savedConfig = JSON.parse(localStorage.getItem('hygiene_sheets_config_v1') || localStorage.getItem('bangpao_sheets_config') || '{}');
       gasUrl = savedConfig.appsScriptUrl || '';
     } catch {
       // ignore
