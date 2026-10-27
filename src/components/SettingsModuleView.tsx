@@ -49,8 +49,15 @@ import {
   approveUser,
   toggleUserStatus,
   changeUserPassword,
+  syncUsersFromRemote,
 } from '../services/authService.ts';
-import { saveUserToFirestore, deleteUserFromFirestore } from '../services/firebaseService.ts';
+import {
+  saveUserToFirestore,
+  deleteUserFromFirestore,
+  fetchUsersFromFirestore,
+  subscribeCollection,
+  COLLECTIONS,
+} from '../services/firebaseService.ts';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel.tsx';
 
 interface SettingsModuleViewProps {
@@ -150,6 +157,30 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
 
   // Users State
   const [usersList, setUsersList] = useState<User[]>(() => getAllUsers());
+
+  useEffect(() => {
+    let mounted = true;
+    fetchUsersFromFirestore()
+      .then((remote) => {
+        if (mounted && remote && remote.length > 0) {
+          syncUsersFromRemote(remote as any);
+          setUsersList(getAllUsers());
+        }
+      })
+      .catch(() => {});
+
+    const unsub = subscribeCollection<any>(COLLECTIONS.USERS, (remote) => {
+      if (mounted && remote && remote.length > 0) {
+        syncUsersFromRemote(remote);
+        setUsersList(getAllUsers());
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, []);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
@@ -496,7 +527,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                         </label>
                         <input
                           type="text"
-                          placeholder="เช่น พันจ่าเอกอานัส เด่นหมาด"
+                          placeholder="เช่น พันจ่าเอกอานัส เด็นหมาด"
                           value={item.name}
                           onChange={(e) => handleUpdateInspectorInSettings(item.id, 'name', e.target.value)}
                           className="w-full text-xs sm:text-sm font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg"

@@ -163,7 +163,7 @@ export const SignerSettingsModal: React.FC<SignerSettingsModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="เช่น พันจ่าเอกอานัส เด่นหมาด"
+                      placeholder="เช่น พันจ่าเอกอานัส เด็นหมาด"
                       value={item.name}
                       onChange={(e) => handleUpdateInspector(item.id, 'name', e.target.value)}
                       className="w-full text-xs sm:text-sm font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg"

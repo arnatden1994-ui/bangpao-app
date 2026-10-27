@@ -1299,7 +1299,7 @@ export function generateInspectionReportHtml(
   const tumbon = license.businessSubdistrict || 'บางเป้า';
   const amphoe = license.businessDistrict || 'กันตัง';
   const changwat = license.businessProvince || 'ตรัง';
-  const inspectorName = 'พันจ่าเอกอานัส เด่นหมาด';
+  const inspectorName = 'พันจ่าเอกอานัส เด็นหมาด';
   const inspectorPos = 'เจ้าพนักงานสาธารณสุขชำนาญงาน';
   const inspectDate = license.approvalDate || '23 กรกฎาคม 2569';
 
@@ -2090,7 +2090,7 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
   const tumbon = license.businessSubdistrict || license.ownerSubdistrict || 'บางเป้า';
   const amphoe = license.businessDistrict || license.ownerDistrict || 'กันตัง';
   const prov = license.businessProvince || license.ownerProvince || 'ตรัง';
-  const inspector = 'พันจ่าเอกอานัส เด่นหมาด';
+  const inspector = 'พันจ่าเอกอานัส เด็นหมาด';
   const inspectorPos = 'เจ้าพนักงานสาธารณสุขชำนาญงาน';
   const inspectDate = license.approvalDate || '23 กรกฎาคม 2569';
 

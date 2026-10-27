@@ -819,7 +819,7 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
 
     setSelectedWorkflowStep(step);
     setActionOfficerName(
-      p.assignedOfficer || (isSewage ? 'นายชนะ สุขด้วง (พนักงานขับรถ)' : 'พันจ่าเอกอานัส เด่นหมาด (จนท.สุขาภิบาล)')
+      p.assignedOfficer || (isSewage ? 'นายชนะ สุขด้วง (พนักงานขับรถ)' : 'พันจ่าเอกอานัส เด็นหมาด (จนท.สุขาภิบาล)')
     );
     setActionComment(p.resolutionNotes || (step === 'assigned' ? 'อนุมัติแล้ว มอบหมายเข้าปฏิบัติการ' : ''));
     setReceiptBookNo(p.form?.receiptBook || '01');
@@ -3168,27 +3168,27 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
                       className="w-full bg-white border border-blue-200 rounded-xl px-3 py-2 font-medium focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      <span className="text-[10px] text-slate-400">เลือกเร็ว:</span>
+                      <span className="text-[10px] text-slate-400">เลือกเจ้าหน้าที่จากระบบ:</span>
                       <button
                         type="button"
-                        onClick={() => setActionOfficerName('นายชนะ สุขด้วง (พนักงานขับรถ)')}
+                        onClick={() => setActionOfficerName('พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข)')}
                         className="px-2 py-0.5 rounded bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-semibold cursor-pointer"
                       >
-                        นายชนะ (พขร.)
+                        พันจ่าเอกอานัส เด็นหมาด
                       </button>
                       <button
                         type="button"
-                        onClick={() => setActionOfficerName('พันจ่าเอกอานัส เด่นหมาด (จนท.สุขาภิบาล)')}
+                        onClick={() => setActionOfficerName('นางสาวปฐมาภรณ์ จันทร์แจ่ม (ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม)')}
                         className="px-2 py-0.5 rounded bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-semibold cursor-pointer"
                       >
-                        พ.จ.อ.อานัส (สุขาภิบาล)
+                        นางสาวปฐมาภรณ์ จันทร์แจ่ม (ผอ.)
                       </button>
                       <button
                         type="button"
-                        onClick={() => setActionOfficerName('ทีมงานพ่นหมอกควันกำจัดยุง')}
+                        onClick={() => setActionOfficerName('นายชนะ สุขด้วง (พนักงานขับรถบรรทุกสิ่งปฏิกูล)')}
                         className="px-2 py-0.5 rounded bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-semibold cursor-pointer"
                       >
-                        ทีมพ่นยุง
+                        นายชนะ สุขด้วง (พขร.)
                       </button>
                     </div>
                   </div>

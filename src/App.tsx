@@ -165,6 +165,27 @@ const CITIZEN_GUEST_USER: User = {
   status: 'active',
 };
 
+const sanitizeAllLocalStorageNames = () => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      const val = window.localStorage.getItem(key);
+      if (val && (val.includes('เด่นหมาด') || val.includes('กัญจนณัฏฐ์'))) {
+        const cleaned = val
+          .replace(/เด่นหมาด/g, 'เด็นหมาด')
+          .replace(/นางสาวกัญจนณัฏฐ์\s*หริรักษ์/g, 'นางสาวปฐมาภรณ์ จันทร์แจ่ม')
+          .replace(/กัญจนณัฏฐ์\s*หริรักษ์/g, 'ปฐมาภรณ์ จันทร์แจ่ม');
+        window.localStorage.setItem(key, cleaned);
+      }
+    }
+  } catch (e) {
+    // ignore storage access errors
+  }
+};
+sanitizeAllLocalStorageNames();
+
 export default function App() {
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   const [citizenShareModalOpen, setCitizenShareModalOpen] = useState(false);
@@ -172,7 +193,7 @@ export default function App() {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('job');
   });
-  // Current logged in officer (Default: พันจ่าเอกอานัส เด่นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
+  // Current logged in officer (Default: พันจ่าเอกอานัส เด็นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
     if (isCitizenDirectLink()) return CITIZEN_GUEST_USER;
     return getActiveSession();

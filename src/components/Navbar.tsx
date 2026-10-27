@@ -50,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCitizenShareModal,
   onToggleSidebar,
 }) => {
-  const officerName = currentUser?.fullName || 'พันจ่าเอกอานัส เด่นหมาด';
+  const officerName = currentUser?.fullName || 'พันจ่าเอกอานัส เด็นหมาด';
   const officerRole = currentUser?.roleTitle || 'เจ้าพนักงานสาธารณสุขชำนาญงาน (นายตรวจ)';
 
   const tabTitleMap: Record<MainNavTab, string> = {

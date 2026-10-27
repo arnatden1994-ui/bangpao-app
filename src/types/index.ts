@@ -572,7 +572,7 @@ export const DEFAULT_SIGNER_SETTINGS: SignerSettings = {
   inspectors: [
     {
       id: 'insp-1',
-      name: 'พันจ่าเอกอานัส เด่นหมาด',
+      name: 'พันจ่าเอกอานัส เด็นหมาด',
       position: 'เจ้าพนักงานสาธารณสุขชำนาญงาน',
     },
     {

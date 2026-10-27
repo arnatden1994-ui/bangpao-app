@@ -3,23 +3,39 @@ import { RolePermissions, User, UserRole } from '../types/index.ts';
 const STORAGE_KEY_USERS = 'ph_users_registry_v3';
 const STORAGE_KEY_SESSION = 'ph_active_session_v3';
 
+const sanitizePersonName = (text?: string): string =>
+  (text || '')
+    .replace(/เด่นหมาด/g, 'เด็นหมาด')
+    .replace(/นางสาวกัญจนณัฏฐ์\s*หริรักษ์/g, 'นางสาวปฐมาภรณ์ จันทร์แจ่ม')
+    .replace(/กัญจนณัฏฐ์\s*หริรักษ์/g, 'ปฐมาภรณ์ จันทร์แจ่ม')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+export function sanitizeUserRecord(u: User): User {
+  return {
+    ...u,
+    fullName: sanitizePersonName(u.fullName),
+    roleTitle: sanitizePersonName(u.roleTitle),
+  };
+}
+
 export const INITIAL_USERS: User[] = [
   {
     id: 'USR-001',
-    username: 'anas.inspector',
-    password: '1234',
-    fullName: 'พันจ่าเอกอานัส เด่นหมาด',
-    email: 'anas.inspector@bangpao.go.th',
-    role: 'inspector',
-    roleTitle: 'เจ้าพนักงานสาธารณสุขชำนาญงาน (นายตรวจ)',
+    username: 'Arnat.d',
+    password: 'Arnat1337',
+    fullName: 'พันจ่าเอกอานัส เด็นหมาด',
+    email: 'arnatden1994@gmail.com',
+    role: 'admin',
+    roleTitle: 'เจ้าพนักงานสาธารณสุข (นายตรวจ)',
     department: 'กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า',
-    phone: '081-370-1841',
+    phone: '0638475404',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
     createdAt: '2026-01-01T08:00:00Z',
     status: 'active',
   },
   {
-    id: 'USR-002',
+    id: 'USR-DIRECTOR',
     username: 'admin',
     password: '1234',
     fullName: 'นางสาวปฐมาภรณ์ จันทร์แจ่ม',
@@ -53,40 +69,12 @@ export const INITIAL_USERS: User[] = [
     fullName: 'นายชนะ สุขด้วง',
     email: 'chana.driver@bangpao.go.th',
     role: 'staff',
-    roleTitle: 'พนักงานขับรถบรรทุกสิ่งปฏิกูล / พนักงานพัสดุ (Staff)',
+    roleTitle: 'พนักงานขับรถบรรทุกสิ่งปฏิกูล',
     department: 'งานบริการสาธารณะและสิ่งปฏิกูล',
     phone: '089-777-6655',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
     createdAt: '2026-02-10T10:00:00Z',
     status: 'active',
-  },
-  {
-    id: 'USR-005',
-    username: 'citizen',
-    password: '1234',
-    fullName: 'นางสำรอง วัฒนา (หจก.บุญโชคบริการ)',
-    email: 'samrong.user@gmail.com',
-    role: 'citizen',
-    roleTitle: 'ผู้ประกอบการ / ประชาชนตำบลบางเป้า (Citizen)',
-    department: '99/1 หมู่ 2 ต.บางเป้า อ.กันตัง จ.ตรัง',
-    phone: '081-370-1841',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-    createdAt: '2026-03-01T11:00:00Z',
-    status: 'active',
-  },
-  {
-    id: 'USR-006',
-    username: 'somchai.staff',
-    password: '1234',
-    fullName: 'นายสมชาย พิทักษ์ไทย',
-    email: 'somchai@bangpao.go.th',
-    role: 'staff',
-    roleTitle: 'เจ้าหน้าที่สาธารณสุขใหม่ (รออนุมัติ)',
-    department: 'กองสาธารณสุขและสิ่งแวดล้อม',
-    phone: '082-111-2233',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    createdAt: '2026-10-25T09:00:00Z',
-    status: 'pending',
   },
 ];
 
@@ -151,7 +139,23 @@ export function getAllUsers(): User[] {
     const raw = localStorage.getItem(STORAGE_KEY_USERS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const cleaned = parsed
+          .filter((u: User) => u && u.id !== 'USR-006' && !(u.fullName || '').includes('สมชาย พิทักษ์ไทย'))
+          .map((u: User) => sanitizeUserRecord(u));
+        // Ensure ผอ.ปฐมาภรณ์ จันทร์แจ่ม and นายชนะ สุขด้วง are always present in registry
+        const hasDirector = cleaned.some((u: User) => (u.fullName || '').includes('ปฐมาภรณ์'));
+        if (!hasDirector) {
+          cleaned.push(INITIAL_USERS[1]);
+        }
+        const hasDriver = cleaned.some((u: User) => (u.fullName || '').includes('ชนะ สุขด้วง'));
+        if (!hasDriver) {
+          cleaned.push(INITIAL_USERS[3]);
+        }
+        if (cleaned.length > 0) {
+          return cleaned;
+        }
+      }
     }
   } catch (e) {
     console.error('Error loading users:', e);
@@ -168,14 +172,12 @@ export function syncUsersFromRemote(remoteUsers: User[]): User[] {
     return getAllUsers();
   }
   try {
-    const localUsers = getAllUsers();
     const mapById = new Map<string, User>();
-    INITIAL_USERS.forEach((u) => mapById.set(u.id, u));
-    localUsers.forEach((u) => mapById.set(u.id, u));
+    INITIAL_USERS.forEach((u) => mapById.set(u.id, sanitizeUserRecord(u)));
     remoteUsers.forEach((ru) => {
-      if (ru && ru.id && ru.username) {
+      if (ru && ru.id && ru.username && ru.id !== 'USR-006' && !(ru.fullName || '').includes('สมชาย พิทักษ์ไทย')) {
         const existing = mapById.get(ru.id);
-        mapById.set(ru.id, { ...(existing || {}), ...ru });
+        mapById.set(ru.id, sanitizeUserRecord({ ...(existing || {}), ...ru }));
       }
     });
     const merged = Array.from(mapById.values());
@@ -201,9 +203,9 @@ export function getActiveSession(): User | null {
         const found = users.find((u) => u.id === parsed.id);
         if (found) {
           if (found.status === 'suspended') return null;
-          return found;
+          return sanitizeUserRecord(found);
         }
-        return parsed;
+        return sanitizeUserRecord(parsed);
       }
     }
   } catch (e) {

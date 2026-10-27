@@ -55,7 +55,7 @@ export const InspectionFormModal: React.FC<InspectionFormModalProps> = ({
 
   const [activeCategory, setActiveCategory] = useState<CriteriaCategory | 'all'>('all');
   const [inspectorName, setInspectorName] = useState(
-    establishment.inspectorName || 'พันจ่าเอกอานัส เด่นหมาด'
+    establishment.inspectorName || 'พันจ่าเอกอานัส เด็นหมาด'
   );
   const [inspectorPosition, setInspectorPosition] = useState('เจ้าพนักงานสาธารณสุขชำนาญงาน');
   const [inspectionDate, setInspectionDate] = useState(

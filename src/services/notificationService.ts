@@ -915,7 +915,7 @@ export function generateOfficialCalendarPlanHtml(
       </div>
       <div class="sign-box">
         <div>ลงชื่อ.......................................................ผู้รับทราบ/อนุมัติแผน</div>
-        <div style="margin-top: 4px;">(${signers.directorName || 'นางสาวกัญจนณัฏฐ์ หริรักษ์'})</div>
+        <div style="margin-top: 4px;">(${signers.directorName || 'นางสาวปฐมาภรณ์ จันทร์แจ่ม'})</div>
         <div>ตำแหน่ง ${signers.directorPosition || 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม'}</div>
       </div>
     </div>

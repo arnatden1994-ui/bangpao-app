@@ -1197,7 +1197,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         loanDate: loanDateStr,
         dueDate: dueDateStr,
         status: 'pending',
-        officerInCharge: 'พันจ่าเอกอานัส เด่นหมาด',
+        officerInCharge: 'พันจ่าเอกอานัส เด็นหมาด',
         notes: `${borrowerForm.reason} (${loanDurationType === 'open_ended' ? 'ยืมระยะยาวไร้กำหนดคืน' : `ยืมระยะสั้น กำหนดคืน ${dueDateStr}`})${isQueued ? ' [สถานะ: เข้าคิวจองล่วงหน้า]' : ''}`,
         createdAt: new Date().toISOString(),
         moo: borrowerForm.moo,

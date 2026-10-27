@@ -43,12 +43,18 @@ interface FieldJobActionViewProps {
   onShowToast?: (type: 'success' | 'error' | 'info', msg: string) => void;
 }
 
+const sanitizeOfficerText = (text: string): string =>
+  (text || '')
+    .replace(/เด่นหมาด/g, 'เด็นหมาด')
+    .replace(/นางสาวกัญจนณัฏฐ์\s*หริรักษ์/g, 'นางสาวปฐมาภรณ์ จันทร์แจ่ม')
+    .replace(/กัญจนณัฏฐ์\s*หริรักษ์/g, 'ปฐมาภรณ์ จันทร์แจ่ม');
+
 const OFFICER_PRESETS = [
-  'นายชนะ สุขด้วง (พนักงานขับรถสูบสิ่งปฏิกูล)',
-  'พันจ่าเอกอานัส เด่นหมาด (เจ้าพนักงานสาธารณสุข)',
-  'นางสาวกัญจนณัฏฐ์ หริรักษ์ (ผอ.กองสาธารณสุขฯ)',
-  'ทีมศูนย์สาธิตและยืมอุปกรณ์การแพทย์ ทต.บางเป้า',
-  'ทีมงานสุขาภิบาลและอนามัยสิ่งแวดล้อม',
+  'พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข (นายตรวจ))',
+  'นางสาวปฐมาภรณ์ จันทร์แจ่ม (ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม)',
+  'นายชนะ สุขด้วง (พนักงานขับรถบรรทุกสิ่งปฏิกูล)',
+  'นายจตุพร ศรีสุวรรณ (ปลัดเทศบาลตำบลบางเป้า)',
+  'นายนิติธรรม ดำสุด (รองนายกเทศมนตรี ปฏิบัติราชการแทน นายกเทศมนตรีตำบลบางเป้า)',
 ];
 
 const ISSUE_REASON_PRESETS = [
@@ -75,40 +81,77 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
   const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => getAllUsers());
   const [isCustomOfficerInput, setIsCustomOfficerInput] = useState<boolean>(false);
 
-  // Sync officer list dynamically with ระบบลงทะเบียนใช้งานและจัดการสิทธิ์เจ้าหน้าที่ (LocalStorage + Cloud Firestore)
+  // Sync officer list dynamically with ระบบลงทะเบียนใช้งานและจัดการสิทธิ์เจ้าหน้าที่ (LocalStorage + Cloud Firestore) + ตั้งค่าผู้บริหารและผู้ลงนาม
   const officerOptions = useMemo(() => {
+    const seenNames = new Set<string>();
+    const result: string[] = [];
+
+    const addOption = (rawName: string, rawPos?: string) => {
+      const cleanName = sanitizeOfficerText(rawName || '').replace(/\s+/g, ' ').trim();
+      if (!cleanName || cleanName.includes('สมชาย พิทักษ์ไทย') || cleanName.includes('สำรอง วัฒนา')) return;
+      const normKey = cleanName
+        .replace(/^พ\.จ\.อ\./, 'พันจ่าเอก')
+        .replace(/\s+/g, '');
+      if (seenNames.has(normKey)) return;
+      seenNames.add(normKey);
+
+      const cleanTitle = sanitizeOfficerText(rawPos || '')
+        .replace(/\s*\(Staff\)/gi, '')
+        .replace(/\s*\(Citizen\)/gi, '')
+        .replace(/\s*\(Inspector\)/gi, '')
+        .replace(/\s*\(รออนุมัติ\)/gi, '')
+        .trim();
+      result.push(cleanTitle ? `${cleanName} (${cleanTitle})` : cleanName);
+    };
+
+    // 1. เจ้าหน้าที่จากระบบลงทะเบียนใช้งานและจัดการสิทธิ์เจ้าหน้าที่
     const activeStaff = registeredUsers.filter(
       (u) => u.role !== 'citizen' && u.status !== 'suspended'
     );
-    const formattedFromRegistry = activeStaff.map((u) => {
-      const cleanTitle = (u.roleTitle || '')
-        .replace(/\s*\(Staff\)/gi, '')
-        .replace(/\s*\(Citizen\)/gi, '')
-        .replace(/\s*\(รออนุมัติ\)/gi, '')
-        .trim();
-      return cleanTitle ? `${u.fullName} (${cleanTitle})` : u.fullName;
+    activeStaff.forEach((u) => addOption(u.fullName, u.roleTitle));
+
+    // 2. ผอ.กองสาธารณสุขฯ และบุคลากรหลักจากตั้งค่าผู้ลงนาม (SignerSettings)
+    if (signerSettings?.directorName) {
+      addOption(
+        signerSettings.directorName,
+        signerSettings.directorPosition || signerSettings.directorPos || 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม'
+      );
+    } else {
+      addOption('นางสาวปฐมาภรณ์ จันทร์แจ่ม', 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม');
+    }
+
+    (signerSettings?.inspectors || []).forEach((insp) => {
+      if (insp.name) addOption(insp.name, insp.position);
     });
 
-    // Also include any inspectors from signerSettings if not already in the registry
-    const fromSigners = (signerSettings?.inspectors || [])
-      .filter((insp) => insp.name && !activeStaff.some((u) => u.fullName.trim() === insp.name.trim()))
-      .map((insp) => (insp.position ? `${insp.name} (${insp.position})` : insp.name));
+    if (signerSettings?.driverName) {
+      addOption(signerSettings.driverName, 'พนักงานขับรถบรรทุกสิ่งปฏิกูล');
+    } else {
+      addOption('นายชนะ สุขด้วง', 'พนักงานขับรถบรรทุกสิ่งปฏิกูล');
+    }
 
-    const combined = Array.from(new Set([...formattedFromRegistry, ...fromSigners]));
-    return combined.length > 0 ? combined : OFFICER_PRESETS;
+    return result.length > 0 ? result : OFFICER_PRESETS;
   }, [registeredUsers, signerSettings]);
 
   const [officerName, setOfficerName] = useState<string>(() => {
     const loggedIn = getCurrentUser();
     if (loggedIn && loggedIn.role !== 'citizen') {
-      const cleanTitle = (loggedIn.roleTitle || '').replace(/\s*\(Staff\)/gi, '').trim();
-      return cleanTitle ? `${loggedIn.fullName} (${cleanTitle})` : loggedIn.fullName;
+      const cleanName = sanitizeOfficerText(loggedIn.fullName);
+      const cleanTitle = sanitizeOfficerText(loggedIn.roleTitle || '')
+        .replace(/\s*\(Staff\)/gi, '')
+        .replace(/\s*\(Inspector\)/gi, '')
+        .trim();
+      return cleanTitle ? `${cleanName} (${cleanTitle})` : cleanName;
     }
     const allStaff = getAllUsers().filter((u) => u.role !== 'citizen' && u.status !== 'suspended');
     if (allStaff.length > 0) {
       const first = allStaff[0];
-      const cleanTitle = (first.roleTitle || '').replace(/\s*\(Staff\)/gi, '').trim();
-      return cleanTitle ? `${first.fullName} (${cleanTitle})` : first.fullName;
+      const cleanName = sanitizeOfficerText(first.fullName);
+      const cleanTitle = sanitizeOfficerText(first.roleTitle || '')
+        .replace(/\s*\(Staff\)/gi, '')
+        .replace(/\s*\(Inspector\)/gi, '')
+        .trim();
+      return cleanTitle ? `${cleanName} (${cleanTitle})` : cleanName;
     }
     return OFFICER_PRESETS[0];
   });
@@ -974,22 +1017,45 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
               </div>
             </div>
 
-            {/* Officer Name Selector */}
+            {/* Officer Name Selector (Synced with ระบบลงทะเบียนใช้งานและจัดการสิทธิ์เจ้าหน้าที่) */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                ชื่อเจ้าหน้าที่ผู้รับงาน / ผู้รายงานผลหน้างาน *
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  ชื่อเจ้าหน้าที่ผู้รับงาน / ผู้รายงานผลหน้างาน *
+                </label>
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  ซิงค์รายชื่อจริงจากระบบจัดการสิทธิ์เจ้าหน้าที่ ({officerOptions.length} ท่าน)
+                </span>
+              </div>
               <select
-                value={officerName}
-                onChange={(e) => setOfficerName(e.target.value)}
+                value={isCustomOfficerInput ? '__CUSTOM__' : officerName}
+                onChange={(e) => {
+                  if (e.target.value === '__CUSTOM__') {
+                    setIsCustomOfficerInput(true);
+                    setOfficerName('');
+                  } else {
+                    setIsCustomOfficerInput(false);
+                    setOfficerName(e.target.value);
+                  }
+                }}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:ring-2 focus:ring-emerald-600"
               >
-                {OFFICER_PRESETS.map((name) => (
+                {officerOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>
                 ))}
+                <option value="__CUSTOM__">✏️ พิมพ์ระบุชื่อเจ้าหน้าที่หรือทีมงานเอง...</option>
               </select>
+              {isCustomOfficerInput && (
+                <input
+                  type="text"
+                  value={officerName}
+                  onChange={(e) => setOfficerName(e.target.value)}
+                  placeholder="พิมพ์ชื่อ-นามสกุล และตำแหน่งเจ้าหน้าที่ผู้ปฏิบัติงาน..."
+                  className="mt-2 w-full px-3.5 py-2 rounded-xl border border-emerald-400 text-sm font-bold text-slate-900 bg-emerald-50/30 focus:ring-2 focus:ring-emerald-600"
+                />
+              )}
             </div>
 
             {/* Specific Fields for 'issue_blocked' */}
