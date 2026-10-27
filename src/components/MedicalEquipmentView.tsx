@@ -1383,8 +1383,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     setReturnModalLoan(null);
   };
 
-  const handleSaveEditEquipment = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveEditEquipment = (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!editingEquipment) return;
     if (onUpdateEquipment) {
       onUpdateEquipment(editingEquipment);
@@ -1397,16 +1397,48 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const handleImageUploadForEdit = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('ขนาดไฟล์รูปภาพเกิน 5MB กรุณาเลือกไฟล์ที่เล็กลง');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('ขนาดไฟล์รูปภาพเกิน 20MB กรุณาเลือกไฟล์ที่เล็กลง');
       return;
     }
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const base64 = ev.target?.result as string;
-      if (editingEquipment) {
-        setEditingEquipment({ ...editingEquipment, imageUrl: base64 });
-      }
+      const rawDataUrl = ev.target?.result as string;
+      // High-performance canvas downscaling to max 800x800 for optimal fast rendering & storage
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 800;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            setEditingEquipment((prev) => (prev ? { ...prev, imageUrl: compressed } : null));
+          } else {
+            setEditingEquipment((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+          }
+        } catch {
+          setEditingEquipment((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+        }
+      };
+      img.onerror = () => {
+        setEditingEquipment((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   };
@@ -4355,7 +4387,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditEquipment} className="space-y-4 text-xs sm:text-sm">
+            <form onSubmit={handleSaveEditEquipment} noValidate className="space-y-4 text-xs sm:text-sm">
               {/* Photo Preview & Upload Box */}
               <div className="p-4 rounded-2xl bg-teal-50/60 border-2 border-dashed border-teal-300 text-center space-y-3">
                 <div className="font-bold text-teal-950">
@@ -4400,10 +4432,10 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 <div className="text-left">
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">หรือระบุลิงก์รูปภาพ (Image URL):</label>
                   <input
-                    type="url"
+                    type="text"
                     value={editingEquipment.imageUrl || ''}
                     onChange={(e) => setEditingEquipment({ ...editingEquipment, imageUrl: e.target.value })}
-                    placeholder="https://example.com/image.jpg"
+                    placeholder="https://... หรือ data:image/..."
                     className="w-full p-2.5 border border-slate-300 rounded-xl bg-white text-xs font-mono"
                   />
                 </div>
@@ -4507,8 +4539,9 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   ยกเลิก
                 </button>
                 <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-black cursor-pointer shadow-md flex items-center gap-1.5"
+                  type="button"
+                  onClick={() => handleSaveEditEquipment()}
+                  className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-black cursor-pointer shadow-md flex items-center gap-1.5 active:scale-95 transition-all"
                 >
                   <Save className="w-4 h-4" />
                   <span>บันทึกการแก้ไข & รูปภาพ</span>
