@@ -208,13 +208,47 @@ export function saveStoredLtc(items: LtcPatient[]) {
   localStorage.setItem(STORAGE_KEYS.LTC, JSON.stringify(items));
 }
 
+// Accurate Medical Equipment Images Mapping
+const ACCURATE_EQUIPMENT_PHOTOS: Record<string, string> = {
+  'EQ-001': 'https://upload.wikimedia.org/wikipedia/commons/8/8a/Hospital_bed.jpg',
+  'EQ-002': 'https://upload.wikimedia.org/wikipedia/commons/2/24/Blue-lightweight-wheelchair.jpg',
+  'EQ-003': 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Home_oxygen_concentrator.jpg',
+  'EQ-004': 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Betabed_Alternating_Pressure_Pad_System.JPG',
+  'EQ-005': 'https://upload.wikimedia.org/wikipedia/commons/a/a4/Aspirateur_medical_1.jpg',
+  'EQ-006': 'https://upload.wikimedia.org/wikipedia/commons/4/49/Rollator.jpg',
+  'EQ-007': 'https://upload.wikimedia.org/wikipedia/commons/d/d1/Hospital_Bed_2011.JPG',
+};
+
 // Medical Equipment
 export function getStoredEquipment(): MedicalEquipment[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      const parsed: MedicalEquipment[] = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Upgrade legacy mismatched photos to accurate medical equipment photos if not customized by user
+        let hasUpgrade = false;
+        const upgraded = parsed.map((item) => {
+          if (
+            ACCURATE_EQUIPMENT_PHOTOS[item.id] &&
+            (item.imageUrl?.includes('photo-1519494026892') ||
+             item.imageUrl?.includes('photo-1584515979956') ||
+             item.imageUrl?.includes('photo-1584515933487') ||
+             item.imageUrl?.includes('photo-1582719478250') ||
+             item.imageUrl?.includes('photo-1584308666744') ||
+             item.imageUrl?.includes('photo-1576091160399') ||
+             item.imageUrl?.includes('photo-1516549655169'))
+          ) {
+            hasUpgrade = true;
+            return { ...item, imageUrl: ACCURATE_EQUIPMENT_PHOTOS[item.id] };
+          }
+          return item;
+        });
+        if (hasUpgrade) {
+          saveStoredEquipment(upgraded);
+        }
+        return upgraded;
+      }
     }
   } catch (e) {
     console.error(e);

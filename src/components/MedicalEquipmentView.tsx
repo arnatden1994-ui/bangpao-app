@@ -180,6 +180,7 @@ interface MedicalEquipmentViewProps {
   onUpdateLoanStatus?: (loanId: string, status: EquipmentLoan['status'], extra?: Partial<EquipmentLoan>) => void;
   onDeleteLoan?: (loanId: string) => void;
   onAddEquipment?: (item: MedicalEquipment) => void;
+  onUpdateEquipment?: (item: MedicalEquipment) => void;
   activeSubTab?: 'route' | 'register' | 'inventory' | 'loans' | 'map';
   onSubTabChange?: (tab: 'route' | 'register' | 'inventory') => void;
   savedSignerSettings?: SignerSettings;
@@ -196,6 +197,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   onUpdateLoanStatus,
   onDeleteLoan,
   onAddEquipment,
+  onUpdateEquipment,
   activeSubTab: controlledTab,
   onSubTabChange,
   savedSignerSettings,
@@ -279,6 +281,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
   // Add Equipment Modal
   const [isAddEquipModalOpen, setIsAddEquipModalOpen] = useState(false);
+  const [editingEquipment, setEditingEquipment] = useState<MedicalEquipment | null>(null);
+  const [isEditEquipModalOpen, setIsEditEquipModalOpen] = useState(false);
   const [newEquipForm, setNewEquipForm] = useState({
     assetCode: `EQ-${Date.now().toString().slice(-4)}`,
     name: '',
@@ -1376,6 +1380,34 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const handleConfirmReturn = (loan: EquipmentLoan) => {
     onReturnEquipment(loan.id, returnCondition, damageNotes);
     setReturnModalLoan(null);
+  };
+
+  const handleSaveEditEquipment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEquipment) return;
+    if (onUpdateEquipment) {
+      onUpdateEquipment(editingEquipment);
+    }
+    setRegisterSuccessMsg('บันทึกการแก้ไข ' + editingEquipment.name + ' เรียบร้อยแล้ว');
+    setIsEditEquipModalOpen(false);
+    setEditingEquipment(null);
+  };
+
+  const handleImageUploadForEdit = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('ขนาดไฟล์รูปภาพเกิน 5MB กรุณาเลือกไฟล์ที่เล็กลง');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64 = ev.target?.result as string;
+      if (editingEquipment) {
+        setEditingEquipment({ ...editingEquipment, imageUrl: base64 });
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleCreateEquipment = (e: React.FormEvent) => {
@@ -3845,6 +3877,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200">
                     <th className="py-2.5 px-3">#</th>
+                    <th className="py-2.5 px-3 text-center">รูปภาพ</th>
                     <th className="py-2.5 px-3">รหัสครุภัณฑ์</th>
                     <th className="py-2.5 px-3">ชื่ออุปกรณ์ทางการแพทย์</th>
                     <th className="py-2.5 px-3">หมวดหมู่</th>
@@ -3852,12 +3885,27 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     <th className="py-2.5 px-3 text-center">ถูกยืม</th>
                     <th className="py-2.5 px-3 text-center">คงเหลือ</th>
                     <th className="py-2.5 px-3">สถานที่จัดเก็บ</th>
+                    <th className="py-2.5 px-3 text-center">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {equipmentList.map((eq, i) => (
                     <tr key={eq.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-2.5 px-3 text-slate-400 font-bold">{i + 1}</td>
+                      <td className="py-2 px-3 text-center">
+                        {eq.imageUrl ? (
+                          <img
+                            src={eq.imageUrl}
+                            alt={eq.name}
+                            className="w-12 h-12 rounded-lg object-cover border border-slate-200 shadow-2xs mx-auto"
+                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 text-slate-400 flex items-center justify-center mx-auto text-[10px]">
+                            ไม่มีรูป
+                          </div>
+                        )}
+                      </td>
                       <td className="py-2.5 px-3 font-mono font-bold text-teal-800">{eq.assetCode}</td>
                       <td className="py-2.5 px-3 font-bold text-slate-900">{eq.name}</td>
                       <td className="py-2.5 px-3 text-slate-600">{eq.category}</td>
@@ -3871,6 +3919,20 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-slate-500">{eq.storageLocation || '-'}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingEquipment({ ...eq });
+                            setIsEditEquipModalOpen(true);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          title="แก้ไขข้อมูล หรืออัปโหลดรูปถ่ายจริงของอุปกรณ์"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>แก้ไข / รูปภาพ</span>
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -4267,6 +4329,191 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 ยืนยันรับคืนอุปกรณ์เข้าคลัง
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Equipment & Photo Upload Modal */}
+      {isEditEquipModalOpen && editingEquipment && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-teal-700" />
+                <span>แก้ไขข้อมูล & รูปถ่ายอุปกรณ์จริง</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditEquipModalOpen(false);
+                  setEditingEquipment(null);
+                }}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditEquipment} className="space-y-4 text-xs sm:text-sm">
+              {/* Photo Preview & Upload Box */}
+              <div className="p-4 rounded-2xl bg-teal-50/60 border-2 border-dashed border-teal-300 text-center space-y-3">
+                <div className="font-bold text-teal-950">
+                  รูปถ่ายอุปกรณ์ทางการแพทย์ (แสดงในระบบเจ้าหน้าที่และประชาชน)
+                </div>
+                {editingEquipment.imageUrl ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={editingEquipment.imageUrl}
+                      alt={editingEquipment.name}
+                      className="w-44 h-36 object-cover rounded-2xl border-2 border-teal-400 shadow-md mx-auto"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditingEquipment({ ...editingEquipment, imageUrl: '' })}
+                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-600 text-white font-bold text-xs flex items-center justify-center shadow-md hover:bg-rose-700 cursor-pointer"
+                      title="ลบรูปภาพนี้"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-44 h-32 rounded-2xl bg-white border-2 border-slate-200 text-slate-400 flex flex-col items-center justify-center mx-auto text-xs gap-1">
+                    <Package className="w-8 h-8 text-slate-300" />
+                    <span>ยังไม่มีรูปภาพ</span>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                  <label className="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>ถ่ายรูป / อัปโหลดไฟล์ภาพจริง</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUploadForEdit}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <div className="text-left">
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">หรือระบุลิงก์รูปภาพ (Image URL):</label>
+                  <input
+                    type="url"
+                    value={editingEquipment.imageUrl || ''}
+                    onChange={(e) => setEditingEquipment({ ...editingEquipment, imageUrl: e.target.value })}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-white text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Equipment Info Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">รหัสครุภัณฑ์ *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingEquipment.assetCode}
+                    onChange={(e) => setEditingEquipment({ ...editingEquipment, assetCode: e.target.value })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-white font-mono font-bold text-teal-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">หมวดหมู่อุปกรณ์ *</label>
+                  <select
+                    value={editingEquipment.category}
+                    onChange={(e) => setEditingEquipment({ ...editingEquipment, category: e.target.value as any })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-white font-semibold"
+                  >
+                    <option value="bed">🛏️ เตียงผู้ป่วย</option>
+                    <option value="wheelchair">♿ รถเข็นวีลแชร์</option>
+                    <option value="oxygen_concentrator">🧪 เครื่องผลิตออกซิเจน</option>
+                    <option value="air_mattress">💨 ที่นอนลม</option>
+                    <option value="suction_machine">🫁 เครื่องดูดเสมหะ</option>
+                    <option value="walker">🦯 ไม้เท้า / โครงช่วยเดิน</option>
+                    <option value="other">📦 อุปกรณ์อื่นๆ</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">ชื่ออุปกรณ์ทางการแพทย์ *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingEquipment.name}
+                  onChange={(e) => setEditingEquipment({ ...editingEquipment, name: e.target.value })}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl bg-white font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">จำนวนทั้งหมด (ชิ้น)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editingEquipment.totalQuantity}
+                    onChange={(e) => {
+                      const total = Number(e.target.value);
+                      const inUse = editingEquipment.inUseQuantity || 0;
+                      setEditingEquipment({
+                        ...editingEquipment,
+                        totalQuantity: total,
+                        availableQuantity: Math.max(0, total - inUse),
+                      });
+                    }}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">พร้อมให้ยืม (ว่าง)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={editingEquipment.availableQuantity}
+                    onChange={(e) => setEditingEquipment({ ...editingEquipment, availableQuantity: Number(e.target.value) })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-white font-bold text-emerald-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">สถานที่จัดเก็บในสำนักงาน</label>
+                <input
+                  type="text"
+                  value={editingEquipment.storageLocation}
+                  onChange={(e) => setEditingEquipment({ ...editingEquipment, storageLocation: e.target.value })}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditEquipModalOpen(false);
+                    setEditingEquipment(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-black cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>บันทึกการแก้ไข & รูปภาพ</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

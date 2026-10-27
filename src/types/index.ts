@@ -501,6 +501,7 @@ export interface EquipmentLoan {
   longitude?: number;
   moo?: string;
   isPublicCitizenRequest?: boolean;
+  itemsSummary?: string;
 }
 
 export interface GoogleSheetsConfig {

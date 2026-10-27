@@ -1231,6 +1231,18 @@ unsubLicenses();
                   saveToFirestore(COLLECTIONS.EQUIPMENT, newEq).catch(() => {});
                   showToast('success', `เพิ่ม ${newEq.name} เข้าคลังเรียบร้อยแล้ว`);
                 }}
+                onUpdateEquipment={(updatedEq) => {
+                  setEquipmentList((prev) =>
+                    prev.map((eq) => (eq.id === updatedEq.id ? updatedEq : eq))
+                  );
+                  saveToFirestore(COLLECTIONS.EQUIPMENT, updatedEq).catch(() => {});
+                  try {
+                    const currentStored = JSON.parse(localStorage.getItem('bangpao_medical_equipment') || '[]');
+                    const nextStored = currentStored.map((eq) => (eq.id === updatedEq.id ? updatedEq : eq));
+                    localStorage.setItem('bangpao_medical_equipment', JSON.stringify(nextStored));
+                  } catch (e) {}
+                  showToast('success', 'อัปเดตข้อมูลและรูปภาพ ' + (updatedEq.name || '') + ' เรียบร้อยแล้ว');
+                }}
                 onPrintContract={(loan) => {
                   setSelectedLoanForPrint(loan);
                   setEquipmentLoanModalOpen(true);

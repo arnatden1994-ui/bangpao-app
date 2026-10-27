@@ -892,7 +892,7 @@ export const INITIAL_MEDICAL_EQUIPMENT: MedicalEquipment[] = [
     maintenanceQuantity: 1,
     condition: 'good',
     storageLocation: 'ห้องคลังอุปกรณ์ชั้น 1 กองสาธารณสุข',
-    imageUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=400&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/8a/Hospital_bed.jpg',
   },
   {
     id: 'EQ-002',
@@ -905,7 +905,7 @@ export const INITIAL_MEDICAL_EQUIPMENT: MedicalEquipment[] = [
     maintenanceQuantity: 1,
     condition: 'good',
     storageLocation: 'ห้องคลังอุปกรณ์ชั้น 1 กองสาธารณสุข',
-    imageUrl: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?w=400&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Blue-lightweight-wheelchair.jpg',
   },
   {
     id: 'EQ-003',
@@ -918,7 +918,7 @@ export const INITIAL_MEDICAL_EQUIPMENT: MedicalEquipment[] = [
     maintenanceQuantity: 0,
     condition: 'good',
     storageLocation: 'ห้องปลอดเชื้อชั้น 2',
-    imageUrl: 'https://images.unsplash.com/photo-1584515933487-779824d29309?w=400&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Home_oxygen_concentrator.jpg',
   },
   {
     id: 'EQ-004',
@@ -931,7 +931,7 @@ export const INITIAL_MEDICAL_EQUIPMENT: MedicalEquipment[] = [
     maintenanceQuantity: 0,
     condition: 'good',
     storageLocation: 'ห้องคลังอุปกรณ์ชั้น 1',
-    imageUrl: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=400&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Betabed_Alternating_Pressure_Pad_System.JPG',
   },
   {
     id: 'EQ-005',
@@ -944,7 +944,7 @@ export const INITIAL_MEDICAL_EQUIPMENT: MedicalEquipment[] = [
     maintenanceQuantity: 0,
     condition: 'good',
     storageLocation: 'ห้องอุปกรณ์การแพทย์ฉุกเฉิน',
-    imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/a4/Aspirateur_medical_1.jpg',
   },
   {
     id: 'EQ-006',
@@ -957,7 +957,7 @@ export const INITIAL_MEDICAL_EQUIPMENT: MedicalEquipment[] = [
     maintenanceQuantity: 0,
     condition: 'good',
     storageLocation: 'ห้องคลังอุปกรณ์ชั้น 1',
-    imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=400&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/4/49/Rollator.jpg',
   },
   {
     id: 'EQ-007',
@@ -970,7 +970,7 @@ export const INITIAL_MEDICAL_EQUIPMENT: MedicalEquipment[] = [
     maintenanceQuantity: 1,
     condition: 'good',
     storageLocation: 'ห้องคลังอุปกรณ์ชั้น 1',
-    imageUrl: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?w=400&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d1/Hospital_Bed_2011.JPG',
   },
 ];
 
