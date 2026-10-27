@@ -88,6 +88,11 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
       const matchStatus = statusFilter === 'all' || l.status === statusFilter;
 
       return matchSearch && matchYear && matchStatus;
+    }).sort((a: any, b: any) => {
+      const tA = new Date(a.updatedAt || a.createdAt || a.issueDate || 0).getTime() || 0;
+      const tB = new Date(b.updatedAt || b.createdAt || b.issueDate || 0).getTime() || 0;
+      if (tB !== tA) return tB - tA;
+      return 0;
     });
   }, [licenses, search, selectedYear, statusFilter]);
 

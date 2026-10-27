@@ -2010,8 +2010,11 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       createdAt: newReg.createdAt || '2026-10-01',
     };
 
-    const nextStops = [...stops, newStop];
-    const nextSelected = [...selectedStopIds, newStop.id];
+    const nextStops = [newStop, ...stops].map((s, idx) => ({
+      ...s,
+      routeOrder: idx + 1,
+    }));
+    const nextSelected = [newStop.id, ...selectedStopIds.filter((id) => id !== newStop.id)];
     setStops(nextStops);
     setSelectedYearFilter(targetYear);
     setSelectedRoundFilter(targetRound);

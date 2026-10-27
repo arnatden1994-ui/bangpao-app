@@ -4,6 +4,7 @@ import {
   generateOfficialMedicalLoanHtml,
   generateOfficialMedicalLoanDocxBytes,
 } from './medicalLoanDocGenerator.ts';
+import { saveLtcQueueToFirestore } from './firebaseService.ts';
 
 export interface NotificationSettings {
   // LINE Messaging API / Group Notification
@@ -67,6 +68,8 @@ export interface LtcQueueStopNotifyItem {
   lat: number;
   lng: number;
   individualMapsUrl: string;
+  fieldDeliveryStatus?: 'pending' | 'delivered' | 'issue_blocked';
+  fieldDeliveryNote?: string;
 }
 
 export interface LtcDeliveryQueueNotifyInput {
@@ -1174,6 +1177,8 @@ export function normalizeLtcQueueInput(raw: any): LtcDeliveryQueueNotifyInput {
       lat,
       lng,
       individualMapsUrl: indivUrl,
+      fieldDeliveryStatus: st.fieldDeliveryStatus,
+      fieldDeliveryNote: st.fieldDeliveryNote,
     };
   });
 
@@ -1360,10 +1365,9 @@ export function buildLtcDeliveryQueueNotificationPayload(
     input.referenceCode || `LTC-${input.fiscalYear}-R${input.roundKey}-Q${input.stops.length}`;
 
   try {
-    localStorage.setItem(
-      STORAGE_KEY_LATEST_LTC_QUEUE_JOB,
-      JSON.stringify({ ...input, referenceCode: refCode })
-    );
+    const queueToSave = { ...input, referenceCode: refCode };
+    localStorage.setItem(STORAGE_KEY_LATEST_LTC_QUEUE_JOB, JSON.stringify(queueToSave));
+    saveLtcQueueToFirestore(queueToSave).catch(() => {});
   } catch {
     // ignore storage quota errors
   }
@@ -1435,16 +1439,33 @@ export function buildLtcDeliveryQueueNotificationPayload(
         input.distanceKm ? ` • ระยะทางรวม ~${input.distanceKm} กม. (~${input.durationMin || 10} นาที)` : ''
       }`,
     },
-    ...input.stops.map((st) => ({
-      label: `🚩 คิวที่ #${st.queueOrder}: ${st.patientName} (${st.adlCategory})`,
-      value: [
-        `👤 ใคร (ผู้รับของ): ${st.patientName}${st.age ? ` (อายุ ${st.age} ปี)` : ''} • กลุ่ม${st.adlCategory}`,
-        `🏠 ที่ไหน (ที่อยู่): ${st.address} (หมู่ที่ ${st.moo} ${st.village} ต.บางเป้า)`,
-        `📦 รับอะไร (สิ่งของรอบนี้): ${st.itemsText}`,
-        `📞 ติดต่อยังไง: โทร. ${st.phone || '-'}${st.caregiverName ? ` (${st.caregiverName})` : ''}`,
-        `📍 พิกัดบ้าน & นำทาง: ${st.lat.toFixed(6)}, ${st.lng.toFixed(6)} ${st.individualMapsUrl}`,
-      ].join('\n'),
-    })),
+    ...input.stops.map((st) => {
+      const statusSuffix =
+        st.fieldDeliveryStatus === 'delivered'
+          ? ' [✅ ส่งมอบสำเร็จ]'
+          : st.fieldDeliveryStatus === 'issue_blocked'
+          ? ` [⚠️ ติดขัด: ${st.fieldDeliveryNote || 'รอนัดส่งใหม่'}]`
+          : '';
+      return {
+        label: `🚩 คิวที่ #${st.queueOrder}: ${st.patientName} (${st.adlCategory})${statusSuffix}`,
+        value: [
+          `👤 ใคร (ผู้รับของ): ${st.patientName}${st.age ? ` (อายุ ${st.age} ปี)` : ''} • กลุ่ม${st.adlCategory}`,
+          `🏠 ที่ไหน (ที่อยู่): ${st.address} (หมู่ที่ ${st.moo} ${st.village} ต.บางเป้า)`,
+          `📦 รับอะไร (สิ่งของรอบนี้): ${st.itemsText}`,
+          `📞 ติดต่อยังไง: โทร. ${st.phone || '-'}${st.caregiverName ? ` (${st.caregiverName})` : ''}`,
+          st.fieldDeliveryStatus
+            ? `📋 ผลส่งมอบรายบ้าน: ${
+                st.fieldDeliveryStatus === 'delivered'
+                  ? '✅ ส่งมอบเรียบร้อยแล้ว'
+                  : `⚠️ ติดขัด (${st.fieldDeliveryNote || 'รอนัดส่งใหม่'})`
+              }`
+            : '',
+          `📍 พิกัดบ้าน & นำทาง: ${st.lat.toFixed(6)}, ${st.lng.toFixed(6)} ${st.individualMapsUrl}`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      };
+    }),
   ];
 
   const badgeText = '🚑 แจ้งเตือนคิวส่งมอบพัสดุ สปสช. & LTC';

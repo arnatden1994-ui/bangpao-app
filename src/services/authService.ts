@@ -12,10 +12,18 @@ const sanitizePersonName = (text?: string): string =>
     .trim();
 
 export function sanitizeUserRecord(u: User): User {
+  const cleanFullName = sanitizePersonName(u.fullName);
+  const cleanRoleTitle = sanitizePersonName(u.roleTitle);
+  const isAnas = cleanFullName.includes('อานัส') && cleanFullName.includes('เด็นหมาด');
   return {
     ...u,
-    fullName: sanitizePersonName(u.fullName),
-    roleTitle: sanitizePersonName(u.roleTitle),
+    fullName: isAnas ? 'พันจ่าเอกอานัส เด็นหมาด' : cleanFullName,
+    role: isAnas ? 'admin' : u.role,
+    roleTitle: isAnas
+      ? cleanRoleTitle.includes('ผู้ดูแลระบบ')
+        ? cleanRoleTitle
+        : 'เจ้าพนักงานสาธารณสุข (ผู้ดูแลระบบสูงสุด)'
+      : cleanRoleTitle,
   };
 }
 
@@ -27,7 +35,7 @@ export const INITIAL_USERS: User[] = [
     fullName: 'พันจ่าเอกอานัส เด็นหมาด',
     email: 'arnatden1994@gmail.com',
     role: 'admin',
-    roleTitle: 'เจ้าพนักงานสาธารณสุข (นายตรวจ)',
+    roleTitle: 'เจ้าพนักงานสาธารณสุข (ผู้ดูแลระบบสูงสุด)',
     department: 'กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า',
     phone: '0638475404',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
@@ -141,7 +149,13 @@ export function getAllUsers(): User[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         const cleaned = parsed
-          .filter((u: User) => u && u.id !== 'USR-006' && !(u.fullName || '').includes('สมชาย พิทักษ์ไทย'))
+          .filter(
+            (u: User) =>
+              u &&
+              u.id !== 'USR-006' &&
+              !(u.fullName || '').includes('สมชาย พิทักษ์ไทย') &&
+              !(u.id === 'USR-002' && (u.fullName || '').includes('อานัส'))
+          )
           .map((u: User) => sanitizeUserRecord(u));
         // Ensure ผอ.ปฐมาภรณ์ จันทร์แจ่ม and นายชนะ สุขด้วง are always present in registry
         const hasDirector = cleaned.some((u: User) => (u.fullName || '').includes('ปฐมาภรณ์'));
@@ -175,7 +189,14 @@ export function syncUsersFromRemote(remoteUsers: User[]): User[] {
     const mapById = new Map<string, User>();
     INITIAL_USERS.forEach((u) => mapById.set(u.id, sanitizeUserRecord(u)));
     remoteUsers.forEach((ru) => {
-      if (ru && ru.id && ru.username && ru.id !== 'USR-006' && !(ru.fullName || '').includes('สมชาย พิทักษ์ไทย')) {
+      if (
+        ru &&
+        ru.id &&
+        ru.username &&
+        ru.id !== 'USR-006' &&
+        !(ru.fullName || '').includes('สมชาย พิทักษ์ไทย') &&
+        !(ru.id === 'USR-002' && (ru.fullName || '').includes('อานัส'))
+      ) {
         const existing = mapById.get(ru.id);
         mapById.set(ru.id, sanitizeUserRecord({ ...(existing || {}), ...ru }));
       }
@@ -250,8 +271,12 @@ export function loginUser(
     const emailPrefix = uemail.split('@')[0];
     const fname = (u.fullName || '').trim().toLowerCase();
     const uphone = (u.phone || '').replace(/[^0-9]/g, '');
+    const isAnasAlias =
+      fname.includes('อานัส') &&
+      (trimmed === 'inspector' || trimmed === 'anas.inspector' || trimmed === 'arnat.d');
     return (
       uname === trimmed ||
+      isAnasAlias ||
       uemail === trimmed ||
       (emailPrefix && emailPrefix === trimmed) ||
       fname === trimmed ||

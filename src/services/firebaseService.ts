@@ -49,6 +49,7 @@ export const COLLECTIONS = {
   SETTINGS: 'system_settings',
   USERS: 'users',
   CALENDAR_EVENTS: 'calendar_events',
+  LTC_QUEUES: 'ltc_delivery_queues',
 } as const;
 
 /**
@@ -279,5 +280,20 @@ export async function deleteUserFromFirestore(userId: string): Promise<void> {
 export async function fetchUsersFromFirestore(): Promise<User[]> {
   return fetchCollection<User>(COLLECTIONS.USERS);
 }
+
+/**
+ * LTC Delivery Queue Firestore helpers (for cross-device PC -> Mobile LINE link sync)
+ */
+export async function saveLtcQueueToFirestore(queueJob: any): Promise<string> {
+  const docId = (queueJob.referenceCode || queueJob.id || `LTC-${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+  await saveToFirestore(COLLECTIONS.LTC_QUEUES, { ...queueJob, id: docId }, docId);
+  await saveToFirestore(COLLECTIONS.LTC_QUEUES, { ...queueJob, id: 'LATEST_LTC_QUEUE' }, 'LATEST_LTC_QUEUE');
+  return docId;
+}
+
+export async function fetchLtcQueuesFromFirestore(): Promise<any[]> {
+  return fetchCollection<any>(COLLECTIONS.LTC_QUEUES);
+}
+
 
 

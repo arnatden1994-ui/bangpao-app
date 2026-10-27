@@ -1122,7 +1122,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 border-y border-slate-200 font-bold text-[11px]">
                       <th className="py-2.5 px-3">สิทธิ์การทำงาน</th>
-                      <th className="py-2.5 px-3 text-center">Admin (ผอ.กอง/นายก)</th>
+                      <th className="py-2.5 px-3 text-center">Admin (ผู้ดูแลระบบสูงสุด)</th>
                       <th className="py-2.5 px-3 text-center">Inspector (นายตรวจ)</th>
                       <th className="py-2.5 px-3 text-center">Staff (ธุรการ/LTC)</th>
                       <th className="py-2.5 px-3 text-center">Citizen (ประชาชน)</th>
@@ -1578,19 +1578,19 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                     onChange={(e) => {
                       const r = e.target.value as UserRole;
                       const roleTitles: Record<UserRole, string> = {
-                        admin: 'นายกเทศมนตรี / ผู้บริหารระดับสูง',
+                        admin: 'เจ้าพนักงานสาธารณสุข (ผู้ดูแลระบบสูงสุด)',
                         executive: 'ผู้บริหารเทศบาลตำบลบางเป้า',
                         inspector: 'นายตรวจ / เจ้าพนักงานสาธารณสุข',
-                        staff: 'เจ้าหน้าที่ธุรการ / LTC (Staff)',
+                        staff: 'เจ้าหน้าที่ปฏิบัติงาน / พขร. / LTC',
                         citizen: 'ประชาชน / ผู้ประกอบการ',
                       };
                       setNewUserForm({ ...newUserForm, role: r, roleTitle: roleTitles[r] || 'เจ้าหน้าที่' });
                     }}
                     className="w-full text-base font-normal px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-sarabun cursor-pointer"
                   >
-                    <option value="inspector">นายตรวจ (Inspector)</option>
-                    <option value="admin">ผู้บริหาร / Admin</option>
-                    <option value="staff">เจ้าหน้าที่ธุรการ / LTC (Staff)</option>
+                    <option value="inspector">นายตรวจ / เจ้าพนักงานสาธารณสุข (Inspector)</option>
+                    <option value="admin">ผู้ดูแลระบบสูงสุด / ทำได้ทุกสิทธิ์ (Admin)</option>
+                    <option value="staff">เจ้าหน้าที่ปฏิบัติงาน / พขร. / LTC (Staff)</option>
                     <option value="executive">ผู้บริหารเทศบาล (Executive)</option>
                     <option value="citizen">ประชาชน / ผู้ประกอบการ</option>
                   </select>
@@ -1743,10 +1743,10 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                     onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRole })}
                     className="w-full text-base px-3.5 py-2 bg-white border border-slate-300 rounded-xl font-semibold font-sarabun cursor-pointer"
                   >
-                    <option value="inspector">นายตรวจ (Inspector)</option>
-                    <option value="admin">ผู้บริหาร / ผอ.กอง (Admin)</option>
+                    <option value="inspector">นายตรวจ / เจ้าพนักงานสาธารณสุข (Inspector)</option>
+                    <option value="admin">ผู้ดูแลระบบสูงสุด / ทำได้ทุกสิทธิ์ (Admin)</option>
                     <option value="executive">ผู้บริหารสูงสุด / นายกฯ (Executive)</option>
-                    <option value="staff">เจ้าหน้าที่ธุรการ / LTC (Staff)</option>
+                    <option value="staff">เจ้าหน้าที่ปฏิบัติงาน / พขร. / LTC (Staff)</option>
                     <option value="citizen">ประชาชน / ผู้ประกอบการ</option>
                   </select>
                 </div>

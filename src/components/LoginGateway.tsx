@@ -392,7 +392,7 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
                         <div className="min-w-0">
                           <div className="text-xs font-black text-slate-900 truncate">{u.fullName}</div>
                           <div className="text-[10px] font-bold text-emerald-800 truncate">
-                            @{u.username} • {u.role === 'admin' ? 'ผอ.กอง (Admin)' : u.role === 'inspector' ? 'นายตรวจ' : u.role === 'executive' ? 'ผู้บริหาร' : 'เจ้าหน้าที่'}
+                            @{u.username} • {u.roleTitle || (u.role === 'admin' ? 'ผู้ดูแลระบบสูงสุด (Admin)' : u.role === 'inspector' ? 'นายตรวจ' : u.role === 'executive' ? 'ผู้บริหาร' : 'เจ้าหน้าที่')}
                           </div>
                         </div>
                         <ArrowRight className="w-3.5 h-3.5 text-emerald-700 shrink-0" />

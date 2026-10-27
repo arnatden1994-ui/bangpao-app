@@ -21,13 +21,20 @@ import {
 } from 'lucide-react';
 import { PublicPetition, EquipmentLoan, SignerSettings, DEFAULT_SIGNER_SETTINGS, User } from '../types/index.ts';
 import { getAllUsers, getCurrentUser, syncUsersFromRemote } from '../services/authService.ts';
-import { subscribeCollection, fetchUsersFromFirestore, COLLECTIONS } from '../services/firebaseService.ts';
+import {
+  subscribeCollection,
+  fetchUsersFromFirestore,
+  fetchLtcQueuesFromFirestore,
+  saveLtcQueueToFirestore,
+  COLLECTIONS,
+} from '../services/firebaseService.ts';
 import {
   buildFieldJobStatusUpdateNotificationPayload,
   dispatchNotification,
   openAttachmentPrintableHtml,
   downloadAttachmentDocx,
   getStoredLatestLtcQueueJob,
+  normalizeLtcQueueInput,
   LtcDeliveryQueueNotifyInput,
 } from '../services/notificationService.ts';
 
@@ -167,6 +174,14 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
       })
       .catch(() => {});
 
+    fetchLtcQueuesFromFirestore()
+      .then((queues) => {
+        if (mounted && queues && queues.length > 0) {
+          setRemoteLtcQueues(queues);
+        }
+      })
+      .catch(() => {});
+
     const unsub = subscribeCollection<any>(COLLECTIONS.USERS, (remoteUsers) => {
       if (mounted && remoteUsers && remoteUsers.length > 0) {
         syncUsersFromRemote(remoteUsers);
@@ -174,9 +189,16 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
       }
     });
 
+    const unsubLtcQueues = subscribeCollection<any>(COLLECTIONS.LTC_QUEUES, (queues) => {
+      if (mounted && queues && queues.length > 0) {
+        setRemoteLtcQueues(queues);
+      }
+    });
+
     return () => {
       mounted = false;
       unsub();
+      unsubLtcQueues();
     };
   }, []);
 
@@ -186,6 +208,9 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
       setOfficerName(officerOptions[0]);
     }
   }, [officerOptions, isCustomOfficerInput]);
+  const [remoteLtcQueues, setRemoteLtcQueues] = useState<any[]>([]);
+  const [perStopStatus, setPerStopStatus] = useState<Record<string, 'delivered' | 'issue_blocked'>>({});
+  const [perStopNote, setPerStopNote] = useState<Record<string, string>>({});
   const [actionNote, setActionNote] = useState<string>('');
   const [issueReason, setIssueReason] = useState<string>(ISSUE_REASON_PRESETS[0]);
   const [receiptBookNo, setReceiptBookNo] = useState<string>('01');
@@ -227,7 +252,16 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
 
     // Check if this is an LTC Delivery Queue Job (e.g. LTC-2569-R1-Q5)
     if (cleanCode.startsWith('ltc')) {
-      const savedLtc = getStoredLatestLtcQueueJob();
+      const matchedRemote =
+        remoteLtcQueues.find(
+          (q) =>
+            (q.referenceCode || '').toLowerCase() === cleanCode ||
+            (q.id || '').toLowerCase() === cleanCode
+        ) || remoteLtcQueues.find((q) => q.id === 'LATEST_LTC_QUEUE');
+
+      const savedLtc = matchedRemote
+        ? normalizeLtcQueueInput(matchedRemote)
+        : getStoredLatestLtcQueueJob();
       const fallbackLtc: LtcDeliveryQueueNotifyInput = savedLtc || {
         referenceCode: selectedCode || 'LTC-2569-R1-Q5',
         fiscalYear: '2569',
@@ -520,19 +554,56 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
       }
 
       if (isLtcQueue && ltcQ) {
+        const enrichedStops = ltcQ.stops.map((st, idx) => {
+          const stopKey = st.stopId || `STOP-${idx + 1}`;
+          const houseStatus =
+            perStopStatus[stopKey] ||
+            st.fieldDeliveryStatus ||
+            (activeActionTab === 'completed'
+              ? 'delivered'
+              : activeActionTab === 'issue_blocked'
+              ? 'issue_blocked'
+              : undefined);
+          const houseNote = perStopNote[stopKey] || st.fieldDeliveryNote || '';
+          return {
+            ...st,
+            fieldDeliveryStatus: houseStatus,
+            fieldDeliveryNote: houseNote,
+          };
+        });
+        const deliveredCount = enrichedStops.filter((s) => s.fieldDeliveryStatus === 'delivered').length;
+        const blockedStops = enrichedStops.filter((s) => s.fieldDeliveryStatus === 'issue_blocked');
+        const perHouseSummary =
+          deliveredCount > 0 || blockedStops.length > 0
+            ? ` (สรุปผลรายบ้าน: ส่งสำเร็จ ${deliveredCount}/${enrichedStops.length} บ้าน${
+                blockedStops.length > 0
+                  ? `, ติดขัด ${blockedStops.length} บ้าน ได้แก่ ${blockedStops
+                      .map((b) => `${b.patientName}${b.fieldDeliveryNote ? ` [${b.fieldDeliveryNote}]` : ''}`)
+                      .join(', ')}`
+                  : ''
+              })`
+            : '';
+        const finalLtcNote = `${finalNote}${perHouseSummary}`;
+        const updatedLtcQueue: LtcDeliveryQueueNotifyInput = {
+          ...ltcQ,
+          officerName,
+          stops: enrichedStops,
+        };
+        saveLtcQueueToFirestore(updatedLtcQueue).catch(() => {});
+
         const notifyPayload = buildFieldJobStatusUpdateNotificationPayload({
           jobType: 'ltc_queue',
           actionState: activeActionTab,
           officerName,
-          actionNote: finalNote,
+          actionNote: finalLtcNote,
           issueReason: activeActionTab === 'issue_blocked' ? issueReason : undefined,
-          ltcQueue: ltcQ,
+          ltcQueue: updatedLtcQueue,
           signers: signerSettings,
         });
         await dispatchNotification(notifyPayload, undefined, gasUrl);
         setLastUpdatedResult({
           actionState: activeActionTab,
-          message: finalNote,
+          message: finalLtcNote,
           attachment: notifyPayload.attachments?.[0],
         });
       } else if (isLoan && ln) {
@@ -888,15 +959,33 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
               )}
             </div>
 
-            {/* If LTC Queue Job: Show Complete Ordered Queue List with Individual Navigation */}
+            {/* If LTC Queue Job: Show Complete Ordered Queue List with Individual Navigation & Per-House Status Check */}
             {isLtcQueue && ltcQ && ltcQ.stops.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
-                <div className="text-xs font-extrabold text-teal-900">
-                  📋 รายชื่อผู้รับมอบพัสดุ LTC เรียงตามคิว (ครบทั้ง {ltcQ.stops.length} ราย):
+              <div className="mt-3 pt-3 border-t border-slate-200 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-extrabold text-teal-900">
+                    📋 รายชื่อผู้รับมอบพัสดุ LTC เรียงตามคิว (ครบทั้ง {ltcQ.stops.length} ราย • ติ๊กผลส่งมอบแยกรายบ้านได้):
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allDone: Record<string, 'delivered' | 'issue_blocked'> = {};
+                      ltcQ.stops.forEach((st, i) => {
+                        allDone[st.stopId || `STOP-${i + 1}`] = 'delivered';
+                      });
+                      setPerStopStatus(allDone);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 text-[11px] font-extrabold cursor-pointer"
+                  >
+                    ✅ ติ๊กส่งสำเร็จครบทุกบ้าน ({ltcQ.stops.length} ราย)
+                  </button>
                 </div>
-                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                   {ltcQ.stops.map((st, idx) => {
                     const qNum = st.queueOrder || (st as any).queueNumber || idx + 1;
+                    const stopKey = st.stopId || `STOP-${idx + 1}`;
+                    const currentHouseStatus =
+                      perStopStatus[stopKey] || st.fieldDeliveryStatus || 'delivered';
                     const itemsDesc = st.itemsText || (st as any).itemsSummary || 'ชุดดูแลผู้มีภาวะพึ่งพิง (LTC)';
                     const mapLink =
                       st.individualMapsUrl ||
@@ -904,36 +993,87 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
                       `https://www.google.com/maps/dir/?api=1&destination=${st.lat},${st.lng}`;
                     return (
                       <div
-                        key={st.stopId || idx}
-                        className="p-3 rounded-xl bg-white border border-slate-200 flex items-start justify-between gap-2.5 text-xs shadow-2xs"
+                        key={stopKey}
+                        className={`p-3 rounded-xl border flex flex-col gap-2 text-xs shadow-2xs transition-colors ${
+                          currentHouseStatus === 'issue_blocked'
+                            ? 'bg-rose-50/60 border-rose-300'
+                            : 'bg-white border-slate-200'
+                        }`}
                       >
-                        <div className="min-w-0 space-y-1">
-                          <div className="font-black text-slate-900 text-sm">
-                            คิวที่ #{qNum}: {st.patientName}{' '}
-                            <span className="text-xs font-extrabold text-rose-700">
-                              ({st.adlCategory || 'ติดเตียง'})
-                            </span>
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="min-w-0 space-y-1">
+                            <div className="font-black text-slate-900 text-sm">
+                              คิวที่ #{qNum}: {st.patientName}{' '}
+                              <span className="text-xs font-extrabold text-rose-700">
+                                ({st.adlCategory || 'ติดเตียง'})
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-700 font-medium">
+                              🏠 <strong>ที่ไหน:</strong> บ้านเลขที่ {st.address} (หมู่ที่ {st.moo} {st.village} ต.บางเป้า)
+                            </div>
+                            <div className="text-[11px] font-extrabold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 inline-block">
+                              📦 รับอะไร: {itemsDesc}
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-semibold">
+                              📞 <strong>ติดต่อ:</strong> {st.phone || '-'}{' '}
+                              {st.caregiverName ? `(${st.caregiverName})` : ''} • 📍 พิกัด: {Number(st.lat).toFixed(5)},{' '}
+                              {Number(st.lng).toFixed(5)}
+                            </div>
                           </div>
-                          <div className="text-[11px] text-slate-700 font-medium">
-                            🏠 <strong>ที่ไหน:</strong> บ้านเลขที่ {st.address} (หมู่ที่ {st.moo} {st.village} ต.บางเป้า)
-                          </div>
-                          <div className="text-[11px] font-extrabold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 inline-block">
-                            📦 รับอะไร: {itemsDesc}
-                          </div>
-                          <div className="text-[11px] text-slate-600 font-semibold">
-                            📞 <strong>ติดต่อ:</strong> {st.phone || '-'}{' '}
-                            {st.caregiverName ? `(${st.caregiverName})` : ''} • 📍 พิกัด: {Number(st.lat).toFixed(5)},{' '}
-                            {Number(st.lng).toFixed(5)}
+                          <a
+                            href={mapLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] shrink-0 shadow-xs"
+                          >
+                            🚗 นำทาง #{qNum}
+                          </a>
+                        </div>
+
+                        {/* Per-House Delivery Status Toggle */}
+                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-slate-600">สถานะส่งมอบบ้านนี้:</span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPerStopStatus((prev) => ({ ...prev, [stopKey]: 'delivered' }))
+                              }
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border cursor-pointer transition-colors ${
+                                currentHouseStatus === 'delivered'
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-white text-slate-700 border-slate-300 hover:bg-emerald-50'
+                              }`}
+                            >
+                              ✅ ส่งสำเร็จ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPerStopStatus((prev) => ({ ...prev, [stopKey]: 'issue_blocked' }))
+                              }
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border cursor-pointer transition-colors ${
+                                currentHouseStatus === 'issue_blocked'
+                                  ? 'bg-rose-600 text-white border-rose-600'
+                                  : 'bg-white text-slate-700 border-slate-300 hover:bg-rose-50'
+                              }`}
+                            >
+                              ⚠️ ติดขัด/เลื่อนส่ง
+                            </button>
                           </div>
                         </div>
-                        <a
-                          href={mapLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] shrink-0 shadow-xs"
-                        >
-                          🚗 นำทาง #{qNum}
-                        </a>
+
+                        {currentHouseStatus === 'issue_blocked' && (
+                          <input
+                            type="text"
+                            value={perStopNote[stopKey] || ''}
+                            onChange={(e) =>
+                              setPerStopNote((prev) => ({ ...prev, [stopKey]: e.target.value }))
+                            }
+                            placeholder={`ระบุสาเหตุติดขัดของบ้าน ${st.patientName} (เช่น ไม่อยู่บ้าน นัดส่งใหม่พรุ่งนี้)...`}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white text-[11px] font-semibold text-rose-900 focus:ring-1 focus:ring-rose-500"
+                          />
+                        )}
                       </div>
                     );
                   })}

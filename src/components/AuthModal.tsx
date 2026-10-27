@@ -149,13 +149,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       {isCurrent && <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />}
                     </div>
                     <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                      {u.role === 'admin'
-                        ? '👑 ผอ.กอง (Admin)'
-                        : u.role === 'inspector'
-                        ? '🔍 นายตรวจ (Inspector)'
-                        : u.role === 'staff'
-                        ? '📋 เจ้าหน้าที่ (Staff)'
-                        : '👤 ประชาชน (Citizen)'}
+                      {u.roleTitle ||
+                        (u.role === 'admin'
+                          ? '🛡️ ผู้ดูแลระบบสูงสุด (Admin)'
+                          : u.role === 'inspector'
+                          ? '🔍 นายตรวจ (Inspector)'
+                          : u.role === 'staff'
+                          ? '📋 เจ้าหน้าที่ (Staff)'
+                          : '👤 ประชาชน (Citizen)')}
                     </div>
                   </button>
                 );
