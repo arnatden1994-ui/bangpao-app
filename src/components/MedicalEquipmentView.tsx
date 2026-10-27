@@ -44,6 +44,7 @@ import {
   Undo2,
   Download,
   Package,
+  Camera,
   Info,
   ShoppingCart,
   ArrowRight,
