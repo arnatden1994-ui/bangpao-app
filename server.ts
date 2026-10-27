@@ -373,6 +373,91 @@ async function startServer() {
     }
   });
 
+  
+  // Smart Notification endpoint (LINE Messaging API + Google Apps Script Email with A4 Form Attachments)
+  app.post('/api/notify', async (req: Request, res: Response) => {
+    const { gasUrl, settings = {}, payload = {} } = req.body || {};
+    let sentLine = false;
+    let sentEmail = false;
+    let forwardedToGas = false;
+    const messages: string[] = [];
+
+    const lineToken = settings.lineChannelAccessToken || process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
+    const lineTarget = settings.lineTargetId || process.env.LINE_TARGET_ID || '';
+
+    if (settings.lineEnabled !== false && lineToken && lineTarget) {
+      try {
+        const lineMessages = payload.lineFlexContents
+          ? [
+              {
+                type: 'flex',
+                altText: (payload.lineTextFallback || payload.title || 'แจ้งเตือนกองสาธารณสุข ทต.บางเป้า').slice(0, 390),
+                contents: payload.lineFlexContents,
+              },
+            ]
+          : [
+              {
+                type: 'text',
+                text: payload.lineTextFallback || payload.title || 'แจ้งเตือนกองสาธารณสุข ทต.บางเป้า',
+              },
+            ];
+
+        const lineResp = await fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + lineToken,
+          },
+          body: JSON.stringify({
+            to: lineTarget,
+            messages: lineMessages,
+          }),
+        });
+
+        if (lineResp.ok) {
+          sentLine = true;
+          messages.push('ส่งเข้า LINE กลุ่มสำเร็จ');
+        }
+      } catch (err: any) {
+        messages.push('LINE Error: ' + (err?.message || String(err)));
+      }
+    }
+
+    const targetGasUrl = gasUrl || process.env.GAS_WEBAPP_URL || '';
+    if (targetGasUrl && targetGasUrl.startsWith('https://script.google.com/')) {
+      try {
+        const gasSettings = sentLine ? { ...settings, lineEnabled: false } : settings;
+        const gasResp = await fetch(targetGasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          redirect: 'follow',
+          body: JSON.stringify({
+            action: 'sendNotification',
+            settings: gasSettings,
+            payload,
+          }),
+        });
+        if (gasResp.ok) {
+          forwardedToGas = true;
+          sentEmail = settings.emailEnabled !== false;
+          messages.push('ส่งอีเมลพร้อมแนบไฟล์แบบฟอร์มราชการ A4 สำเร็จ');
+        }
+      } catch (err: any) {
+        messages.push('GAS Error: ' + (err?.message || String(err)));
+      }
+    }
+
+    res.json({
+      ok: true,
+      sentLine,
+      sentEmail,
+      forwardedToGas,
+      message:
+        messages.join(' | ') ||
+        'สร้างไฟล์แบบฟอร์มราชการ A4 (.PDF และ .DOCX) พร้อมบันทึกประวัติแจ้งเตือนเรียบร้อยแล้ว',
+    });
+  });
+
   // Vite middleware in dev or static files in production
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(__dirname, 'dist')));

@@ -175,7 +175,7 @@ export function parseThaiAddressParts(addr?: string) {
 }
 
 export function getEquipmentChecklist(loan: EquipmentLoan) {
-  const eqName = (loan.equipmentName || '').toLowerCase();
+  const eqName = ((loan.itemsSummary || '') + ' ' + (loan.equipmentName || '')).toLowerCase();
   const eqCat = (loan.equipmentCategory || '').toLowerCase();
   const code = loan.equipmentCode || 'EQ-001';
 
@@ -190,7 +190,13 @@ export function getEquipmentChecklist(loan: EquipmentLoan) {
   const isSuction = eqName.includes('เสมหะ') || eqName.includes('suction') || eqCat === 'suction_machine';
   const isAirMattress = eqName.includes('ที่นอน') || eqName.includes('mattress') || eqCat === 'air_mattress';
 
-  const isOther = !isBed && !isOxygen && !isWheelchair && !isSuction && !isAirMattress;
+  const hasOtherKeyword =
+    eqName.includes('ไม้เท้า') ||
+    eqName.includes('ไม้ค้ำ') ||
+    eqName.includes('เก้าอี้นั่งถ่าย') ||
+    eqName.includes('วอล์คเกอร์') ||
+    eqCat === 'other';
+  const isOther = hasOtherKeyword || (!isBed && !isOxygen && !isWheelchair && !isSuction && !isAirMattress);
 
   return {
     isBed,

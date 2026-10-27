@@ -119,6 +119,11 @@ import {
 import { FirebaseSyncModal } from './components/FirebaseSyncModal.tsx';
 import { CitizenPortalShareModal } from './components/CitizenPortalShareModal.tsx';
 import {
+  buildPetitionNotificationPayload,
+  buildEquipmentLoanNotificationPayload,
+  dispatchNotification,
+} from './services/notificationService.ts';
+import {
   subscribeCollection,
   COLLECTIONS,
   saveToFirestore,
@@ -214,7 +219,32 @@ export default function App() {
   const [nhsoLtcSubTab, setNhsoLtcSubTab] = useState<'route' | 'register' | 'inventory' | 'nhso'>('route');
   const [equipmentSubTab, setEquipmentSubTab] = useState<'route' | 'register' | 'inventory' | 'loans' | 'map'>('route');
   const [petitionsSubTab, setPetitionsSubTab] = useState<'dashboard' | 'form'>('dashboard');
-  const [settingsSubTab, setSettingsSubTab] = useState<'signers' | 'users' | 'approvers' | 'sheets'>('signers');
+  const [settingsSubTab, setSettingsSubTab] = useState<'signers' | 'users' | 'approvers' | 'sheets' | 'notifications'>('signers');
+
+  
+  const lastNotifiedLoanCodeRef = React.useRef<string>('');
+  const triggerPetitionNotification = (newP: PublicPetition) => {
+    try {
+      const payload = buildPetitionNotificationPayload(newP as any, signerSettings);
+      dispatchNotification(payload, undefined, config.appsScriptUrl).catch(() => {});
+    } catch (e) {
+      console.warn('Notify petition error:', e);
+    }
+  };
+  const triggerLoanNotification = (newLoan: EquipmentLoan) => {
+    try {
+      const codeKey = newLoan.loanCode || newLoan.id;
+      if (lastNotifiedLoanCodeRef.current === codeKey) return;
+      lastNotifiedLoanCodeRef.current = codeKey;
+      setTimeout(() => {
+        if (lastNotifiedLoanCodeRef.current === codeKey) lastNotifiedLoanCodeRef.current = '';
+      }, 4000);
+      const payload = buildEquipmentLoanNotificationPayload(newLoan as any, signerSettings);
+      dispatchNotification(payload, undefined, config.appsScriptUrl).catch(() => {});
+    } catch (e) {
+      console.warn('Notify loan error:', e);
+    }
+  };
 
   const handleSidebarNavigate = (tab: MainNavTab, sub?: string) => {
     if (tab === 'settings' && currentUser?.role !== 'admin') {
@@ -264,6 +294,7 @@ export default function App() {
       if (settingsSubTab === 'users') return '👤 ทะเบียนผู้ใช้งาน & สลับสิทธิ์';
       if (settingsSubTab === 'approvers') return '⚖️ ตั้งค่าผู้มีอำนาจพิจารณา';
       if (settingsSubTab === 'sheets') return '📊 เชื่อมต่อ Google Sheets & Apps Script';
+      if (settingsSubTab === 'notifications') return '🔔 แจ้งเตือน LINE กลุ่ม & อีเมล (แนบไฟล์แบบฟอร์ม A4)';
     }
     return undefined;
   };
@@ -902,13 +933,15 @@ unsubLicenses();
           loans={loans}
           equipmentList={equipmentList}
           onAddPetition={(newP) => {
-            setPetitions([newP, ...petitions]);
+            setPetitions((prev) => [newP, ...prev]);
             saveToFirestore(COLLECTIONS.PETITIONS, newP).catch(() => {});
+            triggerPetitionNotification(newP);
           }}
           onAddEquipmentLoan={(newLoan) => {
-            setLoans([newLoan, ...loans]);
+            setLoans((prev) => [newLoan, ...prev]);
             saveToFirestore(COLLECTIONS.LOANS, newLoan).catch(() => {});
-            showToast('success', 'ส่งคำขอยืมอุปกรณ์เรียบร้อยแล้ว เจ้าหน้าที่จะโทรประสานนัดหมายส่งของ');
+            triggerLoanNotification(newLoan);
+            showToast('success', 'ส่งคำขอยืมอุปกรณ์พร้อมแจ้งเตือน LINE & อีเมล (แนบไฟล์แบบฟอร์มสัญญา A4) เรียบร้อยแล้ว');
           }}
           onExitCitizenMode={handleLogout}
           onShowToast={showToast}
@@ -974,7 +1007,12 @@ unsubLicenses();
                 equipmentList={equipmentList}
                 loans={loans}
                 inspections={inspections}
-                onNavigateTab={(tab) => {
+                onShowToast={showToast}
+                onNavigateTab={(tab, subTab) => {
+                  if (tab === 'settings' && subTab) {
+                    handleSidebarNavigate('settings', subTab);
+                    return;
+                  }
                   const t = tab as string;
                   if (t === 'establishments' || t === 'form') {
                     setCurrentTab('hazardous');
@@ -1270,7 +1308,8 @@ unsubLicenses();
                       })
                     );
                   }
-                  showToast('success', `บันทึกคำขอยืม ${newLoan.equipmentName} เรียบร้อยแล้ว`);
+                  triggerLoanNotification(newLoan);
+                  showToast('success', `บันทึกคำขอยืม ${newLoan.equipmentName} และส่งแจ้งเตือนพร้อมไฟล์สัญญา A4 เข้าอีเมลแล้ว`);
                 }}
               />
             )}
@@ -1311,12 +1350,14 @@ unsubLicenses();
                 onAddPetition={(newP) => {
                   setPetitions([newP, ...petitions]);
                   saveToFirestore(COLLECTIONS.PETITIONS, newP).catch(() => {});
-                  showToast('success', `บันทึกคำร้อง  เรียบร้อย`);
+                  triggerPetitionNotification(newP);
+                  showToast('success', `บันทึกคำร้องและส่งแจ้งเตือนพร้อมแนบแบบฟอร์ม A4 เรียบร้อย`);
                 }}
                 onAddSewagePetition={(newSewage) => {
                   setPetitions([newSewage, ...petitions]);
                   saveToFirestore(COLLECTIONS.PETITIONS, newSewage).catch(() => {});
-                  showToast('success', `บันทึกคำร้องขอดูดส้วม ${newSewage.trackingCode} เรียบร้อย`);
+                  triggerPetitionNotification(newSewage);
+                  showToast('success', `บันทึกคำร้องขอดูดส้วม ${newSewage.trackingCode} และส่งแจ้งเตือนพร้อมแนบแบบฟอร์ม A4 เรียบร้อย`);
                 }}
               />
             )}
@@ -1606,7 +1647,8 @@ unsubLicenses();
         onSave={(p) => {
           setPetitions([p, ...petitions]);
           saveToFirestore(COLLECTIONS.PETITIONS, p).catch(() => {});
-          showToast('success', `ยื่นคำร้อง ${p.trackingCode} สำเร็จ`);
+          triggerPetitionNotification(p);
+          showToast('success', `ยื่นคำร้อง ${p.trackingCode} และส่งแจ้งเตือนพร้อมแนบแบบฟอร์ม A4 สำเร็จ`);
         }}
       />
 
@@ -1617,7 +1659,8 @@ unsubLicenses();
         onSave={(l) => {
           setLoans([l, ...loans]);
           saveToFirestore(COLLECTIONS.LOANS, l).catch(() => {});
-          showToast('success', `บันทึกการยืม ${l.equipmentName} เรียบร้อย`);
+          triggerLoanNotification(l);
+          showToast('success', `บันทึกการยืม ${l.equipmentName} และส่งแจ้งเตือนพร้อมไฟล์สัญญา A4 เรียบร้อย`);
         }}
       />
     </div>

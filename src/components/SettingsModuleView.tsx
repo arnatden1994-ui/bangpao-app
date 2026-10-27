@@ -30,6 +30,7 @@ import {
   Plus,
   ShieldAlert,
   Clock,
+  Bell,
 } from 'lucide-react';
 import {
   SignerSettings,
@@ -50,6 +51,7 @@ import {
   changeUserPassword,
 } from '../services/authService.ts';
 import { saveUserToFirestore, deleteUserFromFirestore } from '../services/firebaseService.ts';
+import { NotificationSettingsPanel } from './NotificationSettingsPanel.tsx';
 
 interface SettingsModuleViewProps {
   signerSettings: SignerSettings;
@@ -62,8 +64,8 @@ interface SettingsModuleViewProps {
   onSyncPull: () => void;
   isSyncing: boolean;
   onResetMockData: () => void;
-  activeSubTab?: 'signers' | 'users' | 'approvers' | 'sheets';
-  onSubTabChange?: (tab: 'signers' | 'users' | 'approvers' | 'sheets') => void;
+  activeSubTab?: 'signers' | 'users' | 'approvers' | 'sheets' | 'notifications';
+  onSubTabChange?: (tab: 'signers' | 'users' | 'approvers' | 'sheets' | 'notifications') => void;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -82,10 +84,10 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
   onSubTabChange,
   showToast,
 }) => {
-  const [internalSubTab, setInternalSubTab] = useState<'signers' | 'users' | 'approvers' | 'sheets'>('signers');
+  const [internalSubTab, setInternalSubTab] = useState<'signers' | 'users' | 'approvers' | 'sheets' | 'notifications'>('signers');
   const subTab = controlledSubTab || internalSubTab;
 
-  const handleSubTabSwitch = (tab: 'signers' | 'users' | 'approvers' | 'sheets') => {
+  const handleSubTabSwitch = (tab: 'signers' | 'users' | 'approvers' | 'sheets' | 'notifications') => {
     if (onSubTabChange) {
       onSubTabChange(tab);
     } else {
@@ -412,6 +414,21 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
           <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
           <span>📊 เชื่อมต่อ Google Sheets & Apps Script</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-1" />
+        </button>
+
+        <button
+          onClick={() => handleSubTabSwitch('notifications')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            subTab === 'notifications'
+              ? 'bg-[#064e3b] text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Bell className="w-4 h-4 text-amber-400" />
+          <span>🔔 แจ้งเตือน LINE กลุ่ม & อีเมล (แนบไฟล์แบบฟอร์ม)</span>
+          <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-extrabold">
+            ใหม่
+          </span>
         </button>
       </div>
 
@@ -1409,6 +1426,15 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* 3.5 Notifications Tab (LINE Group + Official Email with A4 Form Attachments) */}
+      {subTab === 'notifications' && (
+        <NotificationSettingsPanel
+          signerSettings={signerForm}
+          gasUrl={config.appsScriptUrl}
+          showToast={showToast}
+        />
       )}
 
       {/* Modal: Confirm Reset Mock Data */}

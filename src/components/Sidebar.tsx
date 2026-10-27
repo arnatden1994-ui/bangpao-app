@@ -24,6 +24,7 @@ import {
   Search,
   LogOut,
   User as UserIcon,
+  Bell,
 } from 'lucide-react';
 import { MainNavTab, User } from '../types/index.ts';
 
@@ -34,7 +35,7 @@ interface SidebarProps {
     nhso_ltc?: 'route' | 'register' | 'inventory' | 'nhso';
     equipment?: 'route' | 'loans' | 'register' | 'inventory' | 'map';
     petitions?: 'dashboard' | 'form' | 'general' | 'sewage' | 'print' | 'tracking';
-    settings?: 'signers' | 'users' | 'approvers' | 'sheets';
+    settings?: 'signers' | 'users' | 'approvers' | 'sheets' | 'notifications';
   };
   onNavigate: (tab: MainNavTab, subTab?: string) => void;
   isOpen: boolean;
@@ -240,6 +241,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: '📊 เชื่อมต่อ Google Sheets',
           desc: 'Apps Script URL & Cloud Sync',
           icon: FileSpreadsheet,
+        },
+        {
+          id: 'notifications',
+          title: '🔔 แจ้งเตือน LINE & อีเมล',
+          desc: 'ส่งการ์ด LINE & แนบไฟล์แบบฟอร์ม A4',
+          icon: Bell,
         },
       ],
     },
