@@ -394,6 +394,52 @@ export interface RoundDeliveryRecord {
   itemsDelivered?: LtcRoundItem[];
 }
 
+// แผนการจัดรอบส่งมอบพัสดุและสิ่งของ LTC (LTC Round Delivery Plan)
+export interface LtcPlanStop {
+  patientId: string;
+  queueOrder: number; // 1, 2, 3...
+  fullName: string;
+  idCard?: string;
+  age: number;
+  gender?: 'male' | 'female';
+  phone: string;
+  caregiverName: string;
+  caregiverPhone: string;
+  relationshipWithPatient?: string;
+  address: string;
+  moo: string;
+  subdistrict?: string;
+  latitude: number;
+  longitude: number;
+  adlScore?: number;
+  adlCategory: string; // 'ติดเตียง' | 'ติดบ้าน' | 'สูงอายุ'
+  items: LtcRoundItem[];
+  scheduledTime?: string;
+  deliveryStatus: 'pending' | 'delivered';
+  deliveredAt?: string;
+  receiverName?: string;
+  notes?: string;
+}
+
+export interface LtcRoundPlan {
+  id: string; // e.g. "PLAN-2569-1"
+  fiscalYear: string; // "2569"
+  round: string; // "1", "2", "3", "urgent"
+  roundName: string; // "งวดรอบที่ 1 (ต.ค. - มี.ค.)"
+  planTitle: string; // "แผนจัดรอบส่งมอบพัสดุ LTC งวดที่ 1 ปีงบ 2569"
+  deliveryDate: string; // "2026-11-15" (กำหนดวันแจก)
+  deliveryTimeWindow: string; // "09:00 - 16:30 น."
+  driverName: string; // "นายชนะ สุขด้วง (พนักงานขับรถ)"
+  staffNames: string; // "พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข), CG"
+  vehiclePlate: string; // "ผก-4512 ตรัง"
+  stops: LtcPlanStop[];
+  totalDistanceKm: number;
+  totalDurationMin: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // 4. ระบบการดูแลระยะยาวผู้สูงอายุที่มีภาวะพึ่งพิง (LTC - Long Term Care)
 export interface LtcPatient {
   id: string;

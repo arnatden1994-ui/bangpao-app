@@ -38,7 +38,15 @@ import {
   Send,
   Download,
 } from 'lucide-react';
-import { NhsoProject, LtcPatient, LtcRoundItem, RoundDeliveryRecord, UserRole, SignerSettings } from '../types/index.ts';
+import {
+  NhsoProject,
+  LtcPatient,
+  LtcRoundItem,
+  RoundDeliveryRecord,
+  UserRole,
+  SignerSettings,
+  LtcRoundPlan,
+} from '../types/index.ts';
 import {
   buildLtcDeliveryQueueNotificationPayload,
   dispatchNotification,
@@ -46,6 +54,8 @@ import {
   downloadAttachmentDocx,
   NotificationLogItem,
 } from '../services/notificationService.ts';
+import { saveLtcQueueToFirestore } from '../services/firebaseService.ts';
+import { LtcRoundPlannerModal } from './LtcRoundPlannerModal.tsx';
 import { NhsoFundView } from './NhsoFundView.tsx';
 import { LtcCareView } from './LtcCareView.tsx';
 
@@ -440,6 +450,150 @@ export const INITIAL_DELIVERY_RECORDS: Record<string, RoundDeliveryRecord> = {
   },
 };
 
+// Initial LTC Round Delivery Plan (Pre-seeded with official 2569 Round 1 data matching municipality distribution)
+export const INITIAL_LTC_ROUND_PLANS: Record<string, LtcRoundPlan> = {
+  '2569_1': {
+    id: 'PLAN-2569-R1-BANGPAO',
+    fiscalYear: '2569',
+    round: '1',
+    planTitle: 'แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ 2569 (รอบที่ 1)',
+    deliveryDate: '2026-11-15',
+    deliveryTimeWindow: '09:00 - 15:30 น.',
+    driverName: 'นายชนะ สุขด้วง (พนักงานขับรถ)',
+    staffNames: 'พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข), นางสาวสุดา (CG)',
+    vehiclePlate: 'ผก-4512 ตรัง (รถกระบะ ทต.บางเป้า)',
+    status: 'scheduled',
+    createdAt: '2026-10-01T08:00:00.000Z',
+    updatedAt: '2026-10-28T09:00:00.000Z',
+    notes: 'รอบจัดส่งที่ 1 ประจำปีงบประมาณ 2569 - แจกผ้าอ้อมผู้ใหญ่และอาหารเสริมโภชนาการ (นมผงสุขภาพ) ในเขตตำบลบางเป้า',
+    stops: [
+      {
+        patientId: 'LTC-6901',
+        queueOrder: 1,
+        fullName: 'นายสุนทร ลาภิพย์',
+        idCard: '3-9201-00123-45-1',
+        age: 74,
+        gender: 'ชาย',
+        phone: '081-234-5671',
+        caregiverName: 'นางมาลี ลาภิพย์ (ภรรยา)',
+        caregiverPhone: '081-234-5671',
+        address: '12/1 หมู่ที่ 1 บ้านชายวัด ต.บางเป้า',
+        moo: '1',
+        latitude: 7.426123,
+        longitude: 99.531245,
+        adlScore: 4,
+        adlCategory: 'ติดเตียง',
+        items: [
+          { itemId: 'INV-LTC-DIA-M', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size M)', quantity: 390, unit: 'ชิ้น' },
+          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 2, unit: 'กระป๋อง' },
+        ],
+        scheduledTime: '09:00 น.',
+        deliveryStatus: 'delivered',
+        deliveredAt: '2026-11-15 09:25',
+        receiverName: 'นางมาลี ลาภิพย์',
+        notes: 'ผู้ป่วยติดเตียง ส่งมอบพร้อมตรวจประเมินแผลกดทับ',
+      },
+      {
+        patientId: 'LTC-6902',
+        queueOrder: 2,
+        fullName: 'นายผึ้ง แซ่จุ้ย',
+        idCard: '3-9201-00234-56-2',
+        age: 82,
+        gender: 'ชาย',
+        phone: '089-876-5432',
+        caregiverName: 'นายสมศักดิ์ แซ่จุ้ย (บุตรชาย)',
+        caregiverPhone: '089-876-5432',
+        address: '45 หมู่ที่ 2 บ้านเกาะปอม ต.บางเป้า',
+        moo: '2',
+        latitude: 7.428543,
+        longitude: 99.534876,
+        adlScore: 6,
+        adlCategory: 'ติดบ้าน',
+        items: [
+          { itemId: 'INV-LTC-DIA-L', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size L)', quantity: 180, unit: 'ชิ้น' },
+        ],
+        scheduledTime: '09:45 น.',
+        deliveryStatus: 'pending',
+        notes: 'บ้านอยู่ริมคลอง ระวังทางแคบ',
+      },
+      {
+        patientId: 'LTC-6903',
+        queueOrder: 3,
+        fullName: 'นางพริ้ง ดำหนูจันทร์',
+        idCard: '3-9201-00345-67-3',
+        age: 78,
+        gender: 'หญิง',
+        phone: '086-111-2233',
+        caregiverName: 'นางสาวสุดา ดำหนูจันทร์ (บุตรสาว)',
+        caregiverPhone: '086-111-2233',
+        address: '88/2 หมู่ที่ 3 บ้านตลาดใหม่ ต.บางเป้า',
+        moo: '3',
+        latitude: 7.423987,
+        longitude: 99.537654,
+        adlScore: 3,
+        adlCategory: 'ติดเตียง',
+        items: [
+          { itemId: 'INV-LTC-DIA-L', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size L)', quantity: 150, unit: 'ชิ้น' },
+          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 2, unit: 'กระป๋อง' },
+        ],
+        scheduledTime: '10:30 น.',
+        deliveryStatus: 'delivered',
+        deliveredAt: '2026-11-15 10:40',
+        receiverName: 'นางสาวสุดา ดำหนูจันทร์',
+        notes: 'ส่งมอบเรียบร้อย ญาติรับไว้',
+      },
+      {
+        patientId: 'LTC-6904',
+        queueOrder: 4,
+        fullName: 'นางแดง คัตคคุณพันธ์',
+        idCard: '3-9201-00456-78-4',
+        age: 85,
+        gender: 'หญิง',
+        phone: '087-444-5566',
+        caregiverName: 'นายประสิทธิ์ คัตคคุณพันธ์ (บุตรชาย)',
+        caregiverPhone: '087-444-5566',
+        address: '19/5 หมู่ที่ 4 บ้านแหลมม่วง ต.บางเป้า',
+        moo: '4',
+        latitude: 7.421122,
+        longitude: 99.533211,
+        adlScore: 2,
+        adlCategory: 'ติดเตียง',
+        items: [
+          { itemId: 'INV-LTC-DIA-M', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size M)', quantity: 300, unit: 'ชิ้น' },
+          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 2, unit: 'กระป๋อง' },
+        ],
+        scheduledTime: '11:15 น.',
+        deliveryStatus: 'pending',
+        notes: 'ผู้ป่วยมีภาวะกลืนลำบาก ทานนมผงสุขภาพสูตรเฉพาะ',
+      },
+      {
+        patientId: 'LTC-6905',
+        queueOrder: 5,
+        fullName: 'นายเลียบ ทองหนัก',
+        idCard: '3-9201-00567-89-5',
+        age: 76,
+        gender: 'ชาย',
+        phone: '082-999-8877',
+        caregiverName: 'นางวรรณา ทองหนัก (ภรรยา)',
+        caregiverPhone: '082-999-8877',
+        address: '5/1 หมู่ที่ 5 บ้านป่าเตียว ต.บางเป้า',
+        moo: '5',
+        latitude: 7.419876,
+        longitude: 99.528765,
+        adlScore: 4,
+        adlCategory: 'ติดเตียง',
+        items: [
+          { itemId: 'INV-LTC-DIA-L', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size L)', quantity: 180, unit: 'ชิ้น' },
+          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 2, unit: 'กระป๋อง' },
+        ],
+        scheduledTime: '13:00 น.',
+        deliveryStatus: 'pending',
+        notes: 'เข้าทางซอยวัดป่าเตียว เข้าไป 300 เมตร',
+      },
+    ],
+  },
+};
+
 const INITIAL_STOCK_LOGS: StockTransactionLog[] = [
   {
     id: 'LOG-01',
@@ -670,6 +824,55 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   });
 
   const configuredYears = ['2569', '2570'];
+
+  // 5-Step Interactive LTC Round Planner State
+  const [isRoundPlannerOpen, setIsRoundPlannerOpen] = useState<boolean>(false);
+  const [plannerInitialYear, setPlannerInitialYear] = useState<string>('2569');
+  const [plannerInitialRound, setPlannerInitialRound] = useState<string>('1');
+  const [roundPlans, setRoundPlans] = useState<Record<string, LtcRoundPlan>>(() => {
+    try {
+      const saved = localStorage.getItem('bangpao_ltc_round_plans_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_LTC_ROUND_PLANS;
+  });
+
+  // Sync roundPlans to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('bangpao_ltc_round_plans_v1', JSON.stringify(roundPlans));
+    } catch {}
+  }, [roundPlans]);
+
+  const activePlanKey = `${selectedYearFilter === 'all' ? '2569' : selectedYearFilter}_${selectedRoundFilter === 'all' ? '1' : selectedRoundFilter}`;
+  const currentPlan = roundPlans[activePlanKey];
+
+  // Provide robust registered patients fallback for Planner Modal
+  const availablePatientsForPlanner: LtcPatient[] = useMemo(() => {
+    if (patients && patients.length > 0) return patients;
+    return stops.map((s, idx) => ({
+      id: s.patientId,
+      fullName: s.patientName,
+      idCard: `3-9201-00000-0${idx + 1}-0`,
+      age: 70 + idx,
+      gender: (idx % 2 === 0 ? 'ชาย' : 'หญิง') as 'ชาย' | 'หญิง',
+      phone: s.phone || '081-000-0000',
+      caregiverName: 'ญาติผู้ดูแล',
+      caregiverPhone: s.phone || '081-000-0000',
+      address: s.address,
+      moo: s.moo,
+      latitude: s.lat,
+      longitude: s.lng,
+      adlScore: s.adlCategory === 'ติดเตียง' ? 3 : 7,
+      adlCategory: (s.adlCategory || 'ติดเตียง') as 'ติดเตียง' | 'ติดบ้าน',
+      status: 'active',
+    }));
+  }, [patients, stops]);
 
   const createDefaultRoundsMap = (): Record<string, LtcRoundItem[]> => {
     const map: Record<string, LtcRoundItem[]> = {};
@@ -1251,6 +1454,123 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       ...prev,
       [pKey]: nextIds,
     }));
+  };
+
+  // Handlers for Saving and Cloning Interactive LTC Round Plans
+  const handleSaveRoundPlan = (plan: LtcRoundPlan) => {
+    setRoundPlans((prev) => {
+      const updated = { ...prev, [`${plan.fiscalYear}_${plan.round}`]: plan };
+      try {
+        localStorage.setItem('bangpao_ltc_round_plans_v1', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (plan.stops && plan.stops.length > 0) {
+      const planStopIds = plan.stops.map((s) => s.patientId);
+      setSelectedYearFilter(plan.fiscalYear);
+      setSelectedRoundFilter(plan.round);
+      updateSelectedQueueForPeriod(planStopIds, plan.fiscalYear, plan.round);
+
+      setStops((prev) => {
+        const stopMap = new Map(plan.stops.map((ps) => [ps.patientId, ps]));
+        return prev.map((s) => {
+          const ps = stopMap.get(s.patientId);
+          if (ps) {
+            return {
+              ...s,
+              routeOrder: ps.queueOrder,
+              status: ps.deliveryStatus === 'delivered' ? 'delivered' : 'pending',
+            };
+          }
+          return s;
+        });
+      });
+    }
+
+    try {
+      saveLtcQueueToFirestore({
+        id: `PLAN-${plan.fiscalYear}-R${plan.round}`,
+        referenceCode: `LTC-${plan.fiscalYear}-R${plan.round}`,
+        fiscalYear: plan.fiscalYear,
+        round: plan.round,
+        planTitle: plan.planTitle,
+        deliveryDate: plan.deliveryDate,
+        deliveryTimeWindow: plan.deliveryTimeWindow,
+        driverName: plan.driverName,
+        staffNames: plan.staffNames,
+        vehiclePlate: plan.vehiclePlate,
+        stopsCount: plan.stops.length,
+        stops: plan.stops.map((s) => ({
+          patientId: s.patientId,
+          queueOrder: s.queueOrder,
+          fullName: s.fullName,
+          phone: s.phone,
+          address: s.address,
+          moo: s.moo,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          adlCategory: s.adlCategory,
+          deliveryStatus: s.deliveryStatus,
+          itemsSummary: s.items?.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ') || '-',
+        })),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn('Failed to sync round plan to firestore:', err);
+    }
+
+    if (onShowToast) {
+      onShowToast('success', `บันทึกแผนจัดรอบแจกพัสดุ ปีงบ ${plan.fiscalYear} รอบที่ ${plan.round} เรียบร้อยแล้ว`);
+    }
+  };
+
+  const handleCloneRoundPlan = (
+    sourcePlan: LtcRoundPlan,
+    targetYear: string,
+    targetRound: string,
+    targetDate: string
+  ) => {
+    const clonedPlan: LtcRoundPlan = {
+      ...sourcePlan,
+      id: `PLAN-${targetYear}-R${targetRound}-${Date.now()}`,
+      fiscalYear: targetYear,
+      round: targetRound,
+      planTitle: `แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ ${targetYear} (รอบที่ ${targetRound})`,
+      deliveryDate: targetDate,
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      stops: sourcePlan.stops.map((s) => ({
+        ...s,
+        deliveryStatus: 'pending',
+        deliveredAt: undefined,
+        receiverName: undefined,
+        handoverPhotoUrl: undefined,
+      })),
+    };
+
+    handleSaveRoundPlan(clonedPlan);
+
+    if (!configuredRounds.includes(targetRound)) {
+      setConfiguredRounds((prev) => {
+        const updated = [...prev, targetRound].sort();
+        try {
+          localStorage.setItem('bangpao_ltc_configured_rounds_v2', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+
+    setSelectedYearFilter(targetYear);
+    setSelectedRoundFilter(targetRound);
+
+    if (onShowToast) {
+      onShowToast(
+        'success',
+        `คัดลอกแผนจากรอบที่ ${sourcePlan.round} ไปจัดเป็นรอบที่ ${targetRound} เรียบร้อยแล้ว พร้อมแก้ไขข้อมูลต่อได้ทันที!`
+      );
+    }
   };
 
   // Sync selectedStopIds when user switches Year or Round filter on the dashboard
@@ -2887,6 +3207,34 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => {
+                    setPlannerInitialYear(selectedYearFilter === 'all' ? '2569' : selectedYearFilter);
+                    setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
+                    setIsRoundPlannerOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 hover:from-teal-700 hover:to-emerald-800 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer transition-all hover:scale-[1.02]"
+                  title="เปิดสตูดิโอวางแผนจัดรอบ สปสช. LTC (เลือกปี, เลือกรอบ, ดึงรายชื่อพร้อมพิกัด, จัดลำดับอัตโนมัติ, คำนวณเส้นทาง, กำหนดวันแจก, แก้ไขสิ่งของ, คัดลอกไปรอบ 2)"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                  <span>✨ วางแผนจัดรอบแจกของ (LTC Planner)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlannerInitialYear(selectedYearFilter === 'all' ? '2569' : selectedYearFilter);
+                    setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
+                    setIsRoundPlannerOpen(true);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                  title="คัดลอกแผนรอบปัจจุบันไปจัดเป็นรอบ 2 หรือรอบถัดไป"
+                >
+                  <Copy className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>คัดลอกไปจัดรอบ 2</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setSubTab('register')}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer transition-colors"
                 >
@@ -3474,6 +3822,57 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     ในคิว {orderedSelectedStops.length} / {stops.length} บ้าน
                   </span>
                 </div>
+
+                {currentPlan && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-sky-50 border border-teal-200 text-xs">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-1.5 font-black text-teal-950">
+                        <Calendar className="w-3.5 h-3.5 text-teal-700" />
+                        <span>วันแจก: {currentPlan.deliveryDate ? new Date(currentPlan.deliveryDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : 'ยังไม่ระบุ'}</span>
+                      </div>
+                      {currentPlan.deliveryTimeWindow && (
+                        <div className="flex items-center gap-1 text-slate-600 font-medium">
+                          <Clock className="w-3 h-3 text-slate-500" />
+                          <span>{currentPlan.deliveryTimeWindow}</span>
+                        </div>
+                      )}
+                      {currentPlan.driverName && (
+                        <div className="flex items-center gap-1 text-slate-600 font-medium">
+                          <Truck className="w-3 h-3 text-slate-500" />
+                          <span>{currentPlan.driverName.split('(')[0]}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlannerInitialYear(selectedYearFilter === 'all' ? '2569' : selectedYearFilter);
+                          setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
+                          setIsRoundPlannerOpen(true);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-[11px] shadow-2xs cursor-pointer flex items-center gap-1 transition-colors"
+                        title="เปิดสตูดิโอวางแผนเพื่อแก้ไขรายละเอียด ลำดับคิว และสิ่งของของรอบนี้"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>แก้ไขแผนรอบนี้</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlannerInitialYear(selectedYearFilter === 'all' ? '2569' : selectedYearFilter);
+                          setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
+                          setIsRoundPlannerOpen(true);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-extrabold text-[11px] cursor-pointer flex items-center gap-1 transition-colors"
+                        title="คัดลอกแผนนี้ไปจัดรอบที่ 2"
+                      >
+                        <Copy className="w-3 h-3 text-indigo-700" />
+                        <span>คัดลอกไปรอบ 2</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {queueToastMsg && (
                   <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center justify-between gap-2">
@@ -6075,6 +6474,21 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
           </div>
         </div>
       )}
+      {/* 5-Step LTC Round Delivery Planner Modal */}
+      <LtcRoundPlannerModal
+        isOpen={isRoundPlannerOpen}
+        onClose={() => setIsRoundPlannerOpen(false)}
+        patients={availablePatientsForPlanner}
+        initialYear={plannerInitialYear}
+        initialRound={plannerInitialRound}
+        configuredYears={configuredYears}
+        configuredRounds={configuredRounds}
+        onAddNewRound={handleAddNewRound}
+        existingPlans={roundPlans}
+        onSavePlan={handleSaveRoundPlan}
+        onClonePlanToRound={handleCloneRoundPlan}
+        userRole={userRole}
+      />
     </div>
   );
 };
