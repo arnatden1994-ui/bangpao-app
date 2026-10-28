@@ -229,9 +229,18 @@ export function getStoredEquipment(): MedicalEquipment[] {
     if (raw) {
       const parsed: MedicalEquipment[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Upgrade legacy mismatched photos to accurate medical equipment photos if not customized by user
         let hasUpgrade = false;
-        const upgraded = parsed.map((item) => {
+        // Merge any equipment items added to INITIAL_MEDICAL_EQUIPMENT (e.g. EQ-007)
+        const existingIds = new Set(parsed.map((item) => item.id));
+        const missingItems = INITIAL_MEDICAL_EQUIPMENT.filter((item) => !existingIds.has(item.id));
+        let listToProcess = parsed;
+        if (missingItems.length > 0) {
+          listToProcess = [...parsed, ...missingItems];
+          hasUpgrade = true;
+        }
+
+        // Upgrade legacy mismatched photos to accurate medical equipment photos if not customized by user
+        const upgraded = listToProcess.map((item) => {
           if (
             ACCURATE_EQUIPMENT_PHOTOS[item.id] &&
             (item.imageUrl?.includes('photo-1519494026892') ||
@@ -270,7 +279,39 @@ export function getStoredEquipmentUnits(): MedicalEquipmentUnit[] {
     const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT_UNITS);
     if (raw) {
       const parsed: MedicalEquipmentUnit[] = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        let hasUpgrade = false;
+        // Merge missing equipment units (e.g. EQ-007 electric bed units)
+        const existingIds = new Set(parsed.map((u) => u.id));
+        const missingUnits = INITIAL_EQUIPMENT_UNITS.filter((u) => !existingIds.has(u.id));
+        let list = parsed;
+        if (missingUnits.length > 0) {
+          list = [...parsed, ...missingUnits];
+          hasUpgrade = true;
+        }
+
+        // Also update any old placeholder village names in stored units
+        const updatedList = list.map((u) => {
+          if (!u.currentAddress) return u;
+          let changed = false;
+          let newAddr = u.currentAddress;
+          if (newAddr.includes('บ้านท่าส้ม')) { newAddr = newAddr.replace(/บ้านท่าส้ม/g, 'บ้านชายวัด'); changed = true; }
+          if (newAddr.includes('บ้านทุ่งค่าย')) { newAddr = newAddr.replace(/บ้านทุ่งค่าย/g, 'บ้านเกาะปอม'); changed = true; }
+          if (newAddr.includes('บ้านไร่ออก')) { newAddr = newAddr.replace(/บ้านไร่ออก/g, 'บ้านป่าเตียว'); changed = true; }
+          if (newAddr.includes('บ้านในลุ่ม')) { newAddr = newAddr.replace(/บ้านในลุ่ม/g, 'บ้านควนทองสีห์'); changed = true; }
+          if (newAddr.includes('บ้านควนทอง') && !newAddr.includes('บ้านควนทองสีห์')) { newAddr = newAddr.replace(/บ้านควนทอง/g, 'บ้านท่าเรือ'); changed = true; }
+          if (changed) {
+            hasUpgrade = true;
+            return { ...u, currentAddress: newAddr };
+          }
+          return u;
+        });
+
+        if (hasUpgrade) {
+          saveStoredEquipmentUnits(updatedList);
+        }
+        return updatedList;
+      }
     }
   } catch (e) {
     console.error('getStoredEquipmentUnits error:', e);

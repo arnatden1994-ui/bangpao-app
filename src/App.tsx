@@ -488,7 +488,12 @@ export default function App() {
       if (items && items.length > 0) setPetitions(items);
     });
     const unsubEquipment = subscribeCollection<MedicalEquipment>(COLLECTIONS.EQUIPMENT, (items) => {
-      if (items && items.length > 0) setEquipmentList(items);
+      if (items && items.length > 0) {
+        const remoteIds = new Set(items.map((x) => x.id));
+        const missing = INITIAL_MEDICAL_EQUIPMENT.filter((item) => !remoteIds.has(item.id));
+        const fullList = missing.length > 0 ? [...items, ...missing] : items;
+        setEquipmentList(fullList);
+      }
     });
     const unsubLoans = subscribeCollection<EquipmentLoan>(COLLECTIONS.LOANS, (items) => {
       if (items && items.length > 0) setLoans(items);

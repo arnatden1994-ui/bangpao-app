@@ -58,6 +58,9 @@ import {
   List,
   QrCode,
   History,
+  ChevronDown,
+  ChevronUp,
+  Upload,
 } from 'lucide-react';
 import {
   EquipmentLoan,
@@ -363,6 +366,112 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/8a/Hospital_bed.jpg',
     notes: '',
   });
+
+  // Category Accordion Collapse state & Image Preview Modal state
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+
+  const toggleCategoryCollapse = (catId: string) => {
+    setCollapsedCategories((prev) => ({ ...prev, [catId]: !prev[catId] }));
+  };
+
+  const setAllCategoriesCollapse = (collapsed: boolean) => {
+    const next: Record<string, boolean> = {};
+    equipmentList.forEach((eq) => {
+      next[eq.id] = collapsed;
+    });
+    setCollapsedCategories(next);
+  };
+
+  // Image upload handler for Unit Edit (with canvas compression to ~800px for speed & localStorage efficiency)
+  const handleImageUploadForUnitEdit = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      const rawDataUrl = loadEvt.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            setEditingUnit((prev) => (prev ? { ...prev, imageUrl: compressed } : null));
+          } else {
+            setEditingUnit((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+          }
+        } catch {
+          setEditingUnit((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+        }
+      };
+      img.onerror = () => {
+        setEditingUnit((prev) => (prev ? { ...prev, imageUrl: rawDataUrl } : null));
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Image upload handler for New Unit Form
+  const handleImageUploadForNewUnit = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      const rawDataUrl = loadEvt.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            setNewUnitForm((prev) => ({ ...prev, imageUrl: compressed }));
+          } else {
+            setNewUnitForm((prev) => ({ ...prev, imageUrl: rawDataUrl }));
+          }
+        } catch {
+          setNewUnitForm((prev) => ({ ...prev, imageUrl: rawDataUrl }));
+        }
+      };
+      img.onerror = () => {
+        setNewUnitForm((prev) => ({ ...prev, imageUrl: rawDataUrl }));
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleUpdateUnit = (updatedUnit: MedicalEquipmentUnit) => {
     if (onUpdateEquipmentUnit) {
@@ -712,8 +821,12 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
   const groupedCategories = useMemo(() => {
     return equipmentList.map((eq) => {
-      const categoryUnits = filteredUnits.filter((u) => u.equipmentId === eq.id || u.category === eq.category);
-      const allCategoryUnits = resolvedUnits.filter((u) => u.equipmentId === eq.id || u.category === eq.category);
+      const categoryUnits = filteredUnits.filter(
+        (u) => u.equipmentId === eq.id || (!u.equipmentId && u.category === eq.category)
+      );
+      const allCategoryUnits = resolvedUnits.filter(
+        (u) => u.equipmentId === eq.id || (!u.equipmentId && u.category === eq.category)
+      );
       const availCount = allCategoryUnits.filter((u) => u.resolvedStatus === 'available').length;
       const borrowCount = allCategoryUnits.filter((u) => u.resolvedStatus === 'borrowed').length;
       const maintCount = allCategoryUnits.filter((u) => u.resolvedStatus === 'maintenance').length;
@@ -4282,16 +4395,14 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   <select
                     value={invMooFilter}
                     onChange={(e) => setInvMooFilter(e.target.value)}
-                    className="py-2 px-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    className="py-2 px-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-2xs"
                   >
-                    <option value="all">ทุกหมู่ (ม.1 - ม.7)</option>
-                    <option value="1">หมู่ 1 บ้านท่าส้ม</option>
-                    <option value="2">หมู่ 2 บ้านทุ่งค่าย</option>
-                    <option value="3">หมู่ 3 บ้านตลาดใหม่</option>
-                    <option value="4">หมู่ 4 บ้านแหลมม่วง</option>
-                    <option value="5">หมู่ 5 บ้านไร่ออก</option>
-                    <option value="6">หมู่ 6 บ้านในลุ่ม</option>
-                    <option value="7">หมู่ 7 บ้านควนทอง</option>
+                    <option value="all">ทุกหมู่บ้าน (ม.1 - ม.7)</option>
+                    {Object.entries(BANGPAO_VILLAGES).map(([moo, vName]) => (
+                      <option key={moo} value={moo}>
+                        หมู่ {moo} {vName}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -4379,6 +4490,32 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
             {/* Content View 1: MODE A - Grouped by Category (ตามที่ผู้ใช้ร้องขอ) */}
             {invViewMode === 'grouped' && (
               <div className="space-y-6">
+                {/* Header Action Bar for Categories */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-slate-600 font-bold">
+                  <div className="flex items-center gap-2">
+                    <span>แสดงอุปกรณ์แยกตามประเภท</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[11px] font-black border border-teal-200">
+                      {groupedCategories.filter((g) => g.units.length > 0).length} หมวดหมู่ (รวม {filteredUnits.length} ชิ้น)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAllCategoriesCollapse(false)}
+                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+                    >
+                      ขยายทุกหมวด
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAllCategoriesCollapse(true)}
+                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+                    >
+                      ยุบทุกหมวด
+                    </button>
+                  </div>
+                </div>
+
                 {groupedCategories
                   .filter((group) => {
                     if (invCategoryFilter !== 'all') {
@@ -4391,288 +4528,332 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     }
                     return group.units.length > 0;
                   })
-                  .map((group) => (
-                    <div
-                      key={group.equipment.id}
-                      className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs"
-                    >
-                      {/* Category Header Bar */}
-                      <div className="bg-gradient-to-r from-slate-50 to-teal-50/40 p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          {group.equipment.imageUrl ? (
-                            <img
-                              src={group.equipment.imageUrl}
-                              alt={group.equipment.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-xs"
-                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                            />
-                          ) : (
-                            <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
-                              <Package className="w-6 h-6" />
+                  .map((group) => {
+                    const isCollapsed = !!collapsedCategories[group.equipment.id];
+                    return (
+                      <div
+                        key={group.equipment.id}
+                        className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs"
+                      >
+                        {/* Category Header Bar (Clickable Accordion) */}
+                        <div
+                          onClick={() => toggleCategoryCollapse(group.equipment.id)}
+                          className="bg-gradient-to-r from-slate-50 to-teal-50/40 p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-teal-50/60 transition-colors select-none"
+                        >
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              className="p-1 rounded-lg text-slate-500 hover:text-teal-700 hover:bg-white/80 transition-colors"
+                              title={isCollapsed ? 'คลิกเพื่อกางดูรายการชิ้น' : 'คลิกเพื่อยุบซ่อน'}
+                            >
+                              <ChevronDown
+                                className={`w-5 h-5 text-slate-600 transition-transform duration-200 ${
+                                  isCollapsed ? '-rotate-90' : 'rotate-0'
+                                }`}
+                              />
+                            </button>
+                            {group.equipment.imageUrl ? (
+                              <img
+                                src={group.equipment.imageUrl}
+                                alt={group.equipment.name}
+                                className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-xs cursor-pointer hover:opacity-90"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage({ url: group.equipment.imageUrl!, title: group.equipment.name });
+                                }}
+                                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                                <Package className="w-6 h-6" />
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-base font-black text-slate-900">
+                                  {group.equipment.name}
+                                </h3>
+                                <span className="font-mono text-xs font-bold text-teal-700 bg-teal-100/70 px-2 py-0.5 rounded border border-teal-200">
+                                  {group.equipment.assetCode}
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                                <span>จัดเก็บหลัก: {group.equipment.storageLocation}</span>
+                              </div>
                             </div>
-                          )}
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-base font-black text-slate-900">
-                                {group.equipment.name}
-                              </h3>
-                              <span className="font-mono text-xs font-bold text-teal-700 bg-teal-100/70 px-2 py-0.5 rounded">
-                                {group.equipment.assetCode}
+                          </div>
+
+                          {/* Category Sub-counts */}
+                          <div className="flex items-center gap-2 text-xs flex-wrap" onClick={(e) => e.stopPropagation()}>
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                              รวมทั้งหมด: <strong>{group.totalCount} ชิ้น</strong>
+                            </span>
+                            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
+                              🟢 ว่าง: <strong>{group.availCount}</strong>
+                            </span>
+                            <span className="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 font-bold border border-sky-200">
+                              🔵 ถูกยืม: <strong>{group.borrowCount}</strong>
+                            </span>
+                            {group.maintCount > 0 && (
+                              <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 font-bold border border-amber-200">
+                                🟠 ชำรุด: <strong>{group.maintCount}</strong>
                               </span>
-                            </div>
-                            <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                              <span>จัดเก็บหลัก: {group.equipment.storageLocation}</span>
-                            </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingEquipment({ ...group.equipment });
+                                setIsEditEquipModalOpen(true);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-teal-700 hover:bg-white border border-transparent hover:border-slate-200 transition-colors cursor-pointer"
+                              title="แก้ไขข้อมูลหลักของประเภทนี้"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
 
-                        {/* Category Sub-counts */}
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold border border-slate-200">
-                            รวมทั้งหมด: <strong>{group.totalCount} ชิ้น</strong>
-                          </span>
-                          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
-                            🟢 ว่าง: <strong>{group.availCount}</strong>
-                          </span>
-                          <span className="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 font-bold border border-sky-200">
-                            🔵 ถูกยืม: <strong>{group.borrowCount}</strong>
-                          </span>
-                          {group.maintCount > 0 && (
-                            <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 font-bold border border-amber-200">
-                              🟠 ชำรุด: <strong>{group.maintCount}</strong>
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingEquipment({ ...group.equipment });
-                              setIsEditEquipModalOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-teal-700 hover:bg-white border border-transparent hover:border-slate-200 transition-colors"
-                            title="แก้ไขข้อมูลหลักของประเภทนี้"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                        {/* Individual Units Grid (ตรงตามที่ผู้ใช้ต้องการ: แสดงรูปภาพจริง สภาพ ยี่ห้อ ชัดเจน) */}
+                        {!isCollapsed && (
+                          <div className="p-4 bg-slate-50/40">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                              {group.units.map((u) => {
+                                const isAvailable = u.resolvedStatus === 'available';
+                                const isBorrowed = u.resolvedStatus === 'borrowed';
+                                const isMaintenance = u.resolvedStatus === 'maintenance';
 
-                      {/* Individual Units Grid (ตรงตามที่ผู้ใช้ต้องการ: เตียง 1 นายเอ, เตียง 2 นายบี, เตียง 3 ชำรุด...) */}
-                      <div className="p-4 bg-slate-50/40">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                          {group.units.map((u) => {
-                            const isAvailable = u.resolvedStatus === 'available';
-                            const isBorrowed = u.resolvedStatus === 'borrowed';
-                            const isMaintenance = u.resolvedStatus === 'maintenance';
-
-                            return (
-                              <div
-                                key={u.id}
-                                className={`rounded-xl p-3.5 border transition-all flex flex-col justify-between ${
-                                  isBorrowed
-                                    ? 'bg-white border-sky-200 shadow-2xs hover:border-sky-400 ring-1 ring-sky-100'
-                                    : isMaintenance
-                                    ? 'bg-amber-50/50 border-amber-300 shadow-2xs'
-                                    : 'bg-white border-emerald-200 shadow-2xs hover:border-emerald-400 ring-1 ring-emerald-100'
-                                }`}
-                              >
-                                <div>
-                                  {/* Unit Header: Asset Tag & Status Badge */}
-                                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5 mb-2.5">
-                                    <div className="space-y-0.5">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                          🏷️ {u.assetCode}
-                                        </span>
-                                        {u.unitNumber && (
-                                          <span className="text-xs font-extrabold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
-                                            ชิ้นที่ {u.unitNumber}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="text-[11px] font-bold text-slate-600 truncate max-w-[210px]" title={u.brandModel}>
-                                        ยี่ห้อ/รุ่น: <span className="text-slate-800">{u.brandModel || 'มาตรฐาน'}</span>
-                                      </div>
-                                    </div>
-
-                                    {/* Status Badge */}
-                                    <div className="shrink-0 text-right">
-                                      {isAvailable && (
-                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                          <span>ว่างพร้อมยืม</span>
-                                        </span>
-                                      )}
-                                      {isBorrowed && (
-                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 inline-flex items-center gap-1">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
-                                          <span>ถูกยืมใช้งาน</span>
-                                        </span>
-                                      )}
-                                      {isMaintenance && (
-                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
-                                          <Wrench className="w-3 h-3 text-amber-600" />
-                                          <span>ชำรุด/ซ่อม</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Middle Box: Condition & Custodian Location Details */}
-                                  <div className="space-y-2 mb-3">
-                                    {/* Condition Badge */}
-                                    <div className="flex items-center justify-between text-[11px]">
-                                      <span className="text-slate-500">สภาพความสมบูรณ์:</span>
-                                      <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                                        u.condition === 'good'
-                                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                          : u.condition === 'fair'
-                                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                          : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                      }`}>
-                                        {u.condition === 'good' ? '✨ สมบูรณ์ 100%' : u.condition === 'fair' ? '👍 สภาพดี/พอใช้' : '⚠️ ชำรุดรอซ่อม'}
-                                      </span>
-                                    </div>
-
-                                    {/* Detailed Location & Custodian Box */}
-                                    {isBorrowed && (
-                                      <div className="p-2.5 rounded-xl bg-sky-50/80 border border-sky-200 text-xs space-y-1.5">
-                                        <div className="flex items-start gap-1.5 text-sky-950">
-                                          <Home className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                                          <div className="leading-tight">
-                                            <div className="font-black text-slate-900">
-                                              อยู่บ้าน: {u.patientName}
-                                            </div>
-                                            <div className="text-[11px] text-sky-800 font-medium">
-                                              ผู้ยืม: {u.borrowerName} • 📞 {u.phone}
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        <div className="text-[11px] text-slate-600 flex items-start gap-1 pl-5">
-                                          <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
-                                          <span className="line-clamp-2">{u.address}</span>
-                                        </div>
-
-                                        <div className="text-[10px] text-slate-500 flex items-center justify-between border-t border-sky-100 pt-1 mt-1 pl-5">
-                                          <span>ยืมเมื่อ: <strong>{formatThaiDate(u.borrowDate)}</strong></span>
-                                          <span className="text-sky-700 font-bold">คืน: <strong>{formatThaiDate(u.dueDate)}</strong></span>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {isAvailable && (
-                                      <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-1">
-                                        <div className="flex items-center gap-1.5 text-emerald-900 font-black">
-                                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                                          <span>อยู่ในคลังพร้อมจ่ายยืม</span>
-                                        </div>
-                                        <div className="text-[11px] text-emerald-800 pl-5">
-                                          ที่เก็บ: <strong>{u.storageLocation}</strong>
-                                        </div>
-                                        {u.notes && (
-                                          <div className="text-[10px] text-slate-500 pl-5 italic">
-                                            หมายเหตุ: {u.notes}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {isMaintenance && (
-                                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-xs space-y-1">
-                                        <div className="flex items-center gap-1.5 text-amber-950 font-black">
-                                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                                          <span>ชำรุดรอซ่อมบำรุง</span>
-                                        </div>
-                                        <div className="text-[11px] text-amber-900 pl-5 font-medium leading-relaxed">
-                                          อาการ: <strong>{u.repairNotes || 'รอช่างตรวจเช็คอะไหล่'}</strong>
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 pl-5">
-                                          สถานที่: {u.storageLocation}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Unit Footer: Action Buttons */}
-                                <div className="border-t border-slate-100 pt-2 flex items-center justify-between gap-1 text-xs">
-                                  <div className="flex items-center gap-1">
-                                    {isBorrowed && u.activeLoan && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => setPrintModalLoan(u.activeLoan!)}
-                                          className="px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
-                                          title="ดูสัญญาการยืม A4"
-                                        >
-                                          <Printer className="w-3 h-3 text-teal-600" />
-                                          <span>สัญญา A4</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setReturnModalLoan(u.activeLoan!)}
-                                          className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
-                                          title="บันทึกรับคืนอุปกรณ์นี้เข้าคลัง"
-                                        >
-                                          <RotateCcw className="w-3 h-3 text-amber-600" />
-                                          <span>รับคืน</span>
-                                        </button>
-                                      </>
-                                    )}
-
-                                    {isAvailable && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedEquipmentIds([u.equipmentId]);
-                                          setSubTab('register');
-                                        }}
-                                        className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
-                                        title="นำอุปกรณ์ชิ้นนี้ไปเปิดสัญญาจ่ายยืมให้ประชาชน"
-                                      >
-                                        <ShoppingCart className="w-3 h-3" />
-                                        <span>จ่ายยืมชิ้นนี้</span>
-                                      </button>
-                                    )}
-
-                                    {isMaintenance && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          handleUpdateUnit({
-                                            ...u,
-                                            status: 'available',
-                                            condition: 'good',
-                                            repairNotes: undefined,
-                                          });
-                                        }}
-                                        className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
-                                        title="ซ่อมบำรุงเสร็จแล้ว นำกลับเข้าคลังพร้อมจ่าย"
-                                      >
-                                        <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                        <span>ซ่อมเสร็จ/เข้าคลัง</span>
-                                      </button>
-                                    )}
-                                  </div>
-
-                                  {/* Edit Unit Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingUnit(u)}
-                                    className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                    title="แก้ไขข้อมูลเลขทะเบียน สภาพ หรือเปลี่ยนผู้ถือครอง"
+                                return (
+                                  <div
+                                    key={u.id}
+                                    className={`rounded-2xl p-3.5 border transition-all flex flex-col justify-between ${
+                                      isBorrowed
+                                        ? 'bg-white border-sky-200 shadow-2xs hover:border-sky-400 ring-1 ring-sky-100'
+                                        : isMaintenance
+                                        ? 'bg-amber-50/50 border-amber-300 shadow-2xs'
+                                        : 'bg-white border-emerald-200 shadow-2xs hover:border-emerald-400 ring-1 ring-emerald-100'
+                                    }`}
                                   >
-                                    <Edit3 className="w-3 h-3 text-slate-500" />
-                                    <span>แก้ไข</span>
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                                    <div>
+                                      {/* Unit Photo Preview Thumbnail (if uploaded) */}
+                                      {u.imageUrl && (
+                                        <div
+                                          className="relative mb-2.5 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 h-28 group cursor-pointer"
+                                          onClick={() => setPreviewImage({ url: u.imageUrl!, title: `${u.assetCode} - ${u.name}` })}
+                                          title="คลิกเพื่อดูรูปขยาย"
+                                        >
+                                          <img
+                                            src={u.imageUrl}
+                                            alt={u.assetCode}
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                          />
+                                          <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 opacity-90 group-hover:opacity-100">
+                                            <Eye className="w-3 h-3" />
+                                            <span>ดูรูปถ่าย</span>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Unit Header: Asset Tag & Status Badge */}
+                                      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5 mb-2.5">
+                                        <div className="space-y-0.5">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                              🏷️ {u.assetCode}
+                                            </span>
+                                            {u.unitNumber && (
+                                              <span className="text-xs font-extrabold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                                                ชิ้นที่ {u.unitNumber}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="text-[11px] font-bold text-slate-600 leading-snug pt-0.5" title={u.brandModel}>
+                                            ยี่ห้อ/รุ่น: <span className="text-slate-900 font-semibold">{u.brandModel || 'มาตรฐาน'}</span>
+                                          </div>
+                                        </div>
+
+                                        {/* Status Badge */}
+                                        <div className="shrink-0 text-right">
+                                          {isAvailable && (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                              <span>ว่างพร้อมยืม</span>
+                                            </span>
+                                          )}
+                                          {isBorrowed && (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 inline-flex items-center gap-1">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                                              <span>ถูกยืมใช้งาน</span>
+                                            </span>
+                                          )}
+                                          {isMaintenance && (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
+                                              <Wrench className="w-3 h-3 text-amber-600" />
+                                              <span>ชำรุด/ซ่อม</span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Middle Box: Condition & Custodian Location Details */}
+                                      <div className="space-y-2 mb-3">
+                                        {/* Condition Badge */}
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-slate-500">สภาพความสมบูรณ์:</span>
+                                          <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                            u.condition === 'good'
+                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                              : u.condition === 'fair'
+                                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                          }`}>
+                                            {u.condition === 'good' ? '✨ สมบูรณ์ 100%' : u.condition === 'fair' ? '👍 สภาพดี/พอใช้' : '⚠️ ชำรุดรอซ่อม'}
+                                          </span>
+                                        </div>
+
+                                        {/* Detailed Location & Custodian Box */}
+                                        {isBorrowed && (
+                                          <div className="p-2.5 rounded-xl bg-sky-50/80 border border-sky-200 text-xs space-y-1.5">
+                                            <div className="flex items-start gap-1.5 text-sky-950">
+                                              <Home className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                                              <div className="leading-tight">
+                                                <div className="font-black text-slate-900">
+                                                  อยู่บ้าน: {u.patientName}
+                                                </div>
+                                                <div className="text-[11px] text-sky-800 font-medium">
+                                                  ผู้ยืม: {u.borrowerName} • 📞 {u.phone}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            <div className="text-[11px] text-slate-600 flex items-start gap-1 pl-5">
+                                              <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                                              <span className="line-clamp-2">
+                                                {u.address} {u.moo ? `(หมู่ ${u.moo} ${BANGPAO_VILLAGES[u.moo] || ''})` : ''}
+                                              </span>
+                                            </div>
+
+                                            <div className="text-[10px] text-slate-500 flex items-center justify-between border-t border-sky-100 pt-1 mt-1 pl-5">
+                                              <span>ยืมเมื่อ: <strong>{formatThaiDate(u.borrowDate)}</strong></span>
+                                              <span className="text-sky-700 font-bold">คืน: <strong>{formatThaiDate(u.dueDate)}</strong></span>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {isAvailable && (
+                                          <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-1">
+                                            <div className="flex items-center gap-1.5 text-emerald-900 font-black">
+                                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                              <span>อยู่ในคลังพร้อมจ่ายยืม</span>
+                                            </div>
+                                            <div className="text-[11px] text-emerald-800 pl-5">
+                                              ที่เก็บ: <strong>{u.storageLocation}</strong>
+                                            </div>
+                                            {u.notes && (
+                                              <div className="text-[10px] text-slate-500 pl-5 italic">
+                                                หมายเหตุ: {u.notes}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {isMaintenance && (
+                                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-xs space-y-1">
+                                            <div className="flex items-center gap-1.5 text-amber-950 font-black">
+                                              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                                              <span>ชำรุดรอซ่อมบำรุง</span>
+                                            </div>
+                                            <div className="text-[11px] text-amber-900 pl-5 font-medium leading-relaxed">
+                                              อาการ: <strong>{u.repairNotes || 'รอช่างตรวจเช็คอะไหล่'}</strong>
+                                            </div>
+                                            <div className="text-[10px] text-slate-500 pl-5">
+                                              สถานที่: {u.storageLocation}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Unit Footer: Action Buttons */}
+                                    <div className="border-t border-slate-100 pt-2 flex items-center justify-between gap-1 text-xs">
+                                      <div className="flex items-center gap-1">
+                                        {isBorrowed && u.activeLoan && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPrintModalLoan(u.activeLoan!)}
+                                              className="px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                                              title="ดูสัญญาการยืม A4"
+                                            >
+                                              <Printer className="w-3 h-3 text-teal-600" />
+                                              <span>สัญญา A4</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setReturnModalLoan(u.activeLoan!)}
+                                              className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                                              title="บันทึกรับคืนอุปกรณ์นี้เข้าคลัง"
+                                            >
+                                              <RotateCcw className="w-3 h-3 text-amber-600" />
+                                              <span>รับคืน</span>
+                                            </button>
+                                          </>
+                                        )}
+
+                                        {isAvailable && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedEquipmentIds([u.equipmentId]);
+                                              setSubTab('register');
+                                            }}
+                                            className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
+                                            title="นำอุปกรณ์ชิ้นนี้ไปเปิดสัญญาจ่ายยืมให้ประชาชน"
+                                          >
+                                            <ShoppingCart className="w-3 h-3" />
+                                            <span>จ่ายยืมชิ้นนี้</span>
+                                          </button>
+                                        )}
+
+                                        {isMaintenance && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              handleUpdateUnit({
+                                                ...u,
+                                                status: 'available',
+                                                condition: 'good',
+                                                repairNotes: undefined,
+                                              });
+                                            }}
+                                            className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                                            title="ซ่อมบำรุงเสร็จแล้ว นำกลับเข้าคลังพร้อมจ่าย"
+                                          >
+                                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                            <span>ซ่อมเสร็จ/เข้าคลัง</span>
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {/* Edit Unit Button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingUnit(u)}
+                                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                        title="แก้ไขข้อมูลเลขทะเบียน สภาพ หรือเปลี่ยนรูปถ่าย"
+                                      >
+                                        <Edit3 className="w-3 h-3 text-slate-500" />
+                                        <span>แก้ไข/รูป</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                 {groupedCategories.filter((g) => g.units.length > 0).length === 0 && (
                   <div className="py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 space-y-2">
@@ -4686,19 +4867,20 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
             {/* Content View 2: MODE B - All Units Complete Data Table */}
             {invViewMode === 'list' && (
-              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-left text-xs text-slate-700 border-collapse">
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-xs">
+                <table className="w-full min-w-[1380px] text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                      <th className="py-3 px-3">#</th>
-                      <th className="py-3 px-3">เลขทะเบียนครุภัณฑ์</th>
-                      <th className="py-3 px-3">ชื่ออุปกรณ์</th>
-                      <th className="py-3 px-3">ยี่ห้อ / รุ่น</th>
-                      <th className="py-3 px-3 text-center">สถานะ</th>
-                      <th className="py-3 px-3">สถานที่จัดเก็บ / อยู่บ้านใคร</th>
-                      <th className="py-3 px-3 text-center">สภาพ</th>
-                      <th className="py-3 px-3">ระยะเวลายืม-คืน</th>
-                      <th className="py-3 px-3 text-center">จัดการ</th>
+                    <tr className="bg-gradient-to-r from-slate-100 to-teal-50/50 text-slate-700 font-extrabold border-b border-slate-200">
+                      <th className="py-3.5 px-4 w-12 text-center font-mono">#</th>
+                      <th className="py-3.5 px-3 w-16 text-center">รูปภาพ</th>
+                      <th className="py-3.5 px-4 min-w-[190px] whitespace-nowrap">เลขทะเบียนครุภัณฑ์</th>
+                      <th className="py-3.5 px-4 min-w-[240px]">ชื่ออุปกรณ์ / หมวดหมู่</th>
+                      <th className="py-3.5 px-4 min-w-[200px]">ยี่ห้อ / รุ่น / S/N</th>
+                      <th className="py-3.5 px-4 min-w-[150px] text-center whitespace-nowrap">สถานะ</th>
+                      <th className="py-3.5 px-4 min-w-[320px]">สถานที่จัดเก็บ / อยู่บ้านใคร</th>
+                      <th className="py-3.5 px-4 min-w-[130px] text-center whitespace-nowrap">สภาพ</th>
+                      <th className="py-3.5 px-4 min-w-[170px] whitespace-nowrap">ระยะเวลายืม-คืน</th>
+                      <th className="py-3.5 px-4 w-28 text-center whitespace-nowrap">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -4708,105 +4890,143 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                       const isMaintenance = u.resolvedStatus === 'maintenance';
 
                       return (
-                        <tr key={u.id} className="hover:bg-teal-50/20 transition-colors">
-                          <td className="py-2.5 px-3 text-slate-400 font-mono font-bold text-center">
+                        <tr
+                          key={u.id}
+                          className="odd:bg-white even:bg-slate-50/50 hover:bg-teal-50/30 transition-colors"
+                        >
+                          <td className="py-3 px-4 text-slate-400 font-mono font-bold text-center">
                             {i + 1}
                           </td>
-                          <td className="py-2.5 px-3">
-                            <div className="font-mono font-black text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 inline-block">
-                              🏷️ {u.assetCode}
+                          <td className="py-3 px-3 text-center">
+                            {u.imageUrl ? (
+                              <img
+                                src={u.imageUrl}
+                                alt={u.assetCode}
+                                className="w-11 h-11 rounded-xl object-cover border border-slate-200 shadow-2xs mx-auto cursor-pointer hover:scale-110 transition-transform"
+                                onClick={() => setPreviewImage({ url: u.imageUrl!, title: `${u.assetCode} - ${u.name}` })}
+                                title="คลิกดูภาพขยาย"
+                                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 flex items-center justify-center mx-auto text-xs">
+                                <Package className="w-5 h-5 text-slate-300" />
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="font-mono font-black text-xs text-teal-900 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 inline-flex items-center gap-1.5 shadow-2xs">
+                              <span>🏷️</span>
+                              <span>{u.assetCode}</span>
                             </div>
                             {u.unitNumber && (
-                              <div className="text-[10px] text-slate-400 mt-0.5">ชิ้นที่ {u.unitNumber}</div>
+                              <div className="text-[11px] text-slate-500 font-semibold mt-1">ชิ้นที่ {u.unitNumber}</div>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 font-bold text-slate-900">
-                            <div>{u.name}</div>
-                            <div className="text-[10px] text-slate-400 font-normal">{u.category}</div>
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900 leading-snug">{u.name}</div>
+                            <div className="text-[11px] text-teal-700 font-medium mt-0.5">
+                              หมวด: {
+                                u.category === 'bed' ? 'เตียงผู้ป่วย' :
+                                u.category === 'wheelchair' ? 'รถเข็นนั่ง' :
+                                u.category === 'oxygen_concentrator' ? 'เครื่องผลิตออกซิเจน' :
+                                u.category === 'air_mattress' ? 'ที่นอนลม' :
+                                u.category === 'suction_machine' ? 'เครื่องดูดเสมหะ' : 'โครงช่วยเดิน'
+                              }
+                            </div>
                           </td>
-                          <td className="py-2.5 px-3 font-medium text-slate-700">
-                            <div>{u.brandModel || '-'}</div>
-                            {u.serialNumber && (
-                              <div className="text-[10px] text-slate-400 font-mono">S/N: {u.serialNumber}</div>
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-slate-800 leading-snug">{u.brandModel || '-'}</div>
+                            {u.serialNumber ? (
+                              <div className="text-[11px] text-slate-500 font-mono mt-0.5">S/N: {u.serialNumber}</div>
+                            ) : (
+                              <div className="text-[11px] text-slate-400 font-mono">-</div>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-center">
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
                             {isAvailable && (
-                              <span className="px-2 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                🟢 ว่างในคลัง
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>ว่างในคลัง</span>
                               </span>
                             )}
                             {isBorrowed && (
-                              <span className="px-2 py-1 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300">
-                                🔵 ถูกยืมอยู่
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-sky-100 text-sky-800 border border-sky-300 shadow-2xs">
+                                <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                                <span>ถูกยืมอยู่</span>
                               </span>
                             )}
                             {isMaintenance && (
-                              <span className="px-2 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
-                                🟠 ชำรุด/ซ่อม
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs">
+                                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                <span>ชำรุด/ส่งซ่อม</span>
                               </span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3">
+                          <td className="py-3.5 px-4 min-w-[320px]">
                             {isBorrowed ? (
-                              <div className="space-y-0.5 max-w-xs">
-                                <div className="font-bold text-slate-900 flex items-center gap-1">
+                              <div className="p-2.5 rounded-xl bg-sky-50/80 border border-sky-200 space-y-1">
+                                <div className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs">
                                   <Home className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                                  <span>อยู่บ้าน: {u.patientName}</span>
+                                  <span>อยู่บ้าน: {u.patientName || u.borrowerName}</span>
                                 </div>
-                                <div className="text-[11px] text-slate-600 truncate" title={u.address}>
-                                  {u.address} {u.moo ? `(หมู่ ${u.moo})` : ''}
+                                <div className="text-[11px] text-slate-600 leading-snug">
+                                  📍 {u.address} {u.moo ? `(หมู่ ${u.moo} ${BANGPAO_VILLAGES[u.moo] || ''})` : ''}
                                 </div>
-                                <div className="text-[10px] text-sky-700">
-                                  ผู้ยืม: {u.borrowerName} • 📞 {u.phone}
+                                <div className="text-[10px] text-sky-800 flex items-center gap-2 pt-0.5 font-medium">
+                                  <span>ผู้ยืม: {u.borrowerName}</span>
+                                  {u.phone && <span>• 📞 {u.phone}</span>}
                                 </div>
                               </div>
                             ) : isMaintenance ? (
-                              <div className="text-amber-900">
-                                <div className="font-bold flex items-center gap-1">
+                              <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-1">
+                                <div className="font-extrabold flex items-center gap-1.5 text-xs">
                                   <Wrench className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                  <span>ชำรุด: {u.repairNotes || 'รอส่งซ่อม'}</span>
+                                  <span>อาการ: {u.repairNotes || 'รอช่างตรวจเช็ค'}</span>
                                 </div>
-                                <div className="text-[10px] text-slate-400">สถานที่: {u.storageLocation}</div>
+                                <div className="text-[11px] text-slate-600">
+                                  🏢 ที่เก็บ: {u.storageLocation}
+                                </div>
                               </div>
                             ) : (
-                              <div className="text-slate-600">
-                                <div className="font-bold text-emerald-800 flex items-center gap-1">
+                              <div className="p-2 rounded-xl bg-emerald-50/50 border border-emerald-100 space-y-0.5">
+                                <div className="font-extrabold text-emerald-800 flex items-center gap-1.5 text-xs">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                  <span>อยู่ในคลังพร้อมจ่าย</span>
+                                  <span>อยู่ในคลังพร้อมจ่ายยืม</span>
                                 </div>
-                                <div className="text-[11px] text-slate-500">{u.storageLocation}</div>
+                                <div className="text-[11px] text-slate-600">
+                                  🏢 {u.storageLocation}
+                                </div>
                               </div>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold inline-flex items-center gap-1 ${
                               u.condition === 'good'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : u.condition === 'fair'
                                 ? 'bg-blue-50 text-blue-700 border border-blue-200'
                                 : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}>
-                              {u.condition === 'good' ? '✨ 100%' : u.condition === 'fair' ? '👍 สภาพดี' : '⚠️ ชำรุด'}
+                              {u.condition === 'good' ? '✨ 100% พร้อมใช้' : u.condition === 'fair' ? '👍 สภาพดี/พอใช้' : '⚠️ มีจุดชำรุด'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 text-slate-600 font-medium text-[11px]">
+                          <td className="py-3.5 px-4 whitespace-nowrap text-xs">
                             {isBorrowed ? (
-                              <div>
-                                <div>ยืม: {formatThaiDate(u.borrowDate)}</div>
-                                <div className="text-sky-700 font-bold">คืน: {formatThaiDate(u.dueDate)}</div>
+                              <div className="space-y-0.5">
+                                <div className="text-slate-600">ยืม: {formatThaiDate(u.borrowDate)}</div>
+                                <div className="text-sky-800 font-bold">คืน: {formatThaiDate(u.dueDate)}</div>
                               </div>
                             ) : (
-                              <span className="text-slate-400">-</span>
+                              <span className="text-slate-400 font-mono">-</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
                               {isBorrowed && u.activeLoan && (
                                 <button
                                   type="button"
                                   onClick={() => setPrintModalLoan(u.activeLoan!)}
-                                  className="p-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 cursor-pointer"
+                                  className="p-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 cursor-pointer shadow-2xs"
                                   title="ดูสัญญา A4"
                                 >
                                   <Printer className="w-3.5 h-3.5" />
@@ -4815,8 +5035,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setEditingUnit(u)}
-                                className="px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
-                                title="แก้ไขข้อมูลชิ้นนี้"
+                                className="px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs active:scale-95"
+                                title="แก้ไขข้อมูลชิ้นนี้ หรือ เปลี่ยนรูปถ่าย"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                                 <span>แก้ไข</span>
@@ -5670,13 +5890,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                         onChange={(e) => setEditingUnit({ ...editingUnit, currentMoo: e.target.value })}
                         className="w-full p-2 border border-slate-300 rounded-xl bg-white font-bold"
                       >
-                        <option value="1">ม.1 ท่าส้ม</option>
-                        <option value="2">ม.2 ทุ่งค่าย</option>
-                        <option value="3">ม.3 ตลาดใหม่</option>
-                        <option value="4">ม.4 แหลมม่วง</option>
-                        <option value="5">ม.5 ไร่ออก</option>
-                        <option value="6">ม.6 ในลุ่ม</option>
-                        <option value="7">ม.7 ควนทอง</option>
+                        {Object.entries(BANGPAO_VILLAGES).map(([moo, vName]) => (
+                          <option key={moo} value={moo}>
+                            หมู่ {moo} {vName}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -5744,15 +5962,88 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">ลิงก์รูปถ่ายอุปกรณ์ชิ้นนี้ (URL)</label>
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  value={editingUnit.imageUrl || ''}
-                  onChange={(e) => setEditingUnit({ ...editingUnit, imageUrl: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-[11px]"
-                />
+              {/* Photo Upload & Preview Box */}
+              <div className="p-4 rounded-2xl bg-teal-50/60 border-2 border-dashed border-teal-300 text-center space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-extrabold text-teal-950 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-teal-700" />
+                    <span>รูปถ่ายอุปกรณ์ชิ้นนี้ (ประจำทะเบียน {editingUnit.assetCode})</span>
+                  </span>
+                  {editingUnit.imageUrl && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                      มีรูปภาพแล้ว
+                    </span>
+                  )}
+                </div>
+
+                {editingUnit.imageUrl ? (
+                  <div className="relative inline-block group">
+                    <img
+                      src={editingUnit.imageUrl}
+                      alt={editingUnit.assetCode}
+                      className="w-48 h-36 object-cover rounded-2xl border-2 border-teal-400 shadow-md mx-auto cursor-pointer"
+                      onClick={() => setPreviewImage({ url: editingUnit.imageUrl!, title: `${editingUnit.assetCode} - ${editingUnit.name}` })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditingUnit({ ...editingUnit, imageUrl: '' })}
+                      className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center shadow-md cursor-pointer transition-colors"
+                      title="ลบรูปภาพนี้"
+                    >
+                      ✕
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage({ url: editingUnit.imageUrl!, title: `${editingUnit.assetCode} - ${editingUnit.name}` })}
+                      className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>ดูภาพขยาย</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-48 h-32 rounded-2xl bg-white border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center mx-auto text-xs gap-1 shadow-2xs">
+                    <Camera className="w-8 h-8 text-teal-600/50" />
+                    <span className="font-medium text-slate-600">ยังไม่มีรูปถ่ายชิ้นนี้</span>
+                    <span className="text-[10px] text-slate-400">กดปุ่มด้านล่างเพื่อถ่ายรูปหรือเลือกไฟล์ภาพ</span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <label className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all">
+                    <Camera className="w-4 h-4" />
+                    <span>{editingUnit.imageUrl ? '🔄 เปลี่ยนรูปถ่ายอุปกรณ์' : '📷 ถ่ายรูป / อัปโหลดไฟล์ภาพจริง'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUploadForUnitEdit}
+                      className="hidden"
+                    />
+                  </label>
+                  {editingUnit.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingUnit({ ...editingUnit, imageUrl: '' })}
+                      className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>ลบรูป</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-left pt-1 border-t border-teal-200/50">
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    หรือใส่ลิงก์รูปภาพ (Image URL):
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://... หรือ data:image/..."
+                    value={editingUnit.imageUrl || ''}
+                    onChange={(e) => setEditingUnit({ ...editingUnit, imageUrl: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-[11px]"
+                  />
+                </div>
               </div>
 
               <div>
@@ -5958,15 +6249,88 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">ลิงก์รูปถ่าย (URL)</label>
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  value={newUnitForm.imageUrl}
-                  onChange={(e) => setNewUnitForm({ ...newUnitForm, imageUrl: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-[11px]"
-                />
+              {/* Photo Upload & Preview Box */}
+              <div className="p-4 rounded-2xl bg-teal-50/60 border-2 border-dashed border-teal-300 text-center space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-extrabold text-teal-950 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-teal-700" />
+                    <span>รูปถ่ายอุปกรณ์ชิ้นนี้</span>
+                  </span>
+                  {newUnitForm.imageUrl && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                      มีรูปภาพแล้ว
+                    </span>
+                  )}
+                </div>
+
+                {newUnitForm.imageUrl ? (
+                  <div className="relative inline-block group">
+                    <img
+                      src={newUnitForm.imageUrl}
+                      alt={newUnitForm.assetCode}
+                      className="w-48 h-36 object-cover rounded-2xl border-2 border-teal-400 shadow-md mx-auto cursor-pointer"
+                      onClick={() => setPreviewImage({ url: newUnitForm.imageUrl, title: `${newUnitForm.assetCode} - ${newUnitForm.name}` })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewUnitForm({ ...newUnitForm, imageUrl: '' })}
+                      className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center shadow-md cursor-pointer transition-colors"
+                      title="ลบรูปภาพนี้"
+                    >
+                      ✕
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage({ url: newUnitForm.imageUrl, title: `${newUnitForm.assetCode} - ${newUnitForm.name}` })}
+                      className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>ดูภาพขยาย</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-48 h-32 rounded-2xl bg-white border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center mx-auto text-xs gap-1 shadow-2xs">
+                    <Camera className="w-8 h-8 text-teal-600/50" />
+                    <span className="font-medium text-slate-600">ยังไม่มีรูปถ่าย</span>
+                    <span className="text-[10px] text-slate-400">กดปุ่มด้านล่างเพื่อถ่ายรูปหรือเลือกไฟล์ภาพ</span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <label className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all">
+                    <Camera className="w-4 h-4" />
+                    <span>{newUnitForm.imageUrl ? '🔄 เปลี่ยนรูปถ่าย' : '📷 ถ่ายรูป / อัปโหลดไฟล์ภาพจริง'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUploadForNewUnit}
+                      className="hidden"
+                    />
+                  </label>
+                  {newUnitForm.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setNewUnitForm({ ...newUnitForm, imageUrl: '' })}
+                      className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>ลบรูป</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-left pt-1 border-t border-teal-200/50">
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    หรือใส่ลิงก์รูปภาพ (Image URL):
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://... หรือ data:image/..."
+                    value={newUnitForm.imageUrl}
+                    onChange={(e) => setNewUnitForm({ ...newUnitForm, imageUrl: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-[11px]"
+                  />
+                </div>
               </div>
 
               <div>
@@ -5996,6 +6360,53 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* I. Full Image Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 cursor-pointer animate-in fade-in duration-150"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-5 shadow-2xl space-y-3 cursor-default animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div className="font-black text-slate-800 text-sm flex items-center gap-2">
+                <Camera className="w-4 h-4 text-teal-700" />
+                <span>{previewImage.title}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors"
+                title="ปิด"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-hidden rounded-2xl flex items-center justify-center bg-slate-900/5 border border-slate-100 p-2">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[66vh] w-auto max-w-full object-contain rounded-xl shadow-xs"
+              />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-slate-500">
+                คลิกนอกกรอบหรือกดปุ่มเพื่อปิด
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
           </div>
         </div>
       )}
