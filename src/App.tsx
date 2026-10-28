@@ -12,6 +12,7 @@ import {
   LicenseRecord,
   LtcPatient,
   MedicalEquipment,
+  MedicalEquipmentUnit,
   EquipmentLoan,
   NhsoProject,
   PublicPetition,
@@ -39,6 +40,7 @@ import {
   getStoredNhso,
   getStoredLtc,
   getStoredEquipment,
+  getStoredEquipmentUnits,
   getStoredLoans,
   getStoredLicenses,
   saveStoredConfig,
@@ -49,6 +51,7 @@ import {
   saveStoredNhso,
   saveStoredLtc,
   saveStoredEquipment,
+  saveStoredEquipmentUnits,
   saveStoredLoans,
   saveStoredLicenses,
   syncToGoogleSheets,
@@ -65,6 +68,7 @@ import {
   INITIAL_NHSO_PROJECTS,
   INITIAL_LTC_PATIENTS,
   INITIAL_MEDICAL_EQUIPMENT,
+  INITIAL_EQUIPMENT_UNITS,
   INITIAL_EQUIPMENT_LOANS,
   INITIAL_LICENSE_RECORDS,
 } from './data/mockData.ts';
@@ -241,6 +245,9 @@ export default function App() {
   );
   const [equipmentList, setEquipmentList] = useState<MedicalEquipment[]>(() =>
     getStoredEquipment()
+  );
+  const [equipmentUnits, setEquipmentUnits] = useState<MedicalEquipmentUnit[]>(() =>
+    getStoredEquipmentUnits()
   );
   const [loans, setLoans] = useState<EquipmentLoan[]>(() =>
     getStoredLoans()
@@ -433,6 +440,10 @@ export default function App() {
   useEffect(() => {
     saveStoredEquipment(equipmentList);
   }, [equipmentList]);
+
+  useEffect(() => {
+    saveStoredEquipmentUnits(equipmentUnits);
+  }, [equipmentUnits]);
 
   useEffect(() => {
     saveStoredLoans(loans);
@@ -931,6 +942,7 @@ unsubLicenses();
     setNhsoProjects(INITIAL_NHSO_PROJECTS);
     setLtcPatients(INITIAL_LTC_PATIENTS);
     setEquipmentList(INITIAL_MEDICAL_EQUIPMENT);
+    setEquipmentUnits(INITIAL_EQUIPMENT_UNITS);
     setLoans(INITIAL_EQUIPMENT_LOANS);
     showToast('info', 'รีเซ็ตข้อมูลตัวอย่างตามต้นฉบับ 36 รายการเรียบร้อยแล้ว');
   };
@@ -1304,12 +1316,25 @@ unsubLicenses();
             {currentTab === 'equipment' && (
               <MedicalEquipmentView
                 equipmentList={equipmentList}
+                equipmentUnits={equipmentUnits}
                 loans={loans}
                 userRole={currentUser.role}
                 activeSubTab={equipmentSubTab}
                 onSubTabChange={(st) => setEquipmentSubTab(st)}
                 onNewLoan={() => setEquipmentSubTab('register')}
                 savedSignerSettings={signerSettings}
+                onAddEquipmentUnit={(newUnit) => {
+                  setEquipmentUnits((prev) => [newUnit, ...prev]);
+                  showToast('success', `เพิ่มทะเบียน "${newUnit.assetCode}" เข้าคลังเรียบร้อยแล้ว`);
+                }}
+                onUpdateEquipmentUnit={(u) => {
+                  setEquipmentUnits((prev) => prev.map((x) => (x.id === u.id ? u : x)));
+                  showToast('success', `อัปเดตข้อมูลทะเบียน "${u.assetCode}" เรียบร้อยแล้ว`);
+                }}
+                onDeleteEquipmentUnit={(id) => {
+                  setEquipmentUnits((prev) => prev.filter((x) => x.id !== id));
+                  showToast('info', 'ลบทะเบียนครุภัณฑ์เรียบร้อยแล้ว');
+                }}
                 onDeleteLoan={(loanId) => {
                   setLoans((prev) => prev.filter((l) => l.id !== loanId));
                   deleteFromFirestore(COLLECTIONS.LOANS, loanId).catch(() => {});
@@ -1333,6 +1358,54 @@ unsubLicenses();
                       return l;
                     })
                   );
+                  // Sync matching unit in equipmentUnits
+                  if (targetLoan) {
+                    setEquipmentUnits((prev) =>
+                      prev.map((u) => {
+                        const isTarget =
+                          (targetLoan.equipmentCode &&
+                            (u.assetCode === targetLoan.equipmentCode ||
+                              u.assetCode.toLowerCase().includes(targetLoan.equipmentCode.toLowerCase()))) ||
+                          (u.currentLoanId && u.currentLoanId === targetLoan.id);
+                        if (isTarget) {
+                          if (returnCondition === 'damaged') {
+                            return {
+                              ...u,
+                              status: 'maintenance',
+                              condition: 'damaged',
+                              repairNotes: notes || 'ชำรุดจากการใช้งาน ส่งซ่อมบำรุง',
+                              currentLoanId: undefined,
+                              currentLoanCode: undefined,
+                              currentBorrowerName: undefined,
+                              currentPatientName: undefined,
+                              currentAddress: undefined,
+                              currentMoo: undefined,
+                              currentBorrowerPhone: undefined,
+                              borrowDate: undefined,
+                              dueDate: undefined,
+                            };
+                          } else {
+                            return {
+                              ...u,
+                              status: 'available',
+                              condition: 'good',
+                              repairNotes: undefined,
+                              currentLoanId: undefined,
+                              currentLoanCode: undefined,
+                              currentBorrowerName: undefined,
+                              currentPatientName: undefined,
+                              currentAddress: undefined,
+                              currentMoo: undefined,
+                              currentBorrowerPhone: undefined,
+                              borrowDate: undefined,
+                              dueDate: undefined,
+                            };
+                          }
+                        }
+                        return u;
+                      })
+                    );
+                  }
                   if (targetLoan && targetLoan.status !== 'returned') {
                     setEquipmentList((prev) =>
                       prev.map((eq) => {
@@ -1791,11 +1864,35 @@ unsubLicenses();
         isOpen={newLoanModalOpen}
         onClose={() => setNewLoanModalOpen(false)}
         equipmentList={equipmentList}
+        equipmentUnits={equipmentUnits}
         onSave={(l) => {
           setLoans([l, ...loans]);
           saveToFirestore(COLLECTIONS.LOANS, l).catch(() => {});
           triggerLoanNotification(l);
-          showToast('success', `บันทึกการยืม ${l.equipmentName} และส่งแจ้งเตือนพร้อมไฟล์สัญญา A4 เรียบร้อย`);
+          // Mark assigned unit as borrowed
+          if (l.equipmentCode) {
+            setEquipmentUnits((prev) =>
+              prev.map((u) => {
+                if (u.assetCode === l.equipmentCode) {
+                  return {
+                    ...u,
+                    status: 'borrowed',
+                    currentLoanId: l.id,
+                    currentLoanCode: l.loanCode,
+                    currentBorrowerName: l.borrowerName,
+                    currentPatientName: l.patientName,
+                    currentBorrowerPhone: l.phone,
+                    currentAddress: l.address,
+                    currentMoo: l.moo,
+                    borrowDate: l.loanDate,
+                    dueDate: l.dueDate,
+                  };
+                }
+                return u;
+              })
+            );
+          }
+          showToast('success', `บันทึกการยืม ${l.equipmentName} (${l.equipmentCode || 'ครุภัณฑ์'}) เรียบร้อย`);
         }}
       />
     </div>

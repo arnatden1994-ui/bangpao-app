@@ -7,6 +7,7 @@ import {
   PetitionCategory,
   EquipmentLoan,
   MedicalEquipment,
+  MedicalEquipmentUnit,
   LtcPatient,
   NhsoProject,
 } from '../types/index.ts';
@@ -318,6 +319,7 @@ interface NewEquipmentLoanModalProps {
   isOpen: boolean;
   onClose: () => void;
   equipmentList: MedicalEquipment[];
+  equipmentUnits?: MedicalEquipmentUnit[];
   onSave: (data: EquipmentLoan) => void;
 }
 
@@ -325,11 +327,13 @@ export const NewEquipmentLoanModal: React.FC<NewEquipmentLoanModalProps> = ({
   isOpen,
   onClose,
   equipmentList,
+  equipmentUnits,
   onSave,
 }) => {
   if (!isOpen) return null;
 
   const [equipmentId, setEquipmentId] = useState(equipmentList[0]?.id || '');
+  const [selectedUnitCode, setSelectedUnitCode] = useState('');
   const [borrowerName, setBorrowerName] = useState('');
   const [borrowerIdCard, setBorrowerIdCard] = useState('');
   const [patientName, setPatientName] = useState('');
@@ -344,15 +348,21 @@ export const NewEquipmentLoanModal: React.FC<NewEquipmentLoanModalProps> = ({
   const [notes, setNotes] = useState('');
 
   const selectedEq = equipmentList.find((e) => e.id === equipmentId) || equipmentList[0];
+  const availableUnits = (equipmentUnits || []).filter(
+    (u) => (u.equipmentId === selectedEq?.id || u.category === selectedEq?.category) && u.status === 'available'
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!borrowerName.trim() || !patientName.trim()) return;
 
+    const unitCodeToUse = selectedUnitCode || availableUnits[0]?.assetCode || selectedEq?.assetCode || 'EQ-001';
+
     const newLoan: EquipmentLoan = {
       id: `LOAN-${Date.now().toString().slice(-4)}`,
       loanCode: `LN-2569-${Math.floor(100 + Math.random() * 900)}`,
       equipmentId: selectedEq?.id || '',
+      equipmentCode: unitCodeToUse,
       equipmentName: selectedEq?.name || 'กายอุปกรณ์',
       borrowerName,
       borrowerIdCard: borrowerIdCard || '1-xxxx-xxxxx-xx-x',
@@ -389,7 +399,10 @@ export const NewEquipmentLoanModal: React.FC<NewEquipmentLoanModalProps> = ({
             <label className="block font-semibold text-slate-700 mb-1">เลือกอุปกรณ์ทางการแพทย์ *</label>
             <select
               value={equipmentId}
-              onChange={(e) => setEquipmentId(e.target.value)}
+              onChange={(e) => {
+                setEquipmentId(e.target.value);
+                setSelectedUnitCode('');
+              }}
               className="w-full p-2.5 rounded-lg border border-slate-300 bg-white font-bold"
             >
               {equipmentList.map((eq) => (
@@ -399,6 +412,25 @@ export const NewEquipmentLoanModal: React.FC<NewEquipmentLoanModalProps> = ({
               ))}
             </select>
           </div>
+
+          {availableUnits.length > 0 && (
+            <div>
+              <label className="block font-semibold text-teal-800 mb-1">
+                🏷️ ระบุเลขทะเบียนประจำชิ้น (ครุภัณฑ์ว่างในคลัง {availableUnits.length} ชิ้น)
+              </label>
+              <select
+                value={selectedUnitCode || availableUnits[0]?.assetCode}
+                onChange={(e) => setSelectedUnitCode(e.target.value)}
+                className="w-full p-2.5 rounded-lg border border-teal-300 bg-teal-50/50 font-mono font-bold text-teal-900 cursor-pointer text-xs"
+              >
+                {availableUnits.map((u) => (
+                  <option key={u.id} value={u.assetCode}>
+                    {u.assetCode} — {u.brandModel || 'มาตรฐาน'} ({u.condition === 'good' ? 'สมบูรณ์ 100%' : 'สภาพดี'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

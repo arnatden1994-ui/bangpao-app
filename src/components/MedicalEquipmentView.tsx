@@ -51,8 +51,26 @@ import {
   ArrowLeft,
   CheckSquare,
   Square,
+  Tag,
+  Home,
+  Wrench,
+  Layers,
+  List,
+  QrCode,
+  History,
 } from 'lucide-react';
-import { EquipmentLoan, MedicalEquipment, UserRole, SignerSettings, DEFAULT_SIGNER_SETTINGS } from '../types/index.ts';
+import {
+  EquipmentLoan,
+  MedicalEquipment,
+  MedicalEquipmentUnit,
+  UserRole,
+  SignerSettings,
+  DEFAULT_SIGNER_SETTINGS,
+} from '../types/index.ts';
+import {
+  getStoredEquipmentUnits,
+  saveStoredEquipmentUnits,
+} from '../services/sheetsSync.ts';
 import {
   BANGPAO_COORDS,
   BANGPAO_VILLAGES,
@@ -172,6 +190,7 @@ const createStatusPinIcon = (
 
 interface MedicalEquipmentViewProps {
   equipmentList: MedicalEquipment[];
+  equipmentUnits?: MedicalEquipmentUnit[];
   loans: EquipmentLoan[];
   userRole: UserRole;
   onNewLoan?: () => void;
@@ -182,6 +201,9 @@ interface MedicalEquipmentViewProps {
   onDeleteLoan?: (loanId: string) => void;
   onAddEquipment?: (item: MedicalEquipment) => void;
   onUpdateEquipment?: (item: MedicalEquipment) => void;
+  onAddEquipmentUnit?: (unit: MedicalEquipmentUnit) => void;
+  onUpdateEquipmentUnit?: (unit: MedicalEquipmentUnit) => void;
+  onDeleteEquipmentUnit?: (unitId: string) => void;
   activeSubTab?: 'route' | 'register' | 'inventory' | 'loans' | 'map';
   onSubTabChange?: (tab: 'route' | 'register' | 'inventory') => void;
   savedSignerSettings?: SignerSettings;
@@ -189,6 +211,7 @@ interface MedicalEquipmentViewProps {
 
 export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   equipmentList,
+  equipmentUnits: propUnits,
   loans,
   userRole,
   onNewLoan,
@@ -199,6 +222,9 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   onDeleteLoan,
   onAddEquipment,
   onUpdateEquipment,
+  onAddEquipmentUnit,
+  onUpdateEquipmentUnit,
+  onDeleteEquipmentUnit,
   activeSubTab: controlledTab,
   onSubTabChange,
   savedSignerSettings,
@@ -291,6 +317,85 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     totalQuantity: 1,
     storageLocation: 'ห้องคลังอุปกรณ์ชั้น 1 กองสาธารณสุข',
   });
+
+  // Unit-Level Inventory State (คลังอุปกรณ์รายชิ้น / รายทะเบียน)
+  const [internalUnits, setInternalUnits] = useState<MedicalEquipmentUnit[]>(() =>
+    propUnits && propUnits.length > 0 ? propUnits : getStoredEquipmentUnits()
+  );
+
+  useEffect(() => {
+    if (propUnits && propUnits.length > 0) {
+      setInternalUnits(propUnits);
+    }
+  }, [propUnits]);
+
+  const units = propUnits || internalUnits;
+
+  const [invViewMode, setInvViewMode] = useState<'grouped' | 'list'>('grouped');
+  const [invSearchQuery, setInvSearchQuery] = useState('');
+  const [invCategoryFilter, setInvCategoryFilter] = useState<string>('all');
+  const [invStatusFilter, setInvStatusFilter] = useState<'all' | 'available' | 'borrowed' | 'maintenance'>('all');
+  const [invMooFilter, setInvMooFilter] = useState<string>('all');
+  const [editingUnit, setEditingUnit] = useState<MedicalEquipmentUnit | null>(null);
+  const [isAddUnitModalOpen, setIsAddUnitModalOpen] = useState(false);
+  const [newUnitForm, setNewUnitForm] = useState<{
+    category: MedicalEquipment['category'];
+    equipmentId: string;
+    name: string;
+    assetCode: string;
+    brandModel: string;
+    serialNumber: string;
+    condition: 'good' | 'fair' | 'damaged' | 'repair_needed';
+    status: 'available' | 'borrowed' | 'maintenance' | 'disposed';
+    storageLocation: string;
+    imageUrl: string;
+    notes: string;
+  }>({
+    category: 'bed',
+    equipmentId: 'EQ-001',
+    name: 'เตียงผู้ป่วยมือหมุน 2 ไกร์ พร้อมเบาะรองนอน',
+    assetCode: 'ทต.บป.BED-016',
+    brandModel: 'Paramount Bed 2-Crank',
+    serialNumber: '',
+    condition: 'good',
+    status: 'available',
+    storageLocation: 'ห้องคลังอุปกรณ์ชั้น 1 กองสาธารณสุข',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/8a/Hospital_bed.jpg',
+    notes: '',
+  });
+
+  const handleUpdateUnit = (updatedUnit: MedicalEquipmentUnit) => {
+    if (onUpdateEquipmentUnit) {
+      onUpdateEquipmentUnit(updatedUnit);
+    }
+    setInternalUnits((prev) => {
+      const next = prev.map((u) => (u.id === updatedUnit.id ? updatedUnit : u));
+      saveStoredEquipmentUnits(next);
+      return next;
+    });
+  };
+
+  const handleAddUnit = (unit: MedicalEquipmentUnit) => {
+    if (onAddEquipmentUnit) {
+      onAddEquipmentUnit(unit);
+    }
+    setInternalUnits((prev) => {
+      const next = [unit, ...prev];
+      saveStoredEquipmentUnits(next);
+      return next;
+    });
+  };
+
+  const handleDeleteUnit = (unitId: string) => {
+    if (onDeleteEquipmentUnit) {
+      onDeleteEquipmentUnit(unitId);
+    }
+    setInternalUnits((prev) => {
+      const next = prev.filter((u) => u.id !== unitId);
+      saveStoredEquipmentUnits(next);
+      return next;
+    });
+  };
 
   // -------------------------------------------------------------
   // Multi-step Registration Wizard State (4 Steps as in Screenshots)
@@ -509,6 +614,120 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const totalAssetsInStock = equipmentList.reduce((acc, eq) => acc + (eq.totalQuantity || 0), 0);
   const totalAssetsInUse = equipmentList.reduce((acc, eq) => acc + (eq.inUseQuantity || 0), 0);
   const totalAssetsAvailable = equipmentList.reduce((acc, eq) => acc + (eq.availableQuantity || 0), 0);
+
+  // Helper to resolve live custodian & location for an individual unit
+  const resolveUnitDetails = (unit: MedicalEquipmentUnit) => {
+    // Check if there is an active loan matching this unit
+    const activeLoan = loans.find(
+      (l) =>
+        (unit.currentLoanId && l.id === unit.currentLoanId) ||
+        (l.equipmentCode &&
+          (l.equipmentCode === unit.assetCode ||
+            unit.assetCode.toLowerCase().includes(l.equipmentCode.toLowerCase()) ||
+            l.equipmentCode.toLowerCase().includes(unit.assetCode.toLowerCase())) &&
+          (l.status === 'borrowed' || l.status === 'approved'))
+    );
+
+    const isBorrowed = unit.status === 'borrowed' || (activeLoan && activeLoan.status === 'borrowed');
+    const isMaintenance = unit.status === 'maintenance';
+    const isAvailable = !isBorrowed && !isMaintenance;
+
+    const patientName = activeLoan?.patientName || unit.currentPatientName || '-';
+    const borrowerName = activeLoan?.borrowerName || unit.currentBorrowerName || '-';
+    const address = activeLoan?.address || activeLoan?.patientAddress || activeLoan?.borrowerAddress || unit.currentAddress || '-';
+    const moo = activeLoan?.moo || unit.currentMoo || '';
+    const phone = activeLoan?.phone || activeLoan?.borrowerPhone || unit.currentBorrowerPhone || '-';
+    const borrowDate = activeLoan?.borrowDate || activeLoan?.loanDate || unit.borrowDate || '-';
+    const dueDate = activeLoan?.dueDate || unit.dueDate || '-';
+    const contractNo = activeLoan?.contractNumber || activeLoan?.loanCode || unit.currentLoanCode || '-';
+
+    return {
+      ...unit,
+      resolvedStatus: isBorrowed ? ('borrowed' as const) : isMaintenance ? ('maintenance' as const) : ('available' as const),
+      activeLoan,
+      patientName,
+      borrowerName,
+      address,
+      moo,
+      phone,
+      borrowDate,
+      dueDate,
+      contractNo,
+    };
+  };
+
+  const resolvedUnits = useMemo(() => {
+    return units.map(resolveUnitDetails);
+  }, [units, loans]);
+
+  const totalUnitsCount = resolvedUnits.length;
+  const availableUnitsCount = resolvedUnits.filter((u) => u.resolvedStatus === 'available').length;
+  const borrowedUnitsCount = resolvedUnits.filter((u) => u.resolvedStatus === 'borrowed').length;
+  const maintenanceUnitsCount = resolvedUnits.filter((u) => u.resolvedStatus === 'maintenance').length;
+
+  const filteredUnits = useMemo(() => {
+    return resolvedUnits.filter((u) => {
+      // Category filter
+      if (invCategoryFilter !== 'all') {
+        if (invCategoryFilter === 'bed' && u.category !== 'bed') return false;
+        if (invCategoryFilter === 'wheelchair' && u.category !== 'wheelchair') return false;
+        if (invCategoryFilter === 'oxygen' && u.category !== 'oxygen_concentrator') return false;
+        if (invCategoryFilter === 'mattress' && u.category !== 'air_mattress') return false;
+        if (invCategoryFilter === 'suction' && u.category !== 'suction_machine') return false;
+        if (invCategoryFilter === 'walker' && u.category !== 'walker') return false;
+      }
+
+      // Status filter
+      if (invStatusFilter !== 'all' && u.resolvedStatus !== invStatusFilter) return false;
+
+      // Moo filter
+      if (invMooFilter !== 'all') {
+        if (u.resolvedStatus === 'borrowed') {
+          if (u.moo !== invMooFilter && !u.address.includes(`หมู่ ${invMooFilter}`) && !u.address.includes(`หมู่ที่ ${invMooFilter}`)) {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      }
+
+      // Search query
+      if (invSearchQuery.trim()) {
+        const q = invSearchQuery.trim().toLowerCase();
+        const matchCode = u.assetCode.toLowerCase().includes(q);
+        const matchName = u.name.toLowerCase().includes(q);
+        const matchBrand = (u.brandModel || '').toLowerCase().includes(q);
+        const matchPatient = (u.patientName || '').toLowerCase().includes(q);
+        const matchBorrower = (u.borrowerName || '').toLowerCase().includes(q);
+        const matchAddr = (u.address || '').toLowerCase().includes(q);
+        const matchSerial = (u.serialNumber || '').toLowerCase().includes(q);
+        if (!matchCode && !matchName && !matchBrand && !matchPatient && !matchBorrower && !matchAddr && !matchSerial) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [resolvedUnits, invCategoryFilter, invStatusFilter, invMooFilter, invSearchQuery]);
+
+  const groupedCategories = useMemo(() => {
+    return equipmentList.map((eq) => {
+      const categoryUnits = filteredUnits.filter((u) => u.equipmentId === eq.id || u.category === eq.category);
+      const allCategoryUnits = resolvedUnits.filter((u) => u.equipmentId === eq.id || u.category === eq.category);
+      const availCount = allCategoryUnits.filter((u) => u.resolvedStatus === 'available').length;
+      const borrowCount = allCategoryUnits.filter((u) => u.resolvedStatus === 'borrowed').length;
+      const maintCount = allCategoryUnits.filter((u) => u.resolvedStatus === 'maintenance').length;
+
+      return {
+        equipment: eq,
+        units: categoryUnits,
+        totalCount: allCategoryUnits.length,
+        availCount,
+        borrowCount,
+        maintCount,
+      };
+    });
+  }, [equipmentList, filteredUnits, resolvedUnits]);
 
   // Initialize Overview Leaflet Satellite Map on Dashboard
   useEffect(() => {
@@ -3909,117 +4128,708 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
           </div>
         )}
 
-      {/* 4. SUBTAB: 'inventory' (MEDICAL EQUIPMENT WAREHOUSE) */}
+      {/* 4. SUBTAB: 'inventory' (MEDICAL EQUIPMENT WAREHOUSE - UNIT-LEVEL TRACKING) */}
       {subTab === 'inventory' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl p-5 shadow-xs border border-slate-200">
-            <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-4 mb-4">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xs border border-slate-200">
+            {/* Header & Main Actions */}
+            <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-4 mb-5">
               <div>
-                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
                   <Package className="w-5 h-5 text-teal-700" />
-                  <span>คลังอุปกรณ์ทางการแพทย์ กองสาธารณสุขและสิ่งแวดล้อม ทต.บางเป้า</span>
+                  <span>คลังอุปกรณ์และครุภัณฑ์การแพทย์ (ระบบติดตามรายชิ้น/รายทะเบียน)</span>
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  ตรวจสอบสต็อกคงเหลือ บันทึกครุภัณฑ์ใหม่ และติดตามสถานะการใช้งาน
+                <p className="text-xs text-slate-500 mt-1">
+                  เทศบาลตำบลบางเป้า • ติดตามชัดเจนว่าอุปกรณ์แต่ละชิ้น <strong>เลขทะเบียนใด อยู่บ้านใคร</strong> ยี่ห้อ สภาพ และความพร้อมใช้งาน
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsAddEquipModalOpen(true)}
-                className="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ เพิ่มอุปกรณ์ใหม่เข้าคลัง</span>
-              </button>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* View Mode Switcher */}
+                <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setInvViewMode('grouped')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      invViewMode === 'grouped'
+                        ? 'bg-white text-teal-800 shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="มุมมองแยกตามประเภทอุปกรณ์ เช่น เตียง 1 อยู่บ้านนายเอ, เตียง 2 นายบี, เตียง 3 ชำรุด..."
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>แยกตามประเภท ({equipmentList.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvViewMode('list')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      invViewMode === 'list'
+                        ? 'bg-white text-teal-800 shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="มุมมองตารางรายการครุภัณฑ์ทุกชิ้นในคลัง"
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span>ตารางทุกชิ้น ({totalUnitsCount})</span>
+                  </button>
+                </div>
+
+                {/* Add New Unit Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsAddUnitModalOpen(true)}
+                  className="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-transform"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ เพิ่มทะเบียนใหม่เข้าคลัง</span>
+                </button>
+              </div>
             </div>
 
             {/* Inventory KPI Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                <div className="text-xs text-slate-500">ยอดครุภัณฑ์ทั้งหมด</div>
-                <div className="text-xl font-black text-slate-900 mt-1">{totalAssetsInStock} ชิ้น</div>
+              <div
+                onClick={() => setInvStatusFilter('all')}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  invStatusFilter === 'all'
+                    ? 'bg-slate-100 border-slate-400 ring-2 ring-slate-300'
+                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100/70'
+                }`}
+              >
+                <div className="text-xs text-slate-500 font-medium">ยอดครุภัณฑ์ทั้งหมด</div>
+                <div className="text-xl font-black text-slate-900 mt-1">{totalUnitsCount} ชิ้น</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">ครบทุกเลขทะเบียน 7 หมวด</div>
               </div>
-              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-                <div className="text-xs text-emerald-700 font-bold">คงเหลือพร้อมจ่ายทันที</div>
-                <div className="text-xl font-black text-emerald-800 mt-1">{totalAssetsAvailable} ชิ้น</div>
+
+              <div
+                onClick={() => setInvStatusFilter(invStatusFilter === 'available' ? 'all' : 'available')}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  invStatusFilter === 'available'
+                    ? 'bg-emerald-100 border-emerald-500 ring-2 ring-emerald-300'
+                    : 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100/60'
+                }`}
+              >
+                <div className="text-xs text-emerald-700 font-bold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>ว่างในคลัง (พร้อมจ่ายทันที)</span>
+                </div>
+                <div className="text-xl font-black text-emerald-800 mt-1">{availableUnitsCount} ชิ้น</div>
+                <div className="text-[10px] text-emerald-600 mt-0.5">เก็บที่ห้องคลังกองสาธารณสุข</div>
               </div>
-              <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200">
-                <div className="text-xs text-sky-700 font-bold">ถูกยืมใช้งานอยู่</div>
-                <div className="text-xl font-black text-sky-800 mt-1">{totalAssetsInUse} ชิ้น</div>
+
+              <div
+                onClick={() => setInvStatusFilter(invStatusFilter === 'borrowed' ? 'all' : 'borrowed')}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  invStatusFilter === 'borrowed'
+                    ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-300'
+                    : 'bg-sky-50 border-sky-200 hover:bg-sky-100/60'
+                }`}
+              >
+                <div className="text-xs text-sky-700 font-bold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                  <span>ถูกยืมอยู่ (บ้านประชาชน)</span>
+                </div>
+                <div className="text-xl font-black text-sky-800 mt-1">{borrowedUnitsCount} ชิ้น</div>
+                <div className="text-[10px] text-sky-600 mt-0.5">กระจายอยู่ใน ม.1 - ม.7</div>
               </div>
-              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
-                <div className="text-xs text-amber-700 font-bold">ชำรุด / ซ่อมบำรุง</div>
-                <div className="text-xl font-black text-amber-800 mt-1">0 ชิ้น</div>
+
+              <div
+                onClick={() => setInvStatusFilter(invStatusFilter === 'maintenance' ? 'all' : 'maintenance')}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  invStatusFilter === 'maintenance'
+                    ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-300'
+                    : 'bg-amber-50 border-amber-200 hover:bg-amber-100/60'
+                }`}
+              >
+                <div className="text-xs text-amber-700 font-bold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  <span>ชำรุด / อยู่ระหว่างซ่อม</span>
+                </div>
+                <div className="text-xl font-black text-amber-800 mt-1">{maintenanceUnitsCount} ชิ้น</div>
+                <div className="text-[10px] text-amber-600 mt-0.5">ห้องช่างบำรุงรักษา</div>
               </div>
             </div>
 
-            {/* Inventory Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-700 border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200">
-                    <th className="py-2.5 px-3">#</th>
-                    <th className="py-2.5 px-3 text-center">รูปภาพ</th>
-                    <th className="py-2.5 px-3">รหัสครุภัณฑ์</th>
-                    <th className="py-2.5 px-3">ชื่ออุปกรณ์ทางการแพทย์</th>
-                    <th className="py-2.5 px-3">หมวดหมู่</th>
-                    <th className="py-2.5 px-3 text-center">ทั้งหมด</th>
-                    <th className="py-2.5 px-3 text-center">ถูกยืม</th>
-                    <th className="py-2.5 px-3 text-center">คงเหลือ</th>
-                    <th className="py-2.5 px-3">สถานที่จัดเก็บ</th>
-                    <th className="py-2.5 px-3 text-center">จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {equipmentList.map((eq, i) => (
-                    <tr key={eq.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-2.5 px-3 text-slate-400 font-bold">{i + 1}</td>
-                      <td className="py-2 px-3 text-center">
-                        {eq.imageUrl ? (
-                          <img
-                            src={eq.imageUrl}
-                            alt={eq.name}
-                            className="w-12 h-12 rounded-lg object-cover border border-slate-200 shadow-2xs mx-auto"
-                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 text-slate-400 flex items-center justify-center mx-auto text-[10px]">
-                            ไม่มีรูป
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-teal-800">{eq.assetCode}</td>
-                      <td className="py-2.5 px-3 font-bold text-slate-900">{eq.name}</td>
-                      <td className="py-2.5 px-3 text-slate-600">{eq.category}</td>
-                      <td className="py-2.5 px-3 text-center font-bold text-slate-800">{eq.totalQuantity}</td>
-                      <td className="py-2.5 px-3 text-center font-bold text-sky-700">{eq.inUseQuantity}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full font-black text-[11px] ${
-                          eq.availableQuantity > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {eq.availableQuantity}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500">{eq.storageLocation || '-'}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingEquipment({ ...eq });
-                            setIsEditEquipModalOpen(true);
-                          }}
-                          className="px-2.5 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
-                          title="แก้ไขข้อมูล หรืออัปโหลดรูปถ่ายจริงของอุปกรณ์"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>แก้ไข / รูปภาพ</span>
-                        </button>
-                      </td>
-                    </tr>
+            {/* Smart Search & Multi-Filter Bar */}
+            <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-200 mb-5 space-y-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="ค้นหาเลขทะเบียน (เช่น BED-001), ยี่ห้อ/รุ่น, ชื่อผู้ป่วย, ผู้ยืม, หรือที่อยู่/หมู่..."
+                    value={invSearchQuery}
+                    onChange={(e) => setInvSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+                  />
+                  {invSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setInvSearchQuery('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Village / Moo Filter */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span className="text-xs text-slate-600 font-bold shrink-0">พิกัดบ้าน:</span>
+                  <select
+                    value={invMooFilter}
+                    onChange={(e) => setInvMooFilter(e.target.value)}
+                    className="py-2 px-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="all">ทุกหมู่ (ม.1 - ม.7)</option>
+                    <option value="1">หมู่ 1 บ้านท่าส้ม</option>
+                    <option value="2">หมู่ 2 บ้านทุ่งค่าย</option>
+                    <option value="3">หมู่ 3 บ้านตลาดใหม่</option>
+                    <option value="4">หมู่ 4 บ้านแหลมม่วง</option>
+                    <option value="5">หมู่ 5 บ้านไร่ออก</option>
+                    <option value="6">หมู่ 6 บ้านในลุ่ม</option>
+                    <option value="7">หมู่ 7 บ้านควนทอง</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Category Pills & Status Filter */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+                {/* Category Pills */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-xs text-slate-500 font-bold mr-1">หมวดหมู่:</span>
+                  {[
+                    { id: 'all', label: 'ทั้งหมด' },
+                    { id: 'bed', label: '🛏️ เตียงผู้ป่วย' },
+                    { id: 'wheelchair', label: '♿ รถเข็นวีลแชร์' },
+                    { id: 'oxygen', label: '💨 ผลิตออกซิเจน' },
+                    { id: 'mattress', label: '🌊 ที่นอนลม' },
+                    { id: 'suction', label: '🧪 ดูดเสมหะ' },
+                    { id: 'walker', label: '🚶 โครงช่วยเดิน' },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setInvCategoryFilter(cat.id)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        invCategoryFilter === cat.id
+                          ? 'bg-teal-700 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
                   ))}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Status Toggle Pills */}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-slate-500 font-bold mr-1">สถานะ:</span>
+                  <button
+                    type="button"
+                    onClick={() => setInvStatusFilter('all')}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer ${
+                      invStatusFilter === 'all'
+                        ? 'bg-slate-700 text-white'
+                        : 'bg-white text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    ทั้งหมด
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvStatusFilter('available')}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer ${
+                      invStatusFilter === 'available'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}
+                  >
+                    🟢 ว่าง ({availableUnitsCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvStatusFilter('borrowed')}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer ${
+                      invStatusFilter === 'borrowed'
+                        ? 'bg-sky-600 text-white'
+                        : 'bg-sky-50 text-sky-700 border border-sky-200'
+                    }`}
+                  >
+                    🔵 ถูกยืม ({borrowedUnitsCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInvStatusFilter('maintenance')}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer ${
+                      invStatusFilter === 'maintenance'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}
+                  >
+                    🟠 ชำรุด ({maintenanceUnitsCount})
+                  </button>
+                </div>
+              </div>
             </div>
+
+            {/* Content View 1: MODE A - Grouped by Category (ตามที่ผู้ใช้ร้องขอ) */}
+            {invViewMode === 'grouped' && (
+              <div className="space-y-6">
+                {groupedCategories
+                  .filter((group) => {
+                    if (invCategoryFilter !== 'all') {
+                      if (invCategoryFilter === 'bed' && group.equipment.category !== 'bed') return false;
+                      if (invCategoryFilter === 'wheelchair' && group.equipment.category !== 'wheelchair') return false;
+                      if (invCategoryFilter === 'oxygen' && group.equipment.category !== 'oxygen_concentrator') return false;
+                      if (invCategoryFilter === 'mattress' && group.equipment.category !== 'air_mattress') return false;
+                      if (invCategoryFilter === 'suction' && group.equipment.category !== 'suction_machine') return false;
+                      if (invCategoryFilter === 'walker' && group.equipment.category !== 'walker') return false;
+                    }
+                    return group.units.length > 0;
+                  })
+                  .map((group) => (
+                    <div
+                      key={group.equipment.id}
+                      className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs"
+                    >
+                      {/* Category Header Bar */}
+                      <div className="bg-gradient-to-r from-slate-50 to-teal-50/40 p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {group.equipment.imageUrl ? (
+                            <img
+                              src={group.equipment.imageUrl}
+                              alt={group.equipment.name}
+                              className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-xs"
+                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                              <Package className="w-6 h-6" />
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-black text-slate-900">
+                                {group.equipment.name}
+                              </h3>
+                              <span className="font-mono text-xs font-bold text-teal-700 bg-teal-100/70 px-2 py-0.5 rounded">
+                                {group.equipment.assetCode}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                              <span>จัดเก็บหลัก: {group.equipment.storageLocation}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Category Sub-counts */}
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                            รวมทั้งหมด: <strong>{group.totalCount} ชิ้น</strong>
+                          </span>
+                          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
+                            🟢 ว่าง: <strong>{group.availCount}</strong>
+                          </span>
+                          <span className="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 font-bold border border-sky-200">
+                            🔵 ถูกยืม: <strong>{group.borrowCount}</strong>
+                          </span>
+                          {group.maintCount > 0 && (
+                            <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 font-bold border border-amber-200">
+                              🟠 ชำรุด: <strong>{group.maintCount}</strong>
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingEquipment({ ...group.equipment });
+                              setIsEditEquipModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-teal-700 hover:bg-white border border-transparent hover:border-slate-200 transition-colors"
+                            title="แก้ไขข้อมูลหลักของประเภทนี้"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Individual Units Grid (ตรงตามที่ผู้ใช้ต้องการ: เตียง 1 นายเอ, เตียง 2 นายบี, เตียง 3 ชำรุด...) */}
+                      <div className="p-4 bg-slate-50/40">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                          {group.units.map((u) => {
+                            const isAvailable = u.resolvedStatus === 'available';
+                            const isBorrowed = u.resolvedStatus === 'borrowed';
+                            const isMaintenance = u.resolvedStatus === 'maintenance';
+
+                            return (
+                              <div
+                                key={u.id}
+                                className={`rounded-xl p-3.5 border transition-all flex flex-col justify-between ${
+                                  isBorrowed
+                                    ? 'bg-white border-sky-200 shadow-2xs hover:border-sky-400 ring-1 ring-sky-100'
+                                    : isMaintenance
+                                    ? 'bg-amber-50/50 border-amber-300 shadow-2xs'
+                                    : 'bg-white border-emerald-200 shadow-2xs hover:border-emerald-400 ring-1 ring-emerald-100'
+                                }`}
+                              >
+                                <div>
+                                  {/* Unit Header: Asset Tag & Status Badge */}
+                                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5 mb-2.5">
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                          🏷️ {u.assetCode}
+                                        </span>
+                                        {u.unitNumber && (
+                                          <span className="text-xs font-extrabold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                                            ชิ้นที่ {u.unitNumber}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] font-bold text-slate-600 truncate max-w-[210px]" title={u.brandModel}>
+                                        ยี่ห้อ/รุ่น: <span className="text-slate-800">{u.brandModel || 'มาตรฐาน'}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Status Badge */}
+                                    <div className="shrink-0 text-right">
+                                      {isAvailable && (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                          <span>ว่างพร้อมยืม</span>
+                                        </span>
+                                      )}
+                                      {isBorrowed && (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 inline-flex items-center gap-1">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                                          <span>ถูกยืมใช้งาน</span>
+                                        </span>
+                                      )}
+                                      {isMaintenance && (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
+                                          <Wrench className="w-3 h-3 text-amber-600" />
+                                          <span>ชำรุด/ซ่อม</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Middle Box: Condition & Custodian Location Details */}
+                                  <div className="space-y-2 mb-3">
+                                    {/* Condition Badge */}
+                                    <div className="flex items-center justify-between text-[11px]">
+                                      <span className="text-slate-500">สภาพความสมบูรณ์:</span>
+                                      <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                        u.condition === 'good'
+                                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                          : u.condition === 'fair'
+                                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                      }`}>
+                                        {u.condition === 'good' ? '✨ สมบูรณ์ 100%' : u.condition === 'fair' ? '👍 สภาพดี/พอใช้' : '⚠️ ชำรุดรอซ่อม'}
+                                      </span>
+                                    </div>
+
+                                    {/* Detailed Location & Custodian Box */}
+                                    {isBorrowed && (
+                                      <div className="p-2.5 rounded-xl bg-sky-50/80 border border-sky-200 text-xs space-y-1.5">
+                                        <div className="flex items-start gap-1.5 text-sky-950">
+                                          <Home className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                                          <div className="leading-tight">
+                                            <div className="font-black text-slate-900">
+                                              อยู่บ้าน: {u.patientName}
+                                            </div>
+                                            <div className="text-[11px] text-sky-800 font-medium">
+                                              ผู้ยืม: {u.borrowerName} • 📞 {u.phone}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div className="text-[11px] text-slate-600 flex items-start gap-1 pl-5">
+                                          <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                                          <span className="line-clamp-2">{u.address}</span>
+                                        </div>
+
+                                        <div className="text-[10px] text-slate-500 flex items-center justify-between border-t border-sky-100 pt-1 mt-1 pl-5">
+                                          <span>ยืมเมื่อ: <strong>{formatThaiDate(u.borrowDate)}</strong></span>
+                                          <span className="text-sky-700 font-bold">คืน: <strong>{formatThaiDate(u.dueDate)}</strong></span>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {isAvailable && (
+                                      <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-1">
+                                        <div className="flex items-center gap-1.5 text-emerald-900 font-black">
+                                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                          <span>อยู่ในคลังพร้อมจ่ายยืม</span>
+                                        </div>
+                                        <div className="text-[11px] text-emerald-800 pl-5">
+                                          ที่เก็บ: <strong>{u.storageLocation}</strong>
+                                        </div>
+                                        {u.notes && (
+                                          <div className="text-[10px] text-slate-500 pl-5 italic">
+                                            หมายเหตุ: {u.notes}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {isMaintenance && (
+                                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-xs space-y-1">
+                                        <div className="flex items-center gap-1.5 text-amber-950 font-black">
+                                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                                          <span>ชำรุดรอซ่อมบำรุง</span>
+                                        </div>
+                                        <div className="text-[11px] text-amber-900 pl-5 font-medium leading-relaxed">
+                                          อาการ: <strong>{u.repairNotes || 'รอช่างตรวจเช็คอะไหล่'}</strong>
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 pl-5">
+                                          สถานที่: {u.storageLocation}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Unit Footer: Action Buttons */}
+                                <div className="border-t border-slate-100 pt-2 flex items-center justify-between gap-1 text-xs">
+                                  <div className="flex items-center gap-1">
+                                    {isBorrowed && u.activeLoan && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPrintModalLoan(u.activeLoan!)}
+                                          className="px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                                          title="ดูสัญญาการยืม A4"
+                                        >
+                                          <Printer className="w-3 h-3 text-teal-600" />
+                                          <span>สัญญา A4</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setReturnModalLoan(u.activeLoan!)}
+                                          className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                                          title="บันทึกรับคืนอุปกรณ์นี้เข้าคลัง"
+                                        >
+                                          <RotateCcw className="w-3 h-3 text-amber-600" />
+                                          <span>รับคืน</span>
+                                        </button>
+                                      </>
+                                    )}
+
+                                    {isAvailable && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedEquipmentIds([u.equipmentId]);
+                                          setSubTab('register');
+                                        }}
+                                        className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
+                                        title="นำอุปกรณ์ชิ้นนี้ไปเปิดสัญญาจ่ายยืมให้ประชาชน"
+                                      >
+                                        <ShoppingCart className="w-3 h-3" />
+                                        <span>จ่ายยืมชิ้นนี้</span>
+                                      </button>
+                                    )}
+
+                                    {isMaintenance && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleUpdateUnit({
+                                            ...u,
+                                            status: 'available',
+                                            condition: 'good',
+                                            repairNotes: undefined,
+                                          });
+                                        }}
+                                        className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                                        title="ซ่อมบำรุงเสร็จแล้ว นำกลับเข้าคลังพร้อมจ่าย"
+                                      >
+                                        <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                        <span>ซ่อมเสร็จ/เข้าคลัง</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Edit Unit Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingUnit(u)}
+                                    className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                    title="แก้ไขข้อมูลเลขทะเบียน สภาพ หรือเปลี่ยนผู้ถือครอง"
+                                  >
+                                    <Edit3 className="w-3 h-3 text-slate-500" />
+                                    <span>แก้ไข</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                {groupedCategories.filter((g) => g.units.length > 0).length === 0 && (
+                  <div className="py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 space-y-2">
+                    <Package className="w-10 h-10 mx-auto text-slate-300" />
+                    <div className="font-bold text-slate-600 text-sm">ไม่พบอุปกรณ์ตามเงื่อนไขที่ค้นหา</div>
+                    <div className="text-xs text-slate-400">ลองล้างตัวกรองหรือคำค้นหาด้านบน</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Content View 2: MODE B - All Units Complete Data Table */}
+            {invViewMode === 'list' && (
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+                      <th className="py-3 px-3">#</th>
+                      <th className="py-3 px-3">เลขทะเบียนครุภัณฑ์</th>
+                      <th className="py-3 px-3">ชื่ออุปกรณ์</th>
+                      <th className="py-3 px-3">ยี่ห้อ / รุ่น</th>
+                      <th className="py-3 px-3 text-center">สถานะ</th>
+                      <th className="py-3 px-3">สถานที่จัดเก็บ / อยู่บ้านใคร</th>
+                      <th className="py-3 px-3 text-center">สภาพ</th>
+                      <th className="py-3 px-3">ระยะเวลายืม-คืน</th>
+                      <th className="py-3 px-3 text-center">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredUnits.map((u, i) => {
+                      const isAvailable = u.resolvedStatus === 'available';
+                      const isBorrowed = u.resolvedStatus === 'borrowed';
+                      const isMaintenance = u.resolvedStatus === 'maintenance';
+
+                      return (
+                        <tr key={u.id} className="hover:bg-teal-50/20 transition-colors">
+                          <td className="py-2.5 px-3 text-slate-400 font-mono font-bold text-center">
+                            {i + 1}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-mono font-black text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 inline-block">
+                              🏷️ {u.assetCode}
+                            </div>
+                            {u.unitNumber && (
+                              <div className="text-[10px] text-slate-400 mt-0.5">ชิ้นที่ {u.unitNumber}</div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-900">
+                            <div>{u.name}</div>
+                            <div className="text-[10px] text-slate-400 font-normal">{u.category}</div>
+                          </td>
+                          <td className="py-2.5 px-3 font-medium text-slate-700">
+                            <div>{u.brandModel || '-'}</div>
+                            {u.serialNumber && (
+                              <div className="text-[10px] text-slate-400 font-mono">S/N: {u.serialNumber}</div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {isAvailable && (
+                              <span className="px-2 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                🟢 ว่างในคลัง
+                              </span>
+                            )}
+                            {isBorrowed && (
+                              <span className="px-2 py-1 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300">
+                                🔵 ถูกยืมอยู่
+                              </span>
+                            )}
+                            {isMaintenance && (
+                              <span className="px-2 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                                🟠 ชำรุด/ซ่อม
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {isBorrowed ? (
+                              <div className="space-y-0.5 max-w-xs">
+                                <div className="font-bold text-slate-900 flex items-center gap-1">
+                                  <Home className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                  <span>อยู่บ้าน: {u.patientName}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-600 truncate" title={u.address}>
+                                  {u.address} {u.moo ? `(หมู่ ${u.moo})` : ''}
+                                </div>
+                                <div className="text-[10px] text-sky-700">
+                                  ผู้ยืม: {u.borrowerName} • 📞 {u.phone}
+                                </div>
+                              </div>
+                            ) : isMaintenance ? (
+                              <div className="text-amber-900">
+                                <div className="font-bold flex items-center gap-1">
+                                  <Wrench className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>ชำรุด: {u.repairNotes || 'รอส่งซ่อม'}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-400">สถานที่: {u.storageLocation}</div>
+                              </div>
+                            ) : (
+                              <div className="text-slate-600">
+                                <div className="font-bold text-emerald-800 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>อยู่ในคลังพร้อมจ่าย</span>
+                                </div>
+                                <div className="text-[11px] text-slate-500">{u.storageLocation}</div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              u.condition === 'good'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : u.condition === 'fair'
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              {u.condition === 'good' ? '✨ 100%' : u.condition === 'fair' ? '👍 สภาพดี' : '⚠️ ชำรุด'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 font-medium text-[11px]">
+                            {isBorrowed ? (
+                              <div>
+                                <div>ยืม: {formatThaiDate(u.borrowDate)}</div>
+                                <div className="text-sky-700 font-bold">คืน: {formatThaiDate(u.dueDate)}</div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {isBorrowed && u.activeLoan && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPrintModalLoan(u.activeLoan!)}
+                                  className="p-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 cursor-pointer"
+                                  title="ดูสัญญา A4"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setEditingUnit(u)}
+                                className="px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                title="แก้ไขข้อมูลชิ้นนี้"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>แก้ไข</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -4692,6 +5502,497 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold cursor-pointer shadow-xs"
                 >
                   บันทึกเข้าคลัง
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* H. Edit Individual Unit Modal (แก้ไขข้อมูลครุภัณฑ์รายชิ้น) */}
+      {editingUnit && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-black">
+                  🏷️
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    แก้ไขข้อมูลครุภัณฑ์รายชิ้น: {editingUnit.assetCode}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">{editingUnit.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUnit(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleUpdateUnit({ ...editingUnit, updatedAt: new Date().toISOString() });
+                setEditingUnit(null);
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    เลขทะเบียน / รหัสครุภัณฑ์ <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingUnit.assetCode}
+                    onChange={(e) => setEditingUnit({ ...editingUnit, assetCode: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono font-bold text-teal-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ลำดับชิ้น (เช่น 1, 2, 3)</label>
+                  <input
+                    type="number"
+                    value={editingUnit.unitNumber || ''}
+                    onChange={(e) => setEditingUnit({ ...editingUnit, unitNumber: parseInt(e.target.value) || undefined })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ยี่ห้อ / รุ่น (Brand & Model)</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น Paramount Bed 2-Crank"
+                    value={editingUnit.brandModel || ''}
+                    onChange={(e) => setEditingUnit({ ...editingUnit, brandModel: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">หมายเลขเครื่อง (Serial Number / S/N)</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น PB-2C-2567-001"
+                    value={editingUnit.serialNumber || ''}
+                    onChange={(e) => setEditingUnit({ ...editingUnit, serialNumber: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">สภาพความสมบูรณ์</label>
+                  <select
+                    value={editingUnit.condition}
+                    onChange={(e) => setEditingUnit({ ...editingUnit, condition: e.target.value as any })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-bold cursor-pointer"
+                  >
+                    <option value="good">✨ สมบูรณ์ 100% พร้อมใช้งาน</option>
+                    <option value="fair">👍 สภาพดี / มีรอยใช้งานเล็กน้อย</option>
+                    <option value="damaged">⚠️ มีจุดชำรุด</option>
+                    <option value="repair_needed">🔧 ต้องซ่อมบำรุงก่อนจ่ายยืม</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">สถานะปัจจุบัน</label>
+                  <select
+                    value={editingUnit.status}
+                    onChange={(e) => setEditingUnit({ ...editingUnit, status: e.target.value as any })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-black cursor-pointer text-slate-800"
+                  >
+                    <option value="available">🟢 ว่างในคลัง (พร้อมจ่ายยืม)</option>
+                    <option value="borrowed">🔵 ถูกยืมใช้งาน (อยู่บ้านประชาชน)</option>
+                    <option value="maintenance">🟠 ชำรุด / ส่งซ่อมบำรุง</option>
+                    <option value="disposed">⚪ แทงจำหน่าย / ปลดระวาง</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dynamic Sub-form: Borrowed Custodian Details (อยู่บ้านใคร) */}
+              {editingUnit.status === 'borrowed' && (
+                <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200 space-y-3">
+                  <div className="font-black text-sky-950 flex items-center gap-1.5 text-xs">
+                    <Home className="w-4 h-4 text-sky-600" />
+                    <span>ข้อมูลผู้ถือครอง / ผู้ป่วยที่ยืมไปใช้งาน (อยู่บ้านใคร)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">ชื่อผู้ป่วย</label>
+                      <input
+                        type="text"
+                        placeholder="เช่น นายแดง สุขเกษม"
+                        value={editingUnit.currentPatientName || ''}
+                        onChange={(e) => setEditingUnit({ ...editingUnit, currentPatientName: e.target.value })}
+                        className="w-full p-2 border border-slate-300 rounded-xl bg-white font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">ชื่อผู้ยืม (ญาติ/ผู้ดูแล)</label>
+                      <input
+                        type="text"
+                        placeholder="เช่น นายดำ สุขเกษม"
+                        value={editingUnit.currentBorrowerName || ''}
+                        onChange={(e) => setEditingUnit({ ...editingUnit, currentBorrowerName: e.target.value })}
+                        className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <label className="block font-bold text-slate-700 mb-1">บ้านเลขที่ / ที่อยู่ผู้ป่วย</label>
+                      <input
+                        type="text"
+                        placeholder="เช่น 1 หมู่ 1 ต.บางเป้า อ.กันตัง จ.ตรัง"
+                        value={editingUnit.currentAddress || ''}
+                        onChange={(e) => setEditingUnit({ ...editingUnit, currentAddress: e.target.value })}
+                        className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">หมู่ที่</label>
+                      <select
+                        value={editingUnit.currentMoo || '1'}
+                        onChange={(e) => setEditingUnit({ ...editingUnit, currentMoo: e.target.value })}
+                        className="w-full p-2 border border-slate-300 rounded-xl bg-white font-bold"
+                      >
+                        <option value="1">ม.1 ท่าส้ม</option>
+                        <option value="2">ม.2 ทุ่งค่าย</option>
+                        <option value="3">ม.3 ตลาดใหม่</option>
+                        <option value="4">ม.4 แหลมม่วง</option>
+                        <option value="5">ม.5 ไร่ออก</option>
+                        <option value="6">ม.6 ในลุ่ม</option>
+                        <option value="7">ม.7 ควนทอง</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">เบอร์ติดต่อ</label>
+                      <input
+                        type="tel"
+                        placeholder="081-xxx-xxxx"
+                        value={editingUnit.currentBorrowerPhone || ''}
+                        onChange={(e) => setEditingUnit({ ...editingUnit, currentBorrowerPhone: e.target.value })}
+                        className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">วันที่เริ่มยืม</label>
+                      <input
+                        type="date"
+                        value={editingUnit.borrowDate || ''}
+                        onChange={(e) => setEditingUnit({ ...editingUnit, borrowDate: e.target.value })}
+                        className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">กำหนดส่งคืน</label>
+                      <input
+                        type="date"
+                        value={editingUnit.dueDate || ''}
+                        onChange={(e) => setEditingUnit({ ...editingUnit, dueDate: e.target.value })}
+                        className="w-full p-2 border border-slate-300 rounded-xl bg-white font-bold text-sky-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Dynamic Sub-form: Maintenance Details */}
+              {editingUnit.status === 'maintenance' && (
+                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 space-y-2">
+                  <div className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
+                    <Wrench className="w-4 h-4 text-amber-600" />
+                    <span>บันทึกอาการชำรุดและการซ่อมบำรุง</span>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">รายละเอียดอาการชำรุด</label>
+                    <textarea
+                      rows={2}
+                      placeholder="เช่น ราวกั้นข้างเตียงหลวม สลักล็อคไม่แน่น รอเปลี่ยนลูกปืนล้อ"
+                      value={editingUnit.repairNotes || ''}
+                      onChange={(e) => setEditingUnit({ ...editingUnit, repairNotes: e.target.value })}
+                      className="w-full p-2 border border-slate-300 rounded-xl bg-white leading-relaxed"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">สถานที่จัดเก็บเมื่ออยู่ในคลัง</label>
+                <input
+                  type="text"
+                  value={editingUnit.storageLocation || 'ห้องคลังอุปกรณ์ชั้น 1 กองสาธารณสุข'}
+                  onChange={(e) => setEditingUnit({ ...editingUnit, storageLocation: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">ลิงก์รูปถ่ายอุปกรณ์ชิ้นนี้ (URL)</label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={editingUnit.imageUrl || ''}
+                  onChange={(e) => setEditingUnit({ ...editingUnit, imageUrl: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">หมายเหตุเพิ่มเติม</label>
+                <input
+                  type="text"
+                  placeholder="บันทึกข้อความเสริม..."
+                  value={editingUnit.notes || ''}
+                  onChange={(e) => setEditingUnit({ ...editingUnit, notes: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`คุณต้องการลบทะเบียน "${editingUnit.assetCode}" ออกจากระบบหรือไม่?`)) {
+                      handleDeleteUnit(editingUnit.id);
+                      setEditingUnit(null);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-bold cursor-pointer"
+                >
+                  ลบชิ้นนี้
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUnit(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold cursor-pointer"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold cursor-pointer shadow-xs active:scale-95 transition-transform"
+                  >
+                    บันทึกการแก้ไข
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* I. Add New Unit Modal (เพิ่มอุปกรณ์รายชิ้นใหม่เข้าคลัง) */}
+      {isAddUnitModalOpen && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-black">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    + เพิ่มครุภัณฑ์ใหม่เข้าคลัง (รายชิ้น)
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">บันทึกเลขทะเบียนครุภัณฑ์และยี่ห้อเฉพาะชิ้น</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddUnitModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const matchedEq = equipmentList.find((e) => e.category === newUnitForm.category);
+                const nextNumber = units.filter((u) => u.category === newUnitForm.category).length + 1;
+                const newUnit: MedicalEquipmentUnit = {
+                  id: `UNIT-${newUnitForm.category.toUpperCase()}-${Date.now().toString().slice(-4)}`,
+                  equipmentId: matchedEq?.id || newUnitForm.equipmentId,
+                  assetCode: newUnitForm.assetCode,
+                  unitNumber: nextNumber,
+                  name: matchedEq?.name || newUnitForm.name,
+                  category: newUnitForm.category,
+                  brandModel: newUnitForm.brandModel || 'มาตรฐาน',
+                  serialNumber: newUnitForm.serialNumber || undefined,
+                  condition: newUnitForm.condition,
+                  status: newUnitForm.status,
+                  storageLocation: newUnitForm.storageLocation || 'ห้องคลังอุปกรณ์ชั้น 1 กองสาธารณสุข',
+                  imageUrl: newUnitForm.imageUrl || matchedEq?.imageUrl,
+                  notes: newUnitForm.notes || undefined,
+                  createdAt: new Date().toISOString(),
+                };
+                handleAddUnit(newUnit);
+                setIsAddUnitModalOpen(false);
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">หมวดหมู่อุปกรณ์การแพทย์</label>
+                <select
+                  value={newUnitForm.category}
+                  onChange={(e) => {
+                    const cat = e.target.value as MedicalEquipment['category'];
+                    const eq = equipmentList.find((item) => item.category === cat);
+                    const prefix = cat === 'bed' ? 'BED' : cat === 'wheelchair' ? 'WCH' : cat === 'oxygen_concentrator' ? 'OXY' : cat === 'air_mattress' ? 'MAT' : cat === 'suction_machine' ? 'SUC' : 'WLK';
+                    const nextNum = units.filter((u) => u.category === cat).length + 1;
+                    const code = `ทต.บป.${prefix}-${String(nextNum).padStart(3, '0')}`;
+                    setNewUnitForm({
+                      ...newUnitForm,
+                      category: cat,
+                      equipmentId: eq?.id || 'EQ-001',
+                      name: eq?.name || 'อุปกรณ์การแพทย์',
+                      assetCode: code,
+                      imageUrl: eq?.imageUrl || '',
+                    });
+                  }}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl bg-white font-bold cursor-pointer text-slate-800"
+                >
+                  <option value="bed">🛏️ เตียงผู้ป่วยมือหมุน 2 ไกร์</option>
+                  <option value="wheelchair">♿ รถเข็นวีลแชร์มาตรฐานพับได้</option>
+                  <option value="oxygen_concentrator">💨 เครื่องผลิตออกซิเจนขนาด 5 ลิตร</option>
+                  <option value="air_mattress">🌊 ที่นอนลมป้องกันแผลกดทับแบบลอน</option>
+                  <option value="suction_machine">🧪 เครื่องดูดเสมหะแบบพกพา</option>
+                  <option value="walker">🚶 โครงช่วยเดินพับได้ 4 ขา</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    เลขทะเบียน / เลขครุภัณฑ์ <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newUnitForm.assetCode}
+                    onChange={(e) => setNewUnitForm({ ...newUnitForm, assetCode: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono font-bold text-teal-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ยี่ห้อ / รุ่น (Brand / Model)</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น Paramount Bed 2-Crank"
+                    value={newUnitForm.brandModel}
+                    onChange={(e) => setNewUnitForm({ ...newUnitForm, brandModel: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">หมายเลขเครื่อง (Serial Number / S/N)</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น PB-2C-69-016"
+                    value={newUnitForm.serialNumber}
+                    onChange={(e) => setNewUnitForm({ ...newUnitForm, serialNumber: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">สภาพเริ่มต้น</label>
+                  <select
+                    value={newUnitForm.condition}
+                    onChange={(e) => setNewUnitForm({ ...newUnitForm, condition: e.target.value as any })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-bold"
+                  >
+                    <option value="good">✨ สมบูรณ์ 100% พร้อมใช้งาน</option>
+                    <option value="fair">👍 สภาพดี / มีรอยใช้งานเล็กน้อย</option>
+                    <option value="damaged">⚠️ มีจุดชำรุด</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">สถานะเริ่มต้น</label>
+                  <select
+                    value={newUnitForm.status}
+                    onChange={(e) => setNewUnitForm({ ...newUnitForm, status: e.target.value as any })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white font-bold text-slate-800"
+                  >
+                    <option value="available">🟢 ว่างในคลัง (พร้อมจ่ายยืม)</option>
+                    <option value="maintenance">🟠 ชำรุด / ส่งซ่อม</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">สถานที่จัดเก็บในคลัง</label>
+                  <input
+                    type="text"
+                    value={newUnitForm.storageLocation}
+                    onChange={(e) => setNewUnitForm({ ...newUnitForm, storageLocation: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">ลิงก์รูปถ่าย (URL)</label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={newUnitForm.imageUrl}
+                  onChange={(e) => setNewUnitForm({ ...newUnitForm, imageUrl: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded-xl bg-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">หมายเหตุ</label>
+                <input
+                  type="text"
+                  placeholder="เช่น รับมอบจากโครงการพระราชทาน..."
+                  value={newUnitForm.notes}
+                  onChange={(e) => setNewUnitForm({ ...newUnitForm, notes: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded-xl bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddUnitModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold cursor-pointer shadow-xs active:scale-95 transition-transform"
+                >
+                  + เพิ่มเข้าคลัง
                 </button>
               </div>
             </form>

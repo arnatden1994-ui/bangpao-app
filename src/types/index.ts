@@ -454,6 +454,39 @@ export interface MedicalEquipment {
   status?: string;
 }
 
+export type EquipmentUnitCondition = 'good' | 'fair' | 'damaged' | 'repair_needed';
+export type EquipmentUnitStatus = 'available' | 'borrowed' | 'maintenance' | 'disposed';
+
+export interface MedicalEquipmentUnit {
+  id: string; // e.g. 'UNIT-BED-001'
+  equipmentId: string; // category id, e.g. 'EQ-001'
+  assetCode: string; // เลขทะเบียน/เลขครุภัณฑ์ e.g. 'BED-001'
+  unitNumber?: number; // ลำดับชิ้น เช่น 1, 2, 3, 4, 5
+  name: string; // ชื่ออุปกรณ์ e.g. 'เตียงผู้ป่วยมือหมุน 2 ไกร์'
+  category: EquipmentCategory;
+  brandModel: string; // ยี่ห้อ / รุ่น เช่น 'Paramount Bed 2-Crank'
+  serialNumber?: string; // หมายเลขเครื่อง / S/N
+  condition: EquipmentUnitCondition; // สภาพ: 'good' (สมบูรณ์ 100%) | 'fair' (ดี/พอใช้) | 'damaged' (ชำรุด) | 'repair_needed' (ต้องซ่อม)
+  status: EquipmentUnitStatus; // 'available' (ว่างพร้อมยืม) | 'borrowed' (ถูกยืมใช้งาน) | 'maintenance' (ชำรุด/ซ่อมบำรุง) | 'disposed' (จำหน่าย)
+  storageLocation: string; // สถานที่จัดเก็บเมื่ออยู่ในคลัง e.g. 'ห้องคลังอุปกรณ์ชั้น 1 กองสาธารณสุข'
+  imageUrl?: string;
+  // ข้อมูลผู้ยืม/ผู้ถือครองปัจจุบัน (กรณีถูกยืม - แสดงว่าอยู่บ้านใคร)
+  currentLoanId?: string; // ID สัญญา
+  currentLoanCode?: string; // เลขที่สัญญา เช่น 'LN-2569-001'
+  currentBorrowerName?: string; // ชื่อผู้ยืม เช่น 'นายสมชาย ใจดี'
+  currentBorrowerPhone?: string; // เบอร์ติดต่อผู้ยืม
+  currentPatientName?: string; // ชื่อผู้ป่วย เช่น 'ตาแดง สุขดี'
+  currentAddress?: string; // บ้านเลขที่ / ที่อยู่ผู้ป่วย
+  currentMoo?: string; // หมู่ที่ เช่น '1'
+  borrowDate?: string; // วันที่เริ่มยืม
+  dueDate?: string; // วันที่ครบกำหนดส่งคืน
+  // รายละเอียดการซ่อมบำรุง
+  repairNotes?: string; // อาการชำรุด หรือรายการซ่อมบำรุง
+  notes?: string; // บันทึกเพิ่มเติม
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface EquipmentLoan {
   id: string;
   loanCode: string;

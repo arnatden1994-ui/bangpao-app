@@ -5,6 +5,7 @@ import {
   InspectionRecord,
   LtcPatient,
   MedicalEquipment,
+  MedicalEquipmentUnit,
   EquipmentLoan,
   NhsoProject,
   PublicPetition,
@@ -18,6 +19,7 @@ import {
   INITIAL_NHSO_PROJECTS,
   INITIAL_LTC_PATIENTS,
   INITIAL_MEDICAL_EQUIPMENT,
+  INITIAL_EQUIPMENT_UNITS,
   INITIAL_EQUIPMENT_LOANS,
   INITIAL_LICENSE_RECORDS,
 } from '../data/mockData.ts';
@@ -30,6 +32,7 @@ const STORAGE_KEYS = {
   NHSO: 'ph_nhso_projects_v2',
   LTC: 'ph_ltc_patients_v2',
   EQUIPMENT: 'ph_medical_equipment_v2',
+  EQUIPMENT_UNITS: 'ph_equipment_units_v1',
   LOANS: 'ph_equipment_loans_v2',
   LICENSES: 'ph_license_records_v1',
   CONFIG: 'hygiene_sheets_config_v1',
@@ -259,6 +262,29 @@ export function getStoredEquipment(): MedicalEquipment[] {
 
 export function saveStoredEquipment(items: MedicalEquipment[]) {
   localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(items));
+}
+
+// Medical Equipment Individual Units (รายชิ้น/รายทะเบียน)
+export function getStoredEquipmentUnits(): MedicalEquipmentUnit[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT_UNITS);
+    if (raw) {
+      const parsed: MedicalEquipmentUnit[] = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('getStoredEquipmentUnits error:', e);
+  }
+  localStorage.setItem(STORAGE_KEYS.EQUIPMENT_UNITS, JSON.stringify(INITIAL_EQUIPMENT_UNITS));
+  return INITIAL_EQUIPMENT_UNITS;
+}
+
+export function saveStoredEquipmentUnits(units: MedicalEquipmentUnit[]) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT_UNITS, JSON.stringify(units));
+  } catch (e) {
+    console.error('saveStoredEquipmentUnits error:', e);
+  }
 }
 
 // Equipment Loans
