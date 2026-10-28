@@ -138,7 +138,7 @@ import {
   loadSignerSettingsFromFirestore,
 } from './services/firebaseService.ts';
 
-import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, X, Menu } from 'lucide-react';
 
 const isCitizenDirectLink = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -255,8 +255,8 @@ export default function App() {
 
   const [config, setConfig] = useState<GoogleSheetsConfig>(() => getStoredConfig());
   
-  // Sidebar & Navigation State for 6 Modules
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Sidebar & Navigation State for 6 Modules (Desktop default open, Mobile/Tablet default collapsed)
+  const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true));
   const [currentTab, setCurrentTab] = useState<MainNavTab>('overview');
 
   // Sub-tabs for each of the 6 modules
@@ -1902,6 +1902,22 @@ unsubLicenses();
           showToast('success', `บันทึกการยืม ${l.equipmentName} (${l.equipmentCode || 'ครุภัณฑ์'}) เรียบร้อย`);
         }}
       />
+
+      {/* Floating Action Button (FAB) for Mobile/Tablet Quick Navigation */}
+      {!sidebarOpen && (
+        <aside className="fixed bottom-5 left-4 z-40 lg:hidden pointer-events-auto animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="เปิดเมนูนำทางหลัก"
+            title="เปิดเมนูนำทางหลัก"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/35 border-2 border-white/90 hover:scale-105 active:scale-95 transition-all cursor-pointer backdrop-blur-md"
+          >
+            <Menu className="w-4 h-4 text-emerald-200 shrink-0" />
+            <span className="tracking-wide">เมนูระบบ</span>
+          </button>
+        </aside>
+      )}
     </div>
   );
 }

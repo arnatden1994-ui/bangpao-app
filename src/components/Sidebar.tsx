@@ -25,6 +25,7 @@ import {
   LogOut,
   User as UserIcon,
   Bell,
+  X,
 } from 'lucide-react';
 import { MainNavTab, User } from '../types/index.ts';
 
@@ -298,13 +299,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          {/* Toggle / Collapse Button */}
+          {/* Toggle / Collapse / Close Button */}
           <button
+            type="button"
             onClick={onToggle}
-            className="p-1.5 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-200/60 rounded-xl transition-colors cursor-pointer shrink-0"
-            title={isOpen ? 'ย่อแถบเมนู' : 'ขยายแถบเมนู'}
+            className="flex items-center justify-center p-2 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-200/80 bg-emerald-100/70 lg:bg-transparent rounded-xl transition-colors cursor-pointer shrink-0 border border-emerald-300/70 lg:border-transparent select-none active:scale-95"
+            title={isOpen ? 'ย่อ/ปิด แถบเมนู' : 'ขยายแถบเมนู'}
+            aria-label={isOpen ? 'ปิดแถบเมนู' : 'เปิดแถบเมนู'}
           >
-            {isOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+            <span className="lg:hidden text-xs font-bold text-emerald-900 mr-1">ปิด</span>
+            {isOpen ? (
+              <>
+                <X className="w-5 h-5 lg:hidden text-emerald-900" />
+                <ChevronLeft className="w-5 h-5 hidden lg:block" />
+              </>
+            ) : (
+              <ChevronRight className="w-5 h-5" />
+            )}
           </button>
         </div>
 
@@ -334,8 +345,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       if (!isExpanded) {
                         setExpandedSections((prev) => ({ ...prev, [mod.id]: true }));
                       }
+                      if (window.innerWidth < 1024) onToggle();
                     } else {
                       onNavigate(mod.id);
+                      if (window.innerWidth < 1024) onToggle();
                     }
                   }}
                   title={!isOpen ? (mod.number ? `${mod.number}. ${mod.title}` : mod.title) : undefined}
