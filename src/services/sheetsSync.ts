@@ -31,9 +31,9 @@ const STORAGE_KEYS = {
   PETITIONS: 'ph_petitions_v2',
   NHSO: 'ph_nhso_projects_v2',
   LTC: 'ph_ltc_patients_v2',
-  EQUIPMENT: 'ph_medical_equipment_v2',
-  EQUIPMENT_UNITS: 'ph_equipment_units_v1',
-  LOANS: 'ph_equipment_loans_v2',
+  EQUIPMENT: 'ph_medical_equipment_v3',
+  EQUIPMENT_UNITS: 'ph_equipment_units_v2',
+  LOANS: 'ph_equipment_loans_v3',
   LICENSES: 'ph_license_records_v1',
   CONFIG: 'hygiene_sheets_config_v1',
 };
@@ -219,7 +219,6 @@ const ACCURATE_EQUIPMENT_PHOTOS: Record<string, string> = {
   'EQ-004': 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Betabed_Alternating_Pressure_Pad_System.JPG',
   'EQ-005': 'https://upload.wikimedia.org/wikipedia/commons/a/a4/Aspirateur_medical_1.jpg',
   'EQ-006': 'https://upload.wikimedia.org/wikipedia/commons/4/49/Rollator.jpg',
-  'EQ-007': 'https://upload.wikimedia.org/wikipedia/commons/d/d1/Hospital_Bed_2011.JPG',
 };
 
 // Medical Equipment
@@ -230,12 +229,15 @@ export function getStoredEquipment(): MedicalEquipment[] {
       const parsed: MedicalEquipment[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         let hasUpgrade = false;
-        // Merge any equipment items added to INITIAL_MEDICAL_EQUIPMENT (e.g. EQ-007)
-        const existingIds = new Set(parsed.map((item) => item.id));
+        const validCatIds = new Set(INITIAL_MEDICAL_EQUIPMENT.map((item) => item.id));
+        let listToProcess = parsed.filter((item) => validCatIds.has(item.id));
+        if (listToProcess.length !== parsed.length) {
+          hasUpgrade = true;
+        }
+        const existingIds = new Set(listToProcess.map((item) => item.id));
         const missingItems = INITIAL_MEDICAL_EQUIPMENT.filter((item) => !existingIds.has(item.id));
-        let listToProcess = parsed;
         if (missingItems.length > 0) {
-          listToProcess = [...parsed, ...missingItems];
+          listToProcess = [...listToProcess, ...missingItems];
           hasUpgrade = true;
         }
 

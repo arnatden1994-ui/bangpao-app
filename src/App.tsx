@@ -489,9 +489,11 @@ export default function App() {
     });
     const unsubEquipment = subscribeCollection<MedicalEquipment>(COLLECTIONS.EQUIPMENT, (items) => {
       if (items && items.length > 0) {
-        const remoteIds = new Set(items.map((x) => x.id));
+        const validIds = new Set(INITIAL_MEDICAL_EQUIPMENT.map((item) => item.id));
+        const filteredRemote = items.filter((x) => validIds.has(x.id));
+        const remoteIds = new Set(filteredRemote.map((x) => x.id));
         const missing = INITIAL_MEDICAL_EQUIPMENT.filter((item) => !remoteIds.has(item.id));
-        const fullList = missing.length > 0 ? [...items, ...missing] : items;
+        const fullList = missing.length > 0 ? [...filteredRemote, ...missing] : filteredRemote;
         setEquipmentList(fullList);
       }
     });

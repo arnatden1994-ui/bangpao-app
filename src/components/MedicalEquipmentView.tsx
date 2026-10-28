@@ -720,10 +720,6 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const returnedCount = normalizedLoans.filter((l) => l.status === 'returned').length;
   const deliveredPercent = totalLoanCount > 0 ? Math.round((activeBorrowedCount / totalLoanCount) * 100) : 0;
 
-  const totalAssetsInStock = equipmentList.reduce((acc, eq) => acc + (eq.totalQuantity || 0), 0);
-  const totalAssetsInUse = equipmentList.reduce((acc, eq) => acc + (eq.inUseQuantity || 0), 0);
-  const totalAssetsAvailable = equipmentList.reduce((acc, eq) => acc + (eq.availableQuantity || 0), 0);
-
   // Helper to resolve live custodian & location for an individual unit
   const resolveUnitDetails = (unit: MedicalEquipmentUnit) => {
     // Check if there is an active loan matching this unit
@@ -743,7 +739,13 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
     const patientName = activeLoan?.patientName || unit.currentPatientName || '-';
     const borrowerName = activeLoan?.borrowerName || unit.currentBorrowerName || '-';
-    const address = activeLoan?.address || activeLoan?.patientAddress || activeLoan?.borrowerAddress || unit.currentAddress || '-';
+    const rawAddress = activeLoan?.address || activeLoan?.patientAddress || activeLoan?.borrowerAddress || unit.currentAddress || '-';
+    let address = rawAddress;
+    if (address.includes('บ้านท่าส้ม')) address = address.replace(/บ้านท่าส้ม/g, 'บ้านชายวัด');
+    if (address.includes('บ้านทุ่งค่าย')) address = address.replace(/บ้านทุ่งค่าย/g, 'บ้านเกาะปอม');
+    if (address.includes('บ้านไร่ออก')) address = address.replace(/บ้านไร่ออก/g, 'บ้านป่าเตียว');
+    if (address.includes('บ้านในลุ่ม')) address = address.replace(/บ้านในลุ่ม/g, 'บ้านควนทองสีห์');
+    if (address.includes('บ้านควนทอง') && !address.includes('บ้านควนทองสีห์')) address = address.replace(/บ้านควนทอง/g, 'บ้านท่าเรือ');
     const moo = activeLoan?.moo || unit.currentMoo || '';
     const phone = activeLoan?.phone || activeLoan?.borrowerPhone || unit.currentBorrowerPhone || '-';
     const borrowDate = activeLoan?.borrowDate || activeLoan?.loanDate || unit.borrowDate || '-';
@@ -773,6 +775,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const availableUnitsCount = resolvedUnits.filter((u) => u.resolvedStatus === 'available').length;
   const borrowedUnitsCount = resolvedUnits.filter((u) => u.resolvedStatus === 'borrowed').length;
   const maintenanceUnitsCount = resolvedUnits.filter((u) => u.resolvedStatus === 'maintenance').length;
+
+  // Single Source of Truth for Dashboard & Inventory KPI stats:
+  const totalAssetsInStock = units.length > 0 ? totalUnitsCount : equipmentList.reduce((acc, eq) => acc + (eq.totalQuantity || 0), 0);
+  const totalAssetsInUse = units.length > 0 ? borrowedUnitsCount : equipmentList.reduce((acc, eq) => acc + (eq.inUseQuantity || 0), 0);
+  const totalAssetsAvailable = units.length > 0 ? availableUnitsCount : equipmentList.reduce((acc, eq) => acc + (eq.availableQuantity || 0), 0);
 
   const filteredUnits = useMemo(() => {
     return resolvedUnits.filter((u) => {
@@ -1357,7 +1364,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     const eq = equipmentList.find((e) => e.id === selectedEquipmentToAdd);
     if (!eq) return;
 
-    if (eq.availableQuantity > 0) {
+    const dynamicAvail = units.length > 0
+      ? resolvedUnits.filter((u) => (u.equipmentId === eq.id || (!u.equipmentId && u.category === eq.category)) && u.resolvedStatus === 'available').length
+      : eq.availableQuantity;
+
+    if (dynamicAvail > 0) {
       setSelectedEquipmentIds((prev) => [...prev, eq.id]);
       setSelectedEquipmentToAdd('');
       setFormError(null);
@@ -3581,10 +3592,13 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                       >
                         <option value="">-- เลือกอุปกรณ์ทางการแพทย์ที่ต้องการยืม --</option>
                         {equipmentList.map((eq) => {
-                          const isAvail = eq.availableQuantity > 0;
+                          const dynamicAvail = units.length > 0
+                            ? resolvedUnits.filter((u) => (u.equipmentId === eq.id || (!u.equipmentId && u.category === eq.category)) && u.resolvedStatus === 'available').length
+                            : eq.availableQuantity;
+                          const isAvail = dynamicAvail > 0;
                           return (
                             <option key={eq.id} value={eq.id}>
-                              {eq.name} ({eq.assetCode}) — {isAvail ? `คงเหลือ ${eq.availableQuantity} ชิ้น (พร้อมจ่าย)` : '❌ หมดในคลัง (เข้าคิวจอง)'}
+                              {eq.name} ({eq.assetCode}) — {isAvail ? `คงเหลือ ${dynamicAvail} ชิ้น (พร้อมจ่าย)` : '❌ หมดในคลัง (เข้าคิวจอง)'}
                             </option>
                           );
                         })}
@@ -4312,7 +4326,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
               >
                 <div className="text-xs text-slate-500 font-medium">ยอดครุภัณฑ์ทั้งหมด</div>
                 <div className="text-xl font-black text-slate-900 mt-1">{totalUnitsCount} ชิ้น</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">ครบทุกเลขทะเบียน 7 หมวด</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">ครบทุกเลขทะเบียน {equipmentList.length} หมวด</div>
               </div>
 
               <div
