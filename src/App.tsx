@@ -1126,6 +1126,7 @@ unsubLicenses();
       <div className="relative flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Top Header Bar without horizontal pills */}
         <Navbar
+          sidebarOpen={sidebarOpen}
           currentTab={currentTab}
           currentSubTabLabel={getCurrentSubTabLabel()}
           config={config}

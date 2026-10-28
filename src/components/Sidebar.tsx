@@ -277,46 +277,64 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isOpen ? 'w-80 sm:w-86 translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-20'
         }`}
       >
-        {/* Brand & Municipal Identity Header (Swapped hierarchy + Official Bangpao Seal) */}
-        <div className="min-h-20 px-4 py-2.5 flex items-center justify-between border-b border-emerald-200/80 bg-gradient-to-r from-emerald-100/75 via-teal-50/80 to-white/90 shrink-0">
-          <div className="flex items-center gap-3 overflow-hidden min-w-0">
-            <div className="w-12 h-12 rounded-full bg-white p-0.5 shrink-0 shadow-sm ring-2 ring-emerald-500/40 flex items-center justify-center overflow-hidden">
+        {/* Brand & Municipal Identity Header */}
+        <div
+          className={`min-h-20 py-2.5 flex items-center border-b border-emerald-200/80 bg-gradient-to-r from-emerald-100/75 via-teal-50/80 to-white/90 shrink-0 ${
+            isOpen ? 'px-4 justify-between' : 'px-2 justify-center'
+          }`}
+        >
+          {isOpen ? (
+            <>
+              <div className="flex items-center gap-3 overflow-hidden min-w-0">
+                <div className="w-12 h-12 rounded-full bg-white p-0.5 shrink-0 shadow-sm ring-2 ring-emerald-500/40 flex items-center justify-center overflow-hidden">
+                  <img
+                    src="/images-Photoroom.png"
+                    alt="ตราเทศบาลตำบลบางเป้า"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-bold text-[15px] sm:text-[16px] text-emerald-950 leading-snug truncate">
+                    กองสาธารณสุขและสิ่งแวดล้อม
+                  </span>
+                  <span className="text-[12.5px] text-emerald-700 font-medium truncate mt-0.5">
+                    ทต.บางเป้า อ.กันตัง จ.ตรัง
+                  </span>
+                </div>
+              </div>
+
+              {/* Collapse Button when open */}
+              <button
+                type="button"
+                onClick={onToggle}
+                className="flex items-center justify-center p-2 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-200/80 bg-emerald-100/70 lg:bg-transparent rounded-xl transition-colors cursor-pointer shrink-0 border border-emerald-300/70 lg:border-transparent select-none active:scale-95"
+                title="ย่อแถบเมนู"
+                aria-label="ย่อแถบเมนู"
+              >
+                <span className="lg:hidden text-xs font-bold text-emerald-900 mr-1">ปิด</span>
+                <X className="w-5 h-5 lg:hidden text-emerald-900" />
+                <ChevronLeft className="w-5 h-5 hidden lg:block" />
+              </button>
+            </>
+          ) : (
+            /* Centered Seal Card / Expand Button when collapsed */
+            <button
+              type="button"
+              onClick={onToggle}
+              className="w-12 h-12 rounded-2xl bg-white p-1 flex items-center justify-center shadow-xs ring-2 ring-emerald-500/40 hover:ring-emerald-600 hover:scale-105 active:scale-95 transition-all cursor-pointer group relative"
+              title="คลิกเพื่อขยายแถบเมนู"
+              aria-label="ขยายแถบเมนู"
+            >
               <img
                 src="/images-Photoroom.png"
                 alt="ตราเทศบาลตำบลบางเป้า"
                 className="w-full h-full object-contain"
               />
-            </div>
-            {isOpen && (
-              <div className="flex flex-col min-w-0">
-                <span className="font-bold text-[15px] sm:text-[16px] text-emerald-950 leading-snug truncate">
-                  กองสาธารณสุขและสิ่งแวดล้อม
-                </span>
-                <span className="text-[12.5px] text-emerald-700 font-medium truncate mt-0.5">
-                  ทต.บางเป้า อ.กันตัง จ.ตรัง
-                </span>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xs group-hover:bg-emerald-700 transition-colors">
+                <ChevronRight className="w-3 h-3" />
               </div>
-            )}
-          </div>
-
-          {/* Toggle / Collapse / Close Button */}
-          <button
-            type="button"
-            onClick={onToggle}
-            className="flex items-center justify-center p-2 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-200/80 bg-emerald-100/70 lg:bg-transparent rounded-xl transition-colors cursor-pointer shrink-0 border border-emerald-300/70 lg:border-transparent select-none active:scale-95"
-            title={isOpen ? 'ย่อ/ปิด แถบเมนู' : 'ขยายแถบเมนู'}
-            aria-label={isOpen ? 'ปิดแถบเมนู' : 'เปิดแถบเมนู'}
-          >
-            <span className="lg:hidden text-xs font-bold text-emerald-900 mr-1">ปิด</span>
-            {isOpen ? (
-              <>
-                <X className="w-5 h-5 lg:hidden text-emerald-900" />
-                <ChevronLeft className="w-5 h-5 hidden lg:block" />
-              </>
-            ) : (
-              <ChevronRight className="w-5 h-5" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Scrollable Navigation List */}
