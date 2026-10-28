@@ -45,6 +45,7 @@ import {
   MedicalEquipment,
 } from '../types/index.ts';
 import { INITIAL_MEDICAL_EQUIPMENT } from '../data/mockData.ts';
+import { CitizenMapPicker } from './CitizenMapPicker.tsx';
 
 interface CitizenPortalViewProps {
   petitions: PublicPetition[];
@@ -321,22 +322,29 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
       : `REQ-${yearTh}-${randNum}`;
 
     const locationText = `${petitionerAddress.trim() || '-'} หมู่ที่ ${petitionerMoo} ต.บางเป้า อ.กันตัง จ.ตรัง [พิกัดหมุด: ${pinLat}, ${pinLng} - ${pinLandmark}]`;
+    const todayStr = new Date().toISOString().split('T')[0];
 
     const newPetition: PublicPetition = {
       id: `PET-${Date.now()}`,
       trackingCode,
       createdAt: new Date().toISOString(),
+      submissionDate: todayStr,
+      citizenName: petitionerName.trim(),
       petitionerName: petitionerName.trim(),
+      phone: petitionerPhone.trim(),
       petitionerPhone: petitionerPhone.trim(),
       petitionerIdCard: '',
+      address: petitionerAddress.trim() || `หมู่ที่ ${petitionerMoo} ต.บางเป้า อ.กันตัง จ.ตรัง`,
       petitionerAddress: petitionerAddress.trim() || `หมู่ที่ ${petitionerMoo} ต.บางเป้า อ.กันตัง จ.ตรัง`,
       moo: petitionerMoo,
+      latitude: pinLat,
+      longitude: pinLng,
       category: formType === 'sewage' ? 'waste_sewage' : category,
       title: formType === 'sewage' 
         ? `คำร้องขอรับบริการสูบสิ่งปฏิกูล (ดูดส้วม) จำนวน ${sewageVolume} ลบ.ม.` 
         : (title.trim() || 'คำร้องทั่วไป'),
       description: formType === 'sewage'
-        ? `ขอบริการดูดส้วม ณ บ้านเลขที่: ${petitionerAddress.trim() || '-'} หมู่ที่ ${petitionerMoo} นัดหมายวันที่: ${desiredDate} | พิกัดหมุดแผนที่: ${pinLat}, ${pinLng}`
+        ? `ขอบริการดูดส้วม ณ บ้านเลขที่: ${petitionerAddress.trim() || '-'} หมู่ที่ ${petitionerMoo} นัดหมายวันที่: ${desiredDate} | พิกัดหมุดแผนที่: ${pinLat}, ${pinLng} (${pinLandmark})`
         : `${description.trim()} | พิกัดหมุดแผนที่: ${pinLat}, ${pinLng} (${pinLandmark})`,
       incidentLocation: locationText,
       urgency: 'medium',
@@ -345,6 +353,35 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
       targetDate: desiredDate,
       feeAmount: formType === 'sewage' ? Number(sewageVolume) * 250 : 0,
       feeStatus: formType === 'sewage' ? 'pending' : 'not_applicable',
+      form: {
+        applicantType: 'individual',
+        formType,
+        filedDate: todayStr,
+        zone: 'in_district',
+        feeAmount: formType === 'sewage' ? Number(sewageVolume) * 250 : 0,
+        applicantAddress: {
+          houseNo: petitionerAddress.trim() || '',
+          moo: petitionerMoo,
+          soi: '-',
+          road: '-',
+          subdistrict: 'บางเป้า',
+          district: 'กันตัง',
+          province: 'ตรัง',
+          phone: petitionerPhone.trim(),
+        },
+        serviceAddress: {
+          houseNo: petitionerAddress.trim() || '',
+          moo: petitionerMoo,
+          soi: '-',
+          road: '-',
+          subdistrict: 'บางเป้า',
+          district: 'กันตัง',
+          province: 'ตรัง',
+          phone: petitionerPhone.trim(),
+        },
+        subject: title.trim() || (formType === 'sewage' ? 'ขอรับบริการสูบสิ่งปฏิกูล' : 'คำร้องทั่วไป'),
+        purpose: description.trim() || (formType === 'sewage' ? `ขอรับบริการสูบสิ่งปฏิกูล จำนวน ${sewageVolume} ลบ.ม.` : ''),
+      },
     };
 
     onAddPetition(newPetition);
@@ -831,17 +868,8 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                   <div className="font-black text-slate-900 text-lg sm:text-xl flex items-center justify-between border-b border-slate-200 pb-2">
                     <div className="flex items-center gap-2">
                       <MapPin className="w-5 h-5 text-emerald-700" />
-                      <span>ตำแหน่งสถานที่เกิดเหตุ & พิกัด GPS</span>
+                      <span>ตำแหน่งสถานที่เกิดเหตุ & ปักหมุดแผนที่ดาวเทียม</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleGetLiveGPS}
-                      disabled={isLocating}
-                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 transition-all"
-                    >
-                      <Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
-                      <span>{isLocating ? 'กำลังดึงพิกัด GPS...' : '📍 ใช้ตำแหน่งปัจจุบัน'}</span>
-                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -883,45 +911,26 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Village Quick Select Buttons */}
-                  <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200">
-                    <div className="text-sm font-bold text-emerald-950 mb-2.5">
-                      หรือคลิกเลือกหมู่บ้านเพื่อปักหมุดตำแหน่งด่วน:
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {BANGPAO_VILLAGES.map((v) => (
-                        <button
-                          key={v.moo}
-                          type="button"
-                          onClick={() => {
-                            setPetitionerMoo(v.moo);
-                            setPinLat(v.lat);
-                            setPinLng(v.lng);
-                            setPinLandmark(`หมู่ ${v.moo} ${v.name} (${v.landmark})`);
-                            onShowToast('info', `ปักหมุดตำแหน่ง: หมู่ ${v.moo} ${v.name}`);
-                          }}
-                          className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                            petitionerMoo === v.moo
-                              ? 'bg-emerald-700 text-white shadow-md'
-                              : 'bg-white text-slate-700 hover:bg-emerald-100 border border-slate-300'
-                          }`}
-                        >
-                          ม.{v.moo} {v.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Coordinate Display Box */}
-                  <div className="p-4 bg-emerald-950 text-white rounded-2xl border border-emerald-400/40 space-y-1">
-                    <div className="flex items-center justify-between text-xs sm:text-sm text-emerald-300 font-bold">
-                      <span>พิกัด GPS สำหรับเจ้าหน้าที่ลงพื้นที่</span>
-                      <span className="font-mono text-emerald-200">{pinLat.toFixed(6)}, {pinLng.toFixed(6)}</span>
-                    </div>
-                    <div className="text-xs text-slate-300 font-medium">
-                      จุดสังเกต: {pinLandmark}
-                    </div>
-                  </div>
+                  {/* Interactive Leaflet Satellite / Street Map with Draggable Pin */}
+                  <CitizenMapPicker
+                    lat={pinLat}
+                    lng={pinLng}
+                    moo={petitionerMoo}
+                    landmark={pinLandmark}
+                    onLocationChange={(newLat, newLng, newMoo, newLandmark) => {
+                      setPinLat(newLat);
+                      setPinLng(newLng);
+                      if (newMoo) setPetitionerMoo(newMoo);
+                      if (newLandmark) {
+                        setPinLandmark(newLandmark);
+                      } else {
+                        setPinLandmark(`พิกัดปักหมุด (${newLat}, ${newLng})`);
+                      }
+                    }}
+                    accentColor="emerald"
+                    label="แผนที่ปักหมุดจุดเกิดเหตุ (คลิก/ลากหมุดไปยังตำแหน่งที่แท้จริง)"
+                    helpText="หากท่านยื่นคำร้องจากที่ทำงานหรือนอกบ้าน ให้ซูมดูหลังคาบ้าน/ถนน แล้วลากหมุดสีแดง 📍 ไปวางบนจุดเกิดเหตุจริงได้เลย"
+                  />
 
                   {/* Privacy Notice */}
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs sm:text-sm text-slate-600 space-y-1 leading-relaxed">
@@ -1055,17 +1064,8 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                   <div className="font-black text-slate-900 text-lg sm:text-xl flex items-center justify-between border-b border-slate-200 pb-2">
                     <div className="flex items-center gap-2">
                       <MapPin className="w-5 h-5 text-blue-700" />
-                      <span>สถานที่ให้บริการ & พิกัดรถดูดส้วม</span>
+                      <span>สถานที่ให้บริการ & ปักหมุดแผนที่ดาวเทียม (นำทางรถดูดส้วม)</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleGetLiveGPS}
-                      disabled={isLocating}
-                      className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 transition-all"
-                    >
-                      <Navigation className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
-                      <span>{isLocating ? 'กำลังดึงพิกัด GPS...' : '📍 ใช้ตำแหน่งปัจจุบัน'}</span>
-                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1108,45 +1108,26 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Village Preset Pills */}
-                  <div className="p-4 rounded-2xl bg-blue-50/80 border border-blue-200">
-                    <div className="text-sm font-bold text-blue-950 mb-2.5">
-                      หรือคลิกเลือกหมู่บ้านเพื่อปักหมุดตำแหน่งด่วน:
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {BANGPAO_VILLAGES.map((v) => (
-                        <button
-                          key={v.moo}
-                          type="button"
-                          onClick={() => {
-                            setPetitionerMoo(v.moo);
-                            setPinLat(v.lat);
-                            setPinLng(v.lng);
-                            setPinLandmark(`หมู่ ${v.moo} ${v.name} (${v.landmark})`);
-                            onShowToast('info', `ปักหมุดตำแหน่ง: หมู่ ${v.moo} ${v.name}`);
-                          }}
-                          className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                            petitionerMoo === v.moo
-                              ? 'bg-blue-700 text-white shadow-md'
-                              : 'bg-white text-slate-700 hover:bg-blue-100 border border-slate-300'
-                          }`}
-                        >
-                          ม.{v.moo} {v.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Coordinate Display Box */}
-                  <div className="p-4 bg-slate-900 text-white rounded-2xl border border-blue-400/40 space-y-1">
-                    <div className="flex items-center justify-between text-xs sm:text-sm text-blue-300 font-bold">
-                      <span>พิกัด GPS นำทางรถบรรทุกดูดสิ่งปฏิกูล</span>
-                      <span className="font-mono text-blue-200">{pinLat.toFixed(6)}, {pinLng.toFixed(6)}</span>
-                    </div>
-                    <div className="text-xs text-slate-300 font-medium">
-                      จุดสังเกต: {pinLandmark}
-                    </div>
-                  </div>
+                  {/* Interactive Leaflet Satellite / Street Map with Draggable Pin */}
+                  <CitizenMapPicker
+                    lat={pinLat}
+                    lng={pinLng}
+                    moo={petitionerMoo}
+                    landmark={pinLandmark}
+                    onLocationChange={(newLat, newLng, newMoo, newLandmark) => {
+                      setPinLat(newLat);
+                      setPinLng(newLng);
+                      if (newMoo) setPetitionerMoo(newMoo);
+                      if (newLandmark) {
+                        setPinLandmark(newLandmark);
+                      } else {
+                        setPinLandmark(`พิกัดปักหมุด (${newLat}, ${newLng})`);
+                      }
+                    }}
+                    accentColor="blue"
+                    label="แผนที่ปักหมุดบ้านที่ต้องการรับบริการสูบสิ่งปฏิกูล (นำทางรถดูดส้วม)"
+                    helpText="หากท่านยื่นคำร้องจากที่อื่น ให้ซูมดูหลังคาบ้านหรือซอย แล้วลากหมุดสีแดง 📍 ไปวางบนบ้านที่ต้องการให้รถดูดส้วมไปถึง"
+                  />
                 </div>
               </div>
 
@@ -1757,17 +1738,8 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                       <div className="flex items-center justify-between flex-wrap gap-2 border-b border-teal-200/60 pb-3">
                         <div className="font-black text-teal-950 flex items-center gap-2.5 text-lg sm:text-xl">
                           <MapPin className="w-6 h-6 text-teal-700" />
-                          <span>ส่วนที่ 3: ที่อยู่สำหรับจัดส่ง & ปักหมุดแผนที่ GPS *</span>
+                          <span>ส่วนที่ 3: ที่อยู่สำหรับจัดส่ง & ปักหมุดแผนที่ดาวเทียม *</span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleGetMedLiveGPS}
-                          disabled={isMedLocating}
-                          className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 transition-all"
-                        >
-                          <Navigation className={`w-4 h-4 ${isMedLocating ? 'animate-spin' : ''}`} />
-                          <span>{isMedLocating ? 'กำลังดึงพิกัด GPS...' : '📍 ใช้ตำแหน่งปัจจุบัน'}</span>
-                        </button>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1811,34 +1783,26 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Village Preset Pills */}
-                      <div>
-                        <div className="text-sm font-bold text-slate-700 mb-2">
-                          หรือคลิกเลือกหมู่บ้านเพื่อปักหมุดด่วน:
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {BANGPAO_VILLAGES.map((v) => (
-                            <button
-                              key={v.moo}
-                              type="button"
-                              onClick={() => handleSelectMedVillage(v)}
-                              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                                medMoo === v.moo
-                                  ? 'bg-teal-700 text-white shadow-xs'
-                                  : 'bg-white text-slate-700 hover:bg-teal-100 border border-slate-300'
-                              }`}
-                            >
-                              ม.{v.moo} {v.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Lat Lng display */}
-                      <div className="p-4 bg-teal-950 text-white rounded-2xl border border-teal-400/40 flex items-center justify-between text-xs sm:text-sm font-mono font-bold">
-                        <span>พิกัด GPS สำหรับรถส่งของ: {medPinLat.toFixed(6)}, {medPinLng.toFixed(6)}</span>
-                        <span className="font-sans font-semibold text-teal-300">{medLandmark}</span>
-                      </div>
+                      {/* Interactive Leaflet Satellite / Street Map with Draggable Pin */}
+                      <CitizenMapPicker
+                        lat={medPinLat}
+                        lng={medPinLng}
+                        moo={medMoo}
+                        landmark={medLandmark}
+                        onLocationChange={(newLat, newLng, newMoo, newLandmark) => {
+                          setMedPinLat(newLat);
+                          setMedPinLng(newLng);
+                          if (newMoo) setMedMoo(newMoo);
+                          if (newLandmark) {
+                            setMedLandmark(newLandmark);
+                          } else {
+                            setMedLandmark(`พิกัดปักหมุด (${newLat}, ${newLng})`);
+                          }
+                        }}
+                        accentColor="teal"
+                        label="แผนที่ปักหมุดบ้านผู้ป่วย (สำหรับรถจัดส่งอุปกรณ์การแพทย์)"
+                        helpText="หากท่านขอยืมให้พ่อแม่หรือญาติขณะอยู่ที่ทำงาน ให้ลากหมุดสีแดง 📍 ไปปักบนหลังคาบ้านผู้ป่วย เพื่อให้เจ้าหน้าที่นำส่งถึงที่อย่างแม่นยำ"
+                      />
                     </div>
 
                     {/* Section 4: แนบรูปถ่ายเอกสาร (ทางเลือก - ไม่บังคับ) */}
