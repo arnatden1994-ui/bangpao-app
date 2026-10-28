@@ -43,8 +43,10 @@ import {
   PetitionStatus,
   EquipmentLoan,
   MedicalEquipment,
+  SewageZone,
 } from '../types/index.ts';
 import { INITIAL_MEDICAL_EQUIPMENT } from '../data/mockData.ts';
+import { getSewageFee, SEWAGE_ZONES, TANK_TYPES } from '../data/petitionMeta.ts';
 import { CitizenMapPicker } from './CitizenMapPicker.tsx';
 
 interface CitizenPortalViewProps {
@@ -152,6 +154,9 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
   const [desiredDate, setDesiredDate] = useState(
     new Date(Date.now() + 86400000).toISOString().split('T')[0]
   );
+  const [sewageZone, setSewageZone] = useState<SewageZone>('in_district');
+  const [tankCount, setTankCount] = useState<number>(1);
+  const [tankType, setTankType] = useState<string>('บ่อเกรอะ/บ่อซึมในบ้านพักอาศัย');
   const [sewageVolume, setSewageVolume] = useState('1');
   const [submittedCode, setSubmittedCode] = useState<string | null>(null);
 
@@ -324,6 +329,16 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
     const locationText = `${petitionerAddress.trim() || '-'} หมู่ที่ ${petitionerMoo} ต.บางเป้า อ.กันตัง จ.ตรัง [พิกัดหมุด: ${pinLat}, ${pinLng} - ${pinLandmark}]`;
     const todayStr = new Date().toISOString().split('T')[0];
 
+    const zoneLabel = sewageZone === 'in_district'
+      ? 'ในเขตเทศบาลตำบลบางเป้า (เหมาจ่าย)'
+      : sewageZone === 'out_10'
+      ? 'นอกเขต ไม่เกิน 10 กม.'
+      : sewageZone === 'out_20'
+      ? 'นอกเขต เกิน 10-20 กม.'
+      : 'นอกเขต เกิน 20-30 กม.';
+
+    const totalFee = formType === 'sewage' ? getSewageFee(sewageZone) * tankCount : 0;
+
     const newPetition: PublicPetition = {
       id: `PET-${Date.now()}`,
       trackingCode,
@@ -341,24 +356,25 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
       longitude: pinLng,
       category: formType === 'sewage' ? 'waste_sewage' : category,
       title: formType === 'sewage' 
-        ? `คำร้องขอรับบริการสูบสิ่งปฏิกูล (ดูดส้วม) จำนวน ${sewageVolume} ลบ.ม.` 
+        ? `คำร้องขอรับบริการสูบสิ่งปฏิกูล (${zoneLabel} จำนวน ${tankCount} บ่อ)` 
         : (title.trim() || 'คำร้องทั่วไป'),
       description: formType === 'sewage'
-        ? `ขอบริการดูดส้วม ณ บ้านเลขที่: ${petitionerAddress.trim() || '-'} หมู่ที่ ${petitionerMoo} นัดหมายวันที่: ${desiredDate} | พิกัดหมุดแผนที่: ${pinLat}, ${pinLng} (${pinLandmark})`
+        ? `ขอบริการสูบสิ่งปฏิกูล ณ บ้านเลขที่: ${petitionerAddress.trim() || '-'} หมู่ที่ ${petitionerMoo} [ประเภท: ${tankType}, ${zoneLabel} จำนวน ${tankCount} บ่อ รวม ${totalFee} บาท] นัดหมายวันที่: ${desiredDate} | พิกัดหมุดแผนที่: ${pinLat}, ${pinLng} (${pinLandmark})`
         : `${description.trim()} | พิกัดหมุดแผนที่: ${pinLat}, ${pinLng} (${pinLandmark})`,
       incidentLocation: locationText,
       urgency: 'medium',
       status: 'pending',
       assignedTo: formType === 'sewage' ? 'นายชนะ สุขด้วง (พนักงานขับรถบรรทุกสิ่งปฏิกูล)' : 'นายตรวจสุขลักษณะ กองสาธารณสุข',
       targetDate: desiredDate,
-      feeAmount: formType === 'sewage' ? Number(sewageVolume) * 250 : 0,
+      feeAmount: totalFee,
       feeStatus: formType === 'sewage' ? 'pending' : 'not_applicable',
       form: {
         applicantType: 'individual',
         formType,
         filedDate: todayStr,
-        zone: 'in_district',
-        feeAmount: formType === 'sewage' ? Number(sewageVolume) * 250 : 0,
+        zone: sewageZone,
+        sewageZone,
+        feeAmount: totalFee,
         applicantAddress: {
           houseNo: petitionerAddress.trim() || '',
           moo: petitionerMoo,
@@ -380,7 +396,7 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
           phone: petitionerPhone.trim(),
         },
         subject: title.trim() || (formType === 'sewage' ? 'ขอรับบริการสูบสิ่งปฏิกูล' : 'คำร้องทั่วไป'),
-        purpose: description.trim() || (formType === 'sewage' ? `ขอรับบริการสูบสิ่งปฏิกูล จำนวน ${sewageVolume} ลบ.ม.` : ''),
+        purpose: description.trim() || (formType === 'sewage' ? `ขอรับบริการสูบสิ่งปฏิกูล (${zoneLabel}) จำนวน ${tankCount} บ่อ รวมเป็นเงิน ${totalFee} บาท` : ''),
       },
     };
 
@@ -971,18 +987,18 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                   แบบฟอร์มขอรับบริการสูบสิ่งปฏิกูล (ดูดส้วม)
                 </h2>
                 <p className="text-sm sm:text-base text-slate-500 font-medium mt-1">
-                  อัตราค่าธรรมเนียมตามเทศบัญญัติเทศบาลตำบลบางเป้า 250 บาท ต่อ 1 ลูกบาศก์เมตร (ลบ.ม.)
+                  อัตราค่าธรรมเนียมตามข้อบัญญัติเทศบาลตำบลบางเป้า (เหมาจ่ายตามเขตพื้นที่ / บ่อ)
                 </p>
               </div>
             </div>
 
             <form onSubmit={(e) => handleSubmitForm(e, 'sewage')} className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Column 1: ข้อมูลผู้ขอ & ปริมาณ & วันที่สะดวก */}
+                {/* Column 1: ข้อมูลผู้ขอ & อัตราค่าบริการตามข้อบัญญัติ */}
                 <div className="space-y-5">
                   <div className="font-black text-slate-900 text-lg sm:text-xl flex items-center gap-2 border-b border-slate-200 pb-2">
                     <User className="w-5 h-5 text-blue-700" />
-                    <span>ข้อมูลผู้ขอรับบริการ & ปริมาณที่ต้องการสูบ</span>
+                    <span>ข้อมูลผู้ขอรับบริการ & อัตราค่าบริการตามข้อบัญญัติ</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1014,48 +1030,211 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Fee Zone Selection (Matching Official Word Template Exactly) */}
+                  <div className="space-y-2.5">
+                    <label className="text-base sm:text-lg font-bold text-slate-800 block">
+                      อัตราค่าธรรมเนียมบริการกำจัดสิ่งปฏิกูล (ตามข้อบัญญัติเทศบาลตำบลบางเป้า) *
+                    </label>
+
+                    <div className="space-y-2">
+                      {/* In District */}
+                      <label
+                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                          sewageZone === 'in_district'
+                            ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="sewageZone"
+                          value="in_district"
+                          checked={sewageZone === 'in_district'}
+                          onChange={() => setSewageZone('in_district')}
+                          className="w-5 h-5 text-blue-600 mt-0.5 cursor-pointer shrink-0"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="font-bold text-slate-900 text-base">
+                              ในเขตเทศบาลตำบลบางเป้า
+                            </span>
+                            <span className="font-black text-blue-700 text-base sm:text-lg">
+                              เหมาจ่าย ๒๕๐ บาท / บ่อ
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            ครอบคลุมหมู่ที่ 1 ถึงหมู่ที่ 7 ในตำบลบางเป้า
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Out District <= 10 km */}
+                      <label
+                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                          sewageZone === 'out_10'
+                            ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="sewageZone"
+                          value="out_10"
+                          checked={sewageZone === 'out_10'}
+                          onChange={() => setSewageZone('out_10')}
+                          className="w-5 h-5 text-blue-600 mt-0.5 cursor-pointer shrink-0"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="font-bold text-slate-900 text-base">
+                              นอกเขตเทศบาลตำบลบางเป้า (ไม่เกิน ๑๐ กิโลเมตร)
+                            </span>
+                            <span className="font-black text-blue-700 text-base sm:text-lg">
+                              ครั้งละ ๗๐๐ บาท / ๑ บ่อ
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            ระยะทางไม่เกิน 10 กิโลเมตรจากเขตเทศบาลตำบลบางเป้า
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Out District 10 - 20 km */}
+                      <label
+                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                          sewageZone === 'out_20'
+                            ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="sewageZone"
+                          value="out_20"
+                          checked={sewageZone === 'out_20'}
+                          onChange={() => setSewageZone('out_20')}
+                          className="w-5 h-5 text-blue-600 mt-0.5 cursor-pointer shrink-0"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="font-bold text-slate-900 text-base">
+                              นอกเขตเทศบาลตำบลบางเป้า (เกิน ๑๐ กม. แต่ไม่เกิน ๒๐ กม.)
+                            </span>
+                            <span className="font-black text-blue-700 text-base sm:text-lg">
+                              ครั้งละ ๑,๐๐๐ บาท / ๑ บ่อ
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            ระยะทางเกิน 10 กิโลเมตรแต่ไม่เกิน 20 กิโลเมตร
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Out District 20 - 30 km */}
+                      <label
+                        className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                          sewageZone === 'out_30'
+                            ? 'bg-blue-50 border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="sewageZone"
+                          value="out_30"
+                          checked={sewageZone === 'out_30'}
+                          onChange={() => setSewageZone('out_30')}
+                          className="w-5 h-5 text-blue-600 mt-0.5 cursor-pointer shrink-0"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="font-bold text-slate-900 text-base">
+                              นอกเขตเทศบาลตำบลบางเป้า (เกิน ๒๐ กม. แต่ไม่เกิน ๓๐ กม.)
+                            </span>
+                            <span className="font-black text-blue-700 text-base sm:text-lg">
+                              ครั้งละ ๑,๓๐๐ บาท / ๑ บ่อ
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            ระยะทางเกิน 20 กิโลเมตรแต่ไม่เกิน 30 กิโลเมตร
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Quantity and Date */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="text-base sm:text-lg font-bold text-slate-800 block mb-2">
-                        ปริมาณสิ่งปฏิกูลโดยประมาณ *
+                      <label className="text-base font-bold text-slate-800 block mb-2">
+                        จำนวนบ่อที่ต้องการสูบ *
                       </label>
                       <select
-                        value={sewageVolume}
-                        onChange={(e) => setSewageVolume(e.target.value)}
-                        className="w-full p-4 rounded-2xl border-2 border-slate-300 text-base sm:text-lg font-bold text-slate-900 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600 transition-all"
+                        value={tankCount}
+                        onChange={(e) => setTankCount(Number(e.target.value))}
+                        className="w-full p-4 rounded-2xl border-2 border-slate-300 text-base font-bold text-slate-900 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600 transition-all"
                       >
-                        <option value="1">1 ลบ.ม. (250 บาท)</option>
-                        <option value="2">2 ลบ.ม. (500 บาท)</option>
-                        <option value="3">3 ลบ.ม. (750 บาท)</option>
-                        <option value="4">4 ลบ.ม. (1,000 บาท)</option>
-                        <option value="5">5 ลบ.ม. ขึ้นไป (ตามวัดจริง)</option>
+                        <option value={1}>1 บ่อ</option>
+                        <option value={2}>2 บ่อ</option>
+                        <option value={3}>3 บ่อ</option>
+                        <option value={4}>4 บ่อ</option>
+                        <option value={5}>5 บ่อ</option>
                       </select>
                     </div>
+
                     <div>
-                      <label className="text-base sm:text-lg font-bold text-slate-800 block mb-2">
-                        วันที่สะดวกให้เข้าบริการเบื้องต้น *
+                      <label className="text-base font-bold text-slate-800 block mb-2">
+                        ประเภทบ่อ / ถังบำบัด
+                      </label>
+                      <select
+                        value={tankType}
+                        onChange={(e) => setTankType(e.target.value)}
+                        className="w-full p-4 rounded-2xl border-2 border-slate-300 text-base font-bold text-slate-900 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600 transition-all"
+                      >
+                        {TANK_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-base font-bold text-slate-800 block mb-2">
+                        วันที่สะดวกให้เข้าบริการ *
                       </label>
                       <input
                         type="date"
                         value={desiredDate}
                         onChange={(e) => setDesiredDate(e.target.value)}
-                        className="w-full p-4 rounded-2xl border-2 border-slate-300 text-base sm:text-lg font-bold text-slate-900 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600 transition-all"
+                        className="w-full p-4 rounded-2xl border-2 border-slate-300 text-base font-bold text-slate-900 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600 transition-all"
                         required
                       />
                     </div>
                   </div>
 
-                  {/* Fee Estimate Card */}
-                  <div className="p-5 rounded-2xl bg-blue-50 border-2 border-blue-200 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-base font-bold text-blue-950">ประมาณการค่าธรรมเนียม:</span>
-                      <span className="text-2xl font-black text-blue-800">
-                        {Number(sewageVolume) * 250} บาท
+                  {/* Fee Estimate Card (Accurate & Matching Regulation) */}
+                  <div className="p-5 rounded-2xl bg-blue-50 border-2 border-blue-200 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-blue-200 pb-2">
+                      <div>
+                        <span className="text-base font-bold text-blue-950 block">ประมาณการค่าธรรมเนียม:</span>
+                        <span className="text-xs text-blue-800">
+                          {getSewageFee(sewageZone)} บาท × {tankCount} บ่อ
+                        </span>
+                      </div>
+                      <span className="text-3xl font-black text-blue-800 font-mono">
+                        {(getSewageFee(sewageZone) * tankCount).toLocaleString('th-TH')} บาท
                       </span>
                     </div>
-                    <p className="text-xs text-blue-900 font-medium">
-                      * ชำระเงินสดกับเจ้าหน้าที่ผู้ปฏิบัติงานเมื่อดูดสิ่งปฏิกูลเสร็จสิ้น พร้อมรับใบเสร็จรับเงินของเทศบาลทันที
-                    </p>
+
+                    <div className="space-y-1 text-xs text-blue-950 leading-relaxed">
+                      <p>
+                        • <strong>การชำระเงิน:</strong> ชำระเงินสดกับเจ้าหน้าที่ผู้ปฏิบัติงานเมื่อดูดสิ่งปฏิกูลเสร็จสิ้น พร้อมรับใบเสร็จรับเงินของเทศบาลทันที
+                      </p>
+                      <p>
+                        • <strong>เอกสารหลักฐาน:</strong> พร้อมคำขอนี้ ข้าพเจ้าได้แนบบัตรประจำตัวประชาชน มาเพื่อเป็นหลักฐาน จำนวน ๑ ฉบับ (กรุณาเตรียมสำเนาบัตรไว้รอเจ้าหน้าที่หน้างาน)
+                      </p>
+                    </div>
                   </div>
                 </div>
 
