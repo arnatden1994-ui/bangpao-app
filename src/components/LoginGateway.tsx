@@ -161,13 +161,6 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
     }
   };
 
-  const handleQuickOfficerLogin = (u: UserType) => {
-    const activeUser: UserType = u.status === 'pending' ? { ...u, status: 'active' } : u;
-    setActiveSession(activeUser);
-    onShowToast('success', `เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ${activeUser.fullName}`);
-    onLoginSuccess(activeUser);
-  };
-
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!regFullName.trim()) {
@@ -373,34 +366,6 @@ export const LoginGateway: React.FC<LoginGatewayProps> = ({
                   )}
                 </button>
               </form>
-
-              {/* Quick 1-Tap Officer Access for Mobile / Tablet Convenience */}
-              {availableUsers.length > 0 && (
-                <div className="mt-5 pt-4 border-t border-slate-200">
-                  <div className="text-xs font-extrabold text-slate-600 mb-2.5 flex items-center justify-between">
-                    <span>⚡ เข้าสู่ระบบด่วนสำหรับเจ้าหน้าที่ (คลิกเลือกบัญชี):</span>
-                    <span className="text-[11px] text-emerald-700 font-bold">รองรับมือถือ/แท็บเล็ต</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {availableUsers.slice(0, 6).map((u) => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => handleQuickOfficerLogin(u)}
-                        className="text-left px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 transition-colors flex items-center justify-between gap-2 cursor-pointer"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-xs font-black text-slate-900 truncate">{u.fullName}</div>
-                          <div className="text-[10px] font-bold text-emerald-800 truncate">
-                            @{u.username} • {u.roleTitle || (u.role === 'admin' ? 'ผู้ดูแลระบบสูงสุด (Admin)' : u.role === 'inspector' ? 'นายตรวจ' : u.role === 'executive' ? 'ผู้บริหาร' : 'เจ้าหน้าที่')}
-                          </div>
-                        </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Register New Account Link */}
