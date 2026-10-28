@@ -44,8 +44,12 @@ import {
   UserRole,
 } from '../types/index.ts';
 
-// Central Municipality Coordinates (Bangpao HQ)
-const BANGPAO_HQ_COORDS = { lat: 7.425574, lng: 99.529854 };
+// Central Municipality Coordinates (Bangpao HQ) - พิกัดจริงสำนักงานเทศบาลตำบลบางเป้า
+export const BANGPAO_HQ_COORDS = {
+  lat: 7.429625,
+  lng: 99.52522,
+  name: 'สำนักงานเทศบาลตำบลบางเป้า (กองสาธารณสุข)',
+};
 
 // Official 7 Villages of Bangpao Subdistrict
 export const BANGPAO_VILLAGES: Record<string, string> = {
@@ -56,6 +60,83 @@ export const BANGPAO_VILLAGES: Record<string, string> = {
   '5': 'บ้านป่าเตียว',
   '6': 'บ้านควนทองสีห์',
   '7': 'บ้านท่าเรือ',
+};
+
+// Approximate Center Coordinates per Village in Bangpao Subdistrict
+export const BANGPAO_COORDS: Record<string, { lat: number; lng: number }> = {
+  '1': { lat: 7.428587, lng: 99.525876 }, // บ้านชายวัด
+  '2': { lat: 7.421512, lng: 99.529104 }, // บ้านเกาะปอม
+  '3': { lat: 7.416288, lng: 99.519842 }, // บ้านตลาดใหม่
+  '4': { lat: 7.411645, lng: 99.531215 }, // บ้านแหลมม่วง
+  '5': { lat: 7.441200, lng: 99.551300 }, // บ้านป่าเตียว
+  '6': { lat: 7.391245, lng: 99.508765 }, // บ้านควนทองสีห์
+  '7': { lat: 7.402190, lng: 99.514280 }, // บ้านท่าเรือ
+};
+
+// Helper to normalize Thai names for resilient comparison and sync
+export const normalizeThaiName = (name?: string): string => {
+  if (!name) return '';
+  return name
+    .replace(/\s+/g, '')
+    .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|ด\.ญ\.)/, '')
+    .trim();
+};
+
+// Helper to extract clean first name without prefix
+export const extractGivenName = (fullName?: string): string => {
+  if (!fullName) return '';
+  const clean = fullName
+    .replace(/\s+/g, ' ')
+    .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|ด\.ญ\.)\s*/, '')
+    .trim();
+  return clean.split(' ')[0] || clean;
+};
+
+// Resilient matcher between a plan stop and a registered patient
+export const matchPlanStopWithPatient = (
+  stop: { patientId?: string; fullName?: string; idCard?: string; address?: string },
+  patient: LtcPatient
+): boolean => {
+  // 1. Direct ID match
+  if (stop.patientId && patient.id && stop.patientId === patient.id) return true;
+
+  // 2. ID Card match
+  if (patient.idCard && stop.idCard && patient.idCard === stop.idCard && stop.idCard !== '-') return true;
+
+  // 3. Address match (rural house number + Moo is very reliable)
+  if (stop.address && patient.address) {
+    const sAddr = stop.address.replace(/\s+/g, '');
+    const pAddr = patient.address.replace(/\s+/g, '');
+    if (sAddr === pAddr || sAddr.includes(pAddr) || pAddr.includes(sAddr)) return true;
+  }
+
+  // 4. Given name matching (handles transcription differences like ลาพิมพ์ vs สาพิมพ์, ดำหนูอินทร์ vs ดำหนูจันทร์)
+  const stopGiven = extractGivenName(stop.fullName);
+  const patientGiven = extractGivenName(patient.fullName);
+  if (stopGiven && patientGiven) {
+    if (stopGiven === patientGiven) return true;
+    if (
+      (stopGiven.includes('สุนทร') && patientGiven.includes('สุนทร')) ||
+      (stopGiven.includes('เลียบ') && patientGiven.includes('เลียบ')) ||
+      (stopGiven.includes('ยี') && (patientGiven.includes('ยี') || patientGiven.includes('ยี่') || patientGiven.includes('ชี'))) ||
+      ((stopGiven.includes('ผึ้ง') || stopGiven.includes('พริ้ง')) && (patientGiven.includes('ผึ้ง') || patientGiven.includes('พริ้ง'))) ||
+      (stopGiven.includes('แดง') && patientGiven.includes('แดง'))
+    ) {
+      return true;
+    }
+  }
+
+  // 5. Full normalized name check
+  if (stop.fullName && patient.fullName) {
+    const sNorm = normalizeThaiName(stop.fullName);
+    const pNorm = normalizeThaiName(patient.fullName);
+    if (sNorm && pNorm) {
+      if (sNorm === pNorm) return true;
+      if (sNorm.includes(pNorm) || pNorm.includes(sNorm)) return true;
+    }
+  }
+
+  return false;
 };
 
 // Haversine distance calculator between two coordinates in kilometers
@@ -241,17 +322,48 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       setStaffNames(existing.staffNames || 'พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข), CG');
       setVehiclePlate(existing.vehiclePlate || 'ผก-4512 ตรัง (รถกระบะ ทต.บางเป้า)');
       setPlanNotes(existing.notes || '');
-      setPlannedStops(existing.stops || []);
+
+      // Reconcile and synchronize stops with registered patient database
+      const rawStops = existing.stops || [];
+      const reconciled = rawStops.map((stop) => {
+        const matched = patients.find((p) => matchPlanStopWithPatient(stop, p));
+        if (matched) {
+          const mooFallback = BANGPAO_COORDS[matched.moo || '2'] || BANGPAO_HQ_COORDS;
+          const realLat = matched.latitude ?? stop.latitude ?? mooFallback.lat;
+          const realLng = matched.longitude ?? stop.longitude ?? mooFallback.lng;
+          return {
+            ...stop,
+            patientId: matched.id, // Guarantee patient ID syncs with registered DB
+            fullName: matched.fullName || stop.fullName,
+            idCard: matched.idCard || stop.idCard,
+            age: matched.age || stop.age,
+            gender: matched.gender || stop.gender,
+            phone: matched.phone || matched.caregiverPhone || stop.phone,
+            caregiverName: matched.caregiverName || stop.caregiverName,
+            caregiverPhone: matched.caregiverPhone || stop.caregiverPhone,
+            address: matched.address || stop.address,
+            moo: matched.moo || stop.moo,
+            latitude: realLat,
+            longitude: realLng,
+            adlScore: matched.adlScore ?? stop.adlScore,
+            adlCategory: matched.adlCategory || stop.adlCategory,
+            items: stop.items && stop.items.length > 0 ? stop.items : extractPatientRoundItems(matched, planRound, planYear),
+          };
+        }
+        return stop;
+      });
+      setPlannedStops(reconciled);
     } else {
       // Default: create fresh title and pre-select active registered patients
       const title = `แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ ${planYear} (รอบที่ ${planRound})`;
       setPlanTitle(title);
-      // Auto-pull all registered patients with coordinates
+      // Auto-pull all registered patients with actual registered coordinates
       const defaultStops: LtcPlanStop[] = patients
         .filter((p) => p.status !== 'deceased')
         .map((p, idx) => {
-          const lat = p.latitude || BANGPAO_HQ_COORDS.lat + 0.003 * (idx + 1);
-          const lng = p.longitude || BANGPAO_HQ_COORDS.lng + 0.003 * (idx + 1);
+          const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
+          const lat = p.latitude ?? (mooFallback.lat + 0.001 * (idx + 1));
+          const lng = p.longitude ?? (mooFallback.lng + 0.001 * (idx + 1));
           return {
             patientId: p.id,
             queueOrder: idx + 1,
@@ -269,14 +381,14 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             adlScore: p.adlScore,
             adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
             items: extractPatientRoundItems(p, planRound, planYear),
-            scheduledTime: `0${9 + Math.floor(idx / 2)}:${(idx % 2) * 30 || '00'}`,
+            scheduledTime: `0${9 + Math.floor(idx / 2)}:${(idx % 2) * 30 || '00'} น.`,
             deliveryStatus: 'pending',
             notes: p.diagnosis || '',
           };
         });
       setPlannedStops(defaultStops);
     }
-  }, [planYear, planRound]);
+  }, [planYear, planRound, existingPlans, patients]);
 
   // Total route metrics
   const routeMetrics = useMemo(() => {
@@ -541,14 +653,16 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
     showToast('จัดลำดับเรียงตามหมู่บ้าน ม.1 ➔ ม.7 เรียบร้อยแล้ว 🏘️');
   };
 
-  // Add a patient to stops from Step 3
+  // Add/remove a patient to stops from Step 3
   const handleTogglePatientSelection = (p: LtcPatient) => {
-    const existingIdx = plannedStops.findIndex((s) => s.patientId === p.id);
+    const existingIdx = plannedStops.findIndex((s) => matchPlanStopWithPatient(s, p));
     if (existingIdx !== -1) {
-      handleRemoveStop(p.id);
+      const stopToRemove = plannedStops[existingIdx];
+      handleRemoveStop(stopToRemove.patientId);
     } else {
-      const lat = p.latitude || BANGPAO_HQ_COORDS.lat + 0.002 * (plannedStops.length + 1);
-      const lng = p.longitude || BANGPAO_HQ_COORDS.lng + 0.002 * (plannedStops.length + 1);
+      const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
+      const lat = p.latitude ?? (mooFallback.lat + 0.001 * (plannedStops.length + 1));
+      const lng = p.longitude ?? (mooFallback.lng + 0.001 * (plannedStops.length + 1));
       const newStop: LtcPlanStop = {
         patientId: p.id,
         queueOrder: plannedStops.length + 1,
@@ -566,7 +680,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         adlScore: p.adlScore,
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
         items: extractPatientRoundItems(p, planRound, planYear),
-        scheduledTime: '09:30',
+        scheduledTime: `0${9 + Math.floor(plannedStops.length / 2)}:${(plannedStops.length % 2) * 30 || '00'} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
       };
@@ -577,13 +691,15 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
   // Select all filtered patients
   const handleSelectAllFiltered = (filteredList: LtcPatient[]) => {
-    const currentIds = new Set(plannedStops.map((s) => s.patientId));
-    const toAdd = filteredList.filter((p) => !currentIds.has(p.id));
+    const toAdd = filteredList.filter(
+      (p) => !plannedStops.some((s) => matchPlanStopWithPatient(s, p))
+    );
     if (toAdd.length === 0) return;
 
     const newStops: LtcPlanStop[] = toAdd.map((p, idx) => {
-      const lat = p.latitude || BANGPAO_HQ_COORDS.lat + 0.002 * (plannedStops.length + idx + 1);
-      const lng = p.longitude || BANGPAO_HQ_COORDS.lng + 0.002 * (plannedStops.length + idx + 1);
+      const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
+      const lat = p.latitude ?? (mooFallback.lat + 0.001 * (plannedStops.length + idx + 1));
+      const lng = p.longitude ?? (mooFallback.lng + 0.001 * (plannedStops.length + idx + 1));
       return {
         patientId: p.id,
         queueOrder: plannedStops.length + idx + 1,
@@ -601,7 +717,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         adlScore: p.adlScore,
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
         items: extractPatientRoundItems(p, planRound, planYear),
-        scheduledTime: '09:30',
+        scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
       };
@@ -1128,21 +1244,21 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                             )}
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5">
-                            {rd === '1'
-                              ? 'ไตรมาส 1-2 (ต.ค. - มี.ค.)'
-                              : rd === '2'
-                              ? 'ไตรมาส 3-4 (เม.ย. - ก.ย.)'
-                              : `รอบพิเศษประจำปี ${planYear}`}
+                            {hasPlan && existingPlans[rdKey]?.deliveryDate
+                              ? `กำหนดแจก: ${existingPlans[rdKey].deliveryDate}`
+                              : `รอบการแจกจ่ายประจำปี ${planYear}`}
                           </div>
                         </div>
 
                         <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
                           {hasPlan ? (
-                            <span className="text-emerald-700 font-bold">
-                              ✓ มีแผนแล้ว ({stopCount} ราย)
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                              ✓ มีแผนบันทึกแล้ว ({stopCount} ราย)
                             </span>
                           ) : (
-                            <span className="text-slate-400">ยังไม่มีแผนรอบนี้</span>
+                            <span className="inline-flex items-center text-slate-400 font-medium">
+                              ยังไม่มีแผนรอบนี้
+                            </span>
                           )}
                         </div>
                       </button>
@@ -1416,9 +1532,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredPatients.map((p) => {
-                        const isSelected = selectedPatientIds.has(p.id);
-                        const matchedStop = plannedStops.find((s) => s.patientId === p.id);
-                        const stopIndex = plannedStops.findIndex((s) => s.patientId === p.id);
+                        const matchedStop = plannedStops.find((s) => matchPlanStopWithPatient(s, p));
+                        const isSelected = Boolean(matchedStop) || selectedPatientIds.has(p.id);
+                        const stopIndex = matchedStop ? plannedStops.indexOf(matchedStop) : -1;
                         const items = matchedStop
                           ? matchedStop.items
                           : extractPatientRoundItems(p, planRound, planYear);
@@ -2027,8 +2143,18 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     onChange={(e) => setCloneTargetRound(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-800 focus:ring-2 focus:ring-teal-500 cursor-pointer"
                   >
-                    <option value="2">งวดรอบที่ 2 (เม.ย. - ก.ย.)</option>
-                    <option value="3">งวดรอบที่ 3</option>
+                    {configuredRounds.map((r) => {
+                      const tKey = `${cloneTargetYear}_${r}`;
+                      const tPlan = existingPlans[tKey];
+                      const tCount = tPlan?.stops?.length;
+                      const statusNote = tCount ? `(มีแผนบันทึกแล้ว ${tCount} ราย)` : '(ยังไม่มีแผน)';
+                      return (
+                        <option key={r} value={r}>
+                          งวดรอบที่ {r} {statusNote}
+                        </option>
+                      );
+                    })}
+                    <option value="3">งวดรอบที่ 3 (ยังไม่มีแผน)</option>
                     <option value="urgent">รอบเร่งด่วนพิเศษ</option>
                   </select>
                 </div>
