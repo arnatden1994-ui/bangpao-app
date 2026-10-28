@@ -354,7 +354,7 @@ export const INITIAL_PETITIONS: PublicPetition[] = [
       feeAmount: 250,
       receiptBook: '01',
       receiptNumber: '0012',
-      intakeOfficer: 'นางสาวจิราภรณ์ จันทร์ดี',
+      intakeOfficer: 'พันจ่าเอกอานัส เด็นหมาด',
       driverName: 'นายชนะ สุขด้วง',
       applicantAddress: {
         houseNo: '88',

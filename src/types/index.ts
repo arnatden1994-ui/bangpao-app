@@ -558,7 +558,7 @@ export const DEFAULT_SIGNER_SETTINGS: SignerSettings = {
   directorPos: 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม',
   directorPosition: 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม',
   clerkName: 'นายจตุพร ศรีสุวรรณ',
-  clerkPos: 'ปลัดเทศบาลตำบลบางเป้า',
+  clerkPos: 'ปลัดเทศบาล',
   mayorName: 'นายนิติธรรม ดำสุด',
   mayorPos: 'รองนายกเทศมนตรี ปฏิบัติราชการแทน\nนายกเทศมนตรีตำบลบางเป้า',
   actingMayorName: 'นายนิติธรรม ดำสุด',

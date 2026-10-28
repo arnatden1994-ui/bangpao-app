@@ -164,7 +164,7 @@ export function parseThaiAddressParts(addr?: string) {
   }
 
   return {
-    houseNo: houseNo || trimmed.split(' ')[0] || '',
+    houseNo: houseNo || '',
     moo: moo || '',
     soi: soi || '-',
     subdistrict,

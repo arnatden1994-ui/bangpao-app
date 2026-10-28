@@ -172,11 +172,23 @@ const sanitizeAllLocalStorageNames = () => {
       const key = window.localStorage.key(i);
       if (!key) continue;
       const val = window.localStorage.getItem(key);
-      if (val && (val.includes('เด่นหมาด') || val.includes('กัญจนณัฏฐ์'))) {
+      if (
+        val &&
+        (val.includes('เด่นหมาด') ||
+          val.includes('กัญจนณัฏฐ์') ||
+          val.includes('ศรีสุวรรร') ||
+          val.includes('พิมลภัส') ||
+          val.includes('จิราภรณ์') ||
+          val.includes('อรัญญา'))
+      ) {
         const cleaned = val
           .replace(/เด่นหมาด/g, 'เด็นหมาด')
+          .replace(/ศรีสุวรรร+ณ/g, 'ศรีสุวรรณ')
           .replace(/นางสาวกัญจนณัฏฐ์\s*หริรักษ์/g, 'นางสาวปฐมาภรณ์ จันทร์แจ่ม')
-          .replace(/กัญจนณัฏฐ์\s*หริรักษ์/g, 'ปฐมาภรณ์ จันทร์แจ่ม');
+          .replace(/กัญจนณัฏฐ์\s*หริรักษ์/g, 'ปฐมาภรณ์ จันทร์แจ่ม')
+          .replace(/น\.ส\.\s*พิมลภัส\s*ศรีสุข/g, 'พันจ่าเอกอานัส เด็นหมาด')
+          .replace(/นางสาวจิราภรณ์\s*จันทร์ดี/g, 'พันจ่าเอกอานัส เด็นหมาด')
+          .replace(/นางสาวอรัญญา\s*สุขสวัสดิ์/g, 'พันจ่าเอกอานัส เด็นหมาด');
         window.localStorage.setItem(key, cleaned);
       }
     }
