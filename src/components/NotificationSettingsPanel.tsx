@@ -21,6 +21,8 @@ import {
   ExternalLink,
   Save,
   RefreshCw,
+  Cloud,
+  Loader2,
 } from 'lucide-react';
 import { SignerSettings, PublicPetition, EquipmentLoan } from '../types/index.ts';
 import {
@@ -40,6 +42,11 @@ import {
   openAttachmentPrintableHtml,
   getCompleteGasNotificationCode,
 } from '../services/notificationService.ts';
+import {
+  saveNotificationSettingsToFirestore,
+  loadNotificationSettingsFromFirestore,
+  subscribeNotificationSettings,
+} from '../services/firebaseService.ts';
 
 interface NotificationSettingsPanelProps {
   signerSettings: SignerSettings;
@@ -58,15 +65,76 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
   const [copiedGasCode, setCopiedGasCode] = useState(false);
   const [showGasCodeModal, setShowGasCodeModal] = useState(false);
   const [previewLog, setPreviewLog] = useState<NotificationLogItem | null>(null);
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setLogs(getStoredNotificationLogs());
+
+    // 1. Load settings from Cloud Firestore to sync across devices/browsers
+    let unsubscribe: (() => void) | undefined;
+    const fetchCloudSettings = async () => {
+      setIsCloudSyncing(true);
+      try {
+        const cloudSettings = await loadNotificationSettingsFromFirestore();
+        if (cloudSettings) {
+          setSettings((prev) => {
+            const merged = { ...prev, ...cloudSettings };
+            saveStoredNotificationSettings(merged);
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load notification settings from Firestore:', err);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+
+      // 2. Realtime listener for cross-device live updates
+      try {
+        unsubscribe = subscribeNotificationSettings((remote) => {
+          if (remote) {
+            setSettings((prev) => {
+              const merged = { ...prev, ...remote };
+              saveStoredNotificationSettings(merged);
+              return merged;
+            });
+          }
+        });
+      } catch (err) {
+        console.warn('Realtime notify subscription error:', err);
+      }
+    };
+
+    fetchCloudSettings();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
-  const handleSaveSettings = (e?: React.FormEvent) => {
+  const handleSaveSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    setIsSaving(true);
+    // Save to local storage first for instant offline/speed
     saveStoredNotificationSettings(settings);
-    showToast('success', 'บันทึกการตั้งค่าระบบแจ้งเตือน LINE กลุ่ม & อีเมลพร้อมไฟล์แนบแบบฟอร์มเรียบร้อยแล้ว');
+
+    // Persist to Cloud Firestore for cross-browser / multi-device synchronization
+    try {
+      await saveNotificationSettingsToFirestore(settings);
+      showToast(
+        'success',
+        'บันทึกการตั้งค่าระบบแจ้งเตือนขึ้นระบบ Cloud เรียบร้อยแล้ว (ข้อมูลซิงค์ตรงกันทุกเครื่องและมือถืออัตโนมัติ)'
+      );
+    } catch (err: any) {
+      console.error('Failed to sync notification settings to Firestore:', err);
+      showToast(
+        'info',
+        'บันทึกลงในเครื่องเรียบร้อยแล้ว แต่การซิงค์ Cloud ขัดข้อง: ' + (err?.message || 'เครือข่ายมีปัญหา')
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSendTest = async (
@@ -79,6 +147,10 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
   ) => {
     setIsSendingTest(testType);
     saveStoredNotificationSettings(settings);
+    // Background cloud sync
+    saveNotificationSettingsToFirestore(settings).catch((err) => {
+      console.warn('Background notify settings sync skipped:', err);
+    });
 
     try {
       let payload;
@@ -329,9 +401,15 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
       <div className="bg-gradient-to-r from-emerald-900 via-teal-800 to-cyan-900 rounded-3xl p-6 text-white shadow-lg border border-emerald-700/50">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="space-y-2 max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-emerald-200 text-xs font-bold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>ระบบแจ้งเตือนอัตโนมัติ + แนบไฟล์แบบฟอร์มราชการ A4 (PDF & Word)</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-emerald-200 text-xs font-bold">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>ระบบแจ้งเตือนอัตโนมัติ + แนบไฟล์แบบฟอร์มราชการ A4 (PDF & Word)</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold">
+                <Cloud className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-pulse text-amber-300' : 'text-emerald-300'}`} />
+                <span>{isCloudSyncing ? 'กำลังซิงค์คลาวด์...' : 'ซิงค์ระบบคลาวด์อัตโนมัติ (เปิดได้ทุกเครื่อง/มือถือ)'}</span>
+              </div>
             </div>
             <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight">
               🔔 ศูนย์แจ้งเตือน LINE กลุ่ม & อีเมลกองสาธารณสุข ทต.บางเป้า
@@ -352,11 +430,12 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
             </button>
             <button
               type="button"
+              disabled={isSaving}
               onClick={() => handleSaveSettings()}
-              className="px-5 py-2.5 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-xs sm:text-sm shadow-md flex items-center gap-2 cursor-pointer transition-all"
+              className="px-5 py-2.5 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-950 font-extrabold text-xs sm:text-sm shadow-md flex items-center gap-2 cursor-pointer transition-all disabled:opacity-60"
             >
-              <Save className="w-4 h-4 text-emerald-700" />
-              <span>บันทึกการตั้งค่า</span>
+              {isSaving ? <Loader2 className="w-4 h-4 text-emerald-700 animate-spin" /> : <Save className="w-4 h-4 text-emerald-700" />}
+              <span>{isSaving ? 'กำลังบันทึกขึ้น Cloud...' : 'บันทึกการตั้งค่า'}</span>
             </button>
           </div>
         </div>
@@ -731,13 +810,18 @@ export const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps>
               ))}
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                <Cloud className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>เมื่อบันทึกแล้ว ข้อมูลจะถูกซิงค์ขึ้น Cloud Firestore อัตโนมัติ (เปิดดูบนมือถือและคอมพิวเตอร์เครื่องอื่นได้ทันที)</span>
+              </div>
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl bg-[#064e3b] hover:bg-[#043d2e] text-white font-bold text-xs sm:text-sm shadow-sm flex items-center gap-2 cursor-pointer"
+                disabled={isSaving}
+                className="px-5 py-2.5 rounded-xl bg-[#064e3b] hover:bg-[#043d2e] text-white font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-60 shrink-0"
               >
-                <Save className="w-4 h-4" />
-                <span>บันทึกตั้งค่าการแจ้งเตือนทั้งหมด</span>
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                <span>{isSaving ? 'กำลังบันทึกขึ้น Cloud...' : 'บันทึกตั้งค่าการแจ้งเตือนทั้งหมด'}</span>
               </button>
             </div>
           </div>

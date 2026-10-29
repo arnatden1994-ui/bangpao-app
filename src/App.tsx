@@ -128,6 +128,8 @@ import {
   buildPetitionNotificationPayload,
   buildEquipmentLoanNotificationPayload,
   dispatchNotification,
+  getStoredNotificationSettings,
+  saveStoredNotificationSettings,
 } from './services/notificationService.ts';
 import {
   subscribeCollection,
@@ -136,6 +138,9 @@ import {
   deleteFromFirestore,
   saveSignerSettingsToFirestore,
   loadSignerSettingsFromFirestore,
+  saveNotificationSettingsToFirestore,
+  loadNotificationSettingsFromFirestore,
+  subscribeNotificationSettings,
 } from './services/firebaseService.ts';
 
 import { CheckCircle2, AlertTriangle, X, Menu } from 'lucide-react';
@@ -468,6 +473,35 @@ export default function App() {
         setSignerSettings(loaded);
       }
     }).catch(() => {});
+  }, []);
+
+  // Load & synchronize notification settings from Firestore across all devices & browsers
+  useEffect(() => {
+    loadNotificationSettingsFromFirestore().then((remoteSettings) => {
+      const local = getStoredNotificationSettings();
+      if (remoteSettings && (remoteSettings.lineTargetId || remoteSettings.lineChannelAccessToken || remoteSettings.emailGasWebAppUrl)) {
+        // Remote exists on Cloud, merge and persist locally on this browser/device
+        const merged = { ...local, ...remoteSettings };
+        saveStoredNotificationSettings(merged);
+      } else {
+        // Remote is empty on Cloud, but this device already configured local settings (e.g. main PC)
+        if (local.lineTargetId || local.lineChannelAccessToken || local.emailGasWebAppUrl) {
+          saveNotificationSettingsToFirestore(local).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+
+    // Real-time listener for notification settings updates from any device
+    const unsubNotify = subscribeNotificationSettings((updated) => {
+      if (updated && (updated.lineTargetId || updated.lineChannelAccessToken || updated.emailGasWebAppUrl)) {
+        const local = getStoredNotificationSettings();
+        saveStoredNotificationSettings({ ...local, ...updated });
+      }
+    });
+
+    return () => {
+      if (unsubNotify) unsubNotify();
+    };
   }, []);
 
   // Real-time synchronization from Cloud Firestore for all 5 core systems

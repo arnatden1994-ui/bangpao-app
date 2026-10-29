@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   deleteDoc,
@@ -21,6 +22,7 @@ import {
   PublicPetition,
   SignerSettings,
   DEFAULT_SIGNER_SETTINGS,
+  NotificationSettings,
   User,
 } from '../types/index.ts';
 import { INITIAL_USERS } from './authService.ts';
@@ -142,6 +144,64 @@ export async function loadSignerSettingsFromFirestore(): Promise<SignerSettings>
   } catch (e) {
     console.warn('Could not load signer settings from Firestore, using default:', e);
     return DEFAULT_SIGNER_SETTINGS;
+  }
+}
+
+/**
+ * Save Notification Settings to Firestore (LINE & Email & Webhook)
+ */
+export async function saveNotificationSettingsToFirestore(settings: NotificationSettings): Promise<void> {
+  const docRef = doc(db, COLLECTIONS.SETTINGS, 'notifications');
+  await setDoc(docRef, settings, { merge: true });
+}
+
+/**
+ * Load Notification Settings from Firestore
+ */
+export async function loadNotificationSettingsFromFirestore(): Promise<NotificationSettings | null> {
+  try {
+    const docRef = doc(db, COLLECTIONS.SETTINGS, 'notifications');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as NotificationSettings;
+    }
+    const snapshot = await getDocs(collection(db, COLLECTIONS.SETTINGS));
+    let found: NotificationSettings | null = null;
+    snapshot.forEach((d) => {
+      if (d.id === 'notifications') {
+        found = d.data() as NotificationSettings;
+      }
+    });
+    return found;
+  } catch (e) {
+    console.warn('Could not load notification settings from Firestore:', e);
+    return null;
+  }
+}
+
+/**
+ * Real-time listener for Notification Settings
+ */
+export function subscribeNotificationSettings(
+  onData: (settings: NotificationSettings) => void,
+  onError?: (err: Error) => void
+): () => void {
+  try {
+    const docRef = doc(db, COLLECTIONS.SETTINGS, 'notifications');
+    return onSnapshot(
+      docRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          onData(docSnap.data() as NotificationSettings);
+        }
+      },
+      (err) => {
+        if (onError) onError(err);
+      }
+    );
+  } catch (err) {
+    if (onError) onError(err as Error);
+    return () => {};
   }
 }
 

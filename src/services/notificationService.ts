@@ -1,4 +1,4 @@
-import { PublicPetition, EquipmentLoan, SignerSettings, DEFAULT_SIGNER_SETTINGS } from '../types/index.ts';
+import { PublicPetition, EquipmentLoan, SignerSettings, DEFAULT_SIGNER_SETTINGS, NotificationSettings } from '../types/index.ts';
 import { generatePetitionHtml, generatePetitionDocxBytes } from './petitionDocGenerator.ts';
 import {
   generateOfficialMedicalLoanHtml,
@@ -6,33 +6,7 @@ import {
 } from './medicalLoanDocGenerator.ts';
 import { saveLtcQueueToFirestore } from './firebaseService.ts';
 
-export interface NotificationSettings {
-  // LINE Messaging API / Group Notification
-  lineEnabled: boolean;
-  lineGroupName: string;
-  lineChannelAccessToken: string;
-  lineTargetId: string; // Group ID (C...) or User ID (U...)
-  lineWebhookUrl: string; // Optional custom webhook / Make / n8n
-
-  // Official Email Notification
-  emailEnabled: boolean;
-  emailGasWebAppUrl: string; // Dedicated Apps Script URL for Email + PDF/DOCX attachments (standalone, no new sheet needed)
-  departmentEmailName: string;
-  recipientEmails: string; // Comma-separated emails
-  ccEmails: string;
-  attachOfficialPdfForm: boolean;
-  attachOfficialDocxForm: boolean;
-
-  // Event Triggers
-  notifyOnGeneralPetition: boolean;
-  notifyOnSewagePetition: boolean;
-  notifyOnEquipmentLoan: boolean;
-  notifyOnLtcDeliveryQueue: boolean;
-  notifyOnCalendarEvent: boolean;
-  notifyOnEquipmentFollowUp: boolean;
-  dailyMorningSummaryEnabled: boolean;
-  dailyMorningSummaryTime: string;
-}
+export type { NotificationSettings };
 
 export interface NotificationAttachment {
   id: string;
@@ -153,9 +127,9 @@ const STORAGE_KEY_NOTIFY_LOGS = 'bangpao_notification_logs_v1';
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   lineEnabled: true,
-  lineGroupName: 'กลุ่มไลน์กองสาธารณสุข ทต.บางเป้า',
+  lineGroupName: 'Sasuk notify',
   lineChannelAccessToken: '',
-  lineTargetId: '',
+  lineTargetId: 'C9a3577cd25b88b13a3757b7462c78de',
   lineWebhookUrl: '',
 
   emailEnabled: true,

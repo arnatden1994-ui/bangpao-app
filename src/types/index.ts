@@ -671,3 +671,32 @@ export const DEFAULT_SIGNER_SETTINGS: SignerSettings = {
     },
   ],
 };
+
+export interface NotificationSettings {
+  // LINE Messaging API / Group Notification
+  lineEnabled: boolean;
+  lineGroupName: string;
+  lineChannelAccessToken: string;
+  lineTargetId: string; // Group ID (C...) or User ID (U...)
+  lineWebhookUrl: string; // Optional custom webhook / Make / n8n
+
+  // Official Email Notification
+  emailEnabled: boolean;
+  emailGasWebAppUrl: string; // Dedicated Apps Script URL for Email + PDF/DOCX attachments
+  departmentEmailName: string;
+  recipientEmails: string; // Comma-separated emails
+  ccEmails: string;
+  attachOfficialPdfForm: boolean;
+  attachOfficialDocxForm: boolean;
+
+  // Event Triggers
+  notifyOnGeneralPetition: boolean;
+  notifyOnSewagePetition: boolean;
+  notifyOnEquipmentLoan: boolean;
+  notifyOnLtcDeliveryQueue: boolean;
+  notifyOnCalendarEvent: boolean;
+  notifyOnEquipmentFollowUp: boolean;
+  dailyMorningSummaryEnabled: boolean;
+  dailyMorningSummaryTime: string;
+}
+
