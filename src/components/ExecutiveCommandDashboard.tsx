@@ -64,6 +64,7 @@ import {
 } from '../services/firebaseService.ts';
 import {
   buildCalendarNotificationPayload,
+  buildDailyMorningDigestPayload,
   dispatchNotification,
   openAttachmentPrintableHtml,
 } from '../services/notificationService.ts';
@@ -194,11 +195,18 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   // Shared Calendar Events State
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>(() => {
     try {
+      const isCleared = typeof window !== 'undefined' && localStorage.getItem('bangpao_calendar_demo_cleared_v1') === 'true';
       const stored = localStorage.getItem('bangpao_calendar_events_v2');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          if (isCleared) {
+            return parsed.filter((e) => !DEMO_CALENDAR_EVENT_IDS.has(e.id));
+          }
+          return parsed;
+        }
       }
+      if (isCleared) return [];
     } catch (e) {
       console.warn('Failed to parse local calendar events', e);
     }
@@ -209,10 +217,15 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   useEffect(() => {
     const unsub = subscribeCollection<CalendarEventItem>(COLLECTIONS.CALENDAR_EVENTS, (remoteItems) => {
       if (remoteItems && Array.isArray(remoteItems)) {
+        const isCleared = typeof window !== 'undefined' && localStorage.getItem('bangpao_calendar_demo_cleared_v1') === 'true';
+        const filteredRemote = isCleared
+          ? remoteItems.filter((e) => !DEMO_CALENDAR_EVENT_IDS.has(e.id))
+          : remoteItems;
         setCalendarEvents((prev) => {
+          const base = isCleared ? prev.filter((e) => !DEMO_CALENDAR_EVENT_IDS.has(e.id)) : prev;
           const map = new Map<string, CalendarEventItem>();
-          prev.forEach((e) => map.set(e.id, e));
-          remoteItems.forEach((e) => map.set(e.id, e));
+          base.forEach((e) => map.set(e.id, e));
+          filteredRemote.forEach((e) => map.set(e.id, e));
           const merged = Array.from(map.values());
           try {
             localStorage.setItem('bangpao_calendar_events_v2', JSON.stringify(merged));
@@ -352,36 +365,56 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
     setCalendarEvents((prev) => [newEvent, ...prev.filter((e) => e.id !== newEvent.id)]);
     saveToFirestore(COLLECTIONS.CALENDAR_EVENTS, newEvent).catch(() => {});
 
-    // Automatically dispatch notification + A4 Schedule Form attachment for the new calendar appointment/plan
-    const payload = buildCalendarNotificationPayload(
-      [
-        {
-          id: newEvent.id,
-          title: newEvent.title,
-          date: newEvent.date,
-          endDate: newEvent.endDate,
-          startTime: newEvent.startTime,
-          endTime: newEvent.endTime,
-          time: newEvent.startTime
-            ? `${newEvent.startTime} - ${newEvent.endTime || '16:30'} น.`
-            : '09:00 - 16:30 น.',
-          type: newEvent.category,
-          location: newEvent.location,
-          assignee: newEvent.responsibleOfficer,
-          description: newEvent.details,
-          docType: (newEvent as any).docType,
-          docNumber: (newEvent as any).docNumber,
-          fromAgency: (newEvent as any).fromAgency,
-          attachments: (newEvent as any).attachments,
-        },
-      ],
-      newEvent.title
-    );
-    dispatchNotification(payload).then(() => {
+    // Check if user chose to notify LINE & timing preferences
+    const shouldNotify = newEvent.notifyLine !== false && newEvent.notifyTiming !== 'none';
+    const timing = newEvent.notifyTiming || 'instant';
+
+    if (shouldNotify && timing === 'instant') {
+      const payload = buildCalendarNotificationPayload(
+        [
+          {
+            id: newEvent.id,
+            title: newEvent.title,
+            date: newEvent.date,
+            endDate: newEvent.endDate,
+            startTime: newEvent.startTime,
+            endTime: newEvent.endTime,
+            time: newEvent.startTime
+              ? `${newEvent.startTime} - ${newEvent.endTime || '16:30'} น.`
+              : '09:00 - 16:30 น.',
+            type: newEvent.category,
+            location: newEvent.location,
+            assignee: newEvent.responsibleOfficer,
+            description: newEvent.details,
+            docType: (newEvent as any).docType,
+            docNumber: (newEvent as any).docNumber,
+            fromAgency: (newEvent as any).fromAgency,
+            attachments: (newEvent as any).attachments,
+          },
+        ],
+        newEvent.title
+      );
+      dispatchNotification(payload).then(() => {
+        if (onShowToast) {
+          onShowToast('success', `บันทึกนัดหมาย "${newEvent.title}" และส่งแจ้งเตือน LINE & อีเมลพร้อมไฟล์แบบฟอร์มแผนงาน A4 แล้ว`);
+        }
+      });
+    } else if (shouldNotify && timing !== 'instant') {
+      const targetDesc =
+        timing === 'day_before'
+          ? 'ล่วงหน้า 1 วัน (08:00 น.)'
+          : timing === 'on_date_morning'
+          ? `เช้าวันจัดกิจกรรม (${formatThaiDateShort(newEvent.date)} เวลา 07:30 น.)`
+          : `วันที่ ${formatThaiDateShort(newEvent.customNotifyDate || newEvent.date)}`;
+
       if (onShowToast) {
-        onShowToast('success', `บันทึกนัดหมาย "${newEvent.title}" และส่งแจ้งเตือน LINE & อีเมลพร้อมไฟล์แบบฟอร์มแผนงาน A4 แล้ว`);
+        onShowToast('info', `บันทึกนัดหมายแล้ว โดยตั้งเวลาแจ้งเตือน: ${targetDesc}`);
       }
-    });
+    } else {
+      if (onShowToast) {
+        onShowToast('success', `บันทึกนัดหมาย "${newEvent.title}" ลงปฏิทินเรียบร้อยแล้ว (ไม่ส่งแจ้งเตือน LINE ตามที่เลือก)`);
+      }
+    }
   };
 
   const handleSendDailyScheduleNotification = async (openPrintPreview = false) => {
@@ -410,6 +443,75 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
       } else {
         alert('ส่งแจ้งเตือนตารางนัดหมายและแผนงาน พร้อมแนบไฟล์แบบฟอร์ม A4 เข้า LINE & อีเมลเรียบร้อยแล้ว!');
       }
+    } finally {
+      setIsNotifyCalendarSending(false);
+    }
+  };
+
+
+  const handleSendMorningDigest = async (targetDateStr?: string) => {
+    setIsNotifyCalendarSending(true);
+    try {
+      const today = targetDateStr || toLocalDateStr();
+      // 1. Events today
+      const todayEvents = calendarEvents.filter((ev) => eventCoversDate(ev, today)).map((ev) => ({
+        id: ev.id,
+        title: ev.title,
+        date: ev.date,
+        time: ev.startTime ? `${ev.startTime} - ${ev.endTime || '12:00'} น.` : ev.time || '09:00 น.',
+        type: ev.category,
+        location: ev.location,
+        assignee: ev.responsibleOfficer,
+        description: ev.details,
+      }));
+
+      // 2. Sewage orders today
+      const todaySewage = petitions
+        .filter((p) => p.category === 'waste_sewage' && (p.submissionDate === today || (p as any).appointmentDate === today || p.status === 'pending'))
+        .slice(0, 5)
+        .map((p) => ({
+          code: p.trackingCode || p.id,
+          customerName: p.citizenName,
+          moo: p.moo || '1',
+          time: (p as any).appointmentTime,
+        }));
+
+      // 3. LTC stops
+      const todayLtc = ltcPatients
+        .slice(0, 4)
+        .map((l) => ({
+          name: l.name || (l as any).fullName,
+          moo: l.moo || '1',
+          items: l.itemsNeeded || 'ชุดดูแล LTC / ผ้าอ้อม',
+        }));
+
+      // 4. Due follow ups
+      const todayFollowUps = loans
+        .filter((l) => l.status === 'borrowed')
+        .slice(0, 4)
+        .map((l) => ({
+          patientName: l.patientName,
+          equipment: l.equipmentName,
+          phone: l.borrowerPhone || l.phone,
+        }));
+
+      const payload = buildDailyMorningDigestPayload({
+        dateStr: today,
+        events: todayEvents,
+        sewageOrders: todaySewage,
+        ltcStops: todayLtc,
+        dueFollowUps: todayFollowUps,
+        signers: signerSettings,
+      });
+
+      await dispatchNotification(payload);
+      if (onShowToast) {
+        onShowToast('success', 'ส่งสรุปภารกิจเช้าประจำวัน (ก่อน 08:00 น.) เข้ากลุ่ม LINE & อีเมลเรียบร้อยแล้ว!');
+      } else {
+        alert('ส่งสรุปภารกิจเช้าประจำวัน (ก่อน 08:00 น.) เข้ากลุ่ม LINE & อีเมลเรียบร้อยแล้ว!');
+      }
+    } catch (err: any) {
+      alert(`ส่งสรุปภารกิจไม่สำเร็จ: ${err?.message || String(err)}`);
     } finally {
       setIsNotifyCalendarSending(false);
     }

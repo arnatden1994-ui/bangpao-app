@@ -62,6 +62,9 @@ export const ActivityAnnouncementModal: React.FC<ActivityAnnouncementModalProps>
   const [location, setLocation] = useState('ห้องประชุมเทศบาลตำบลบางเป้า');
   const [responsibleOfficer, setResponsibleOfficer] = useState('กองสาธารณสุขและสิ่งแวดล้อม');
   const [details, setDetails] = useState('');
+  const [notifyLine, setNotifyLine] = useState(true);
+  const [notifyTiming, setNotifyTiming] = useState<'instant' | 'on_date_morning' | 'day_before' | 'custom'>('instant');
+  const [customNotifyDate, setCustomNotifyDate] = useState('');
   const [status, setStatus] = useState<CalendarEventItem['status']>('pending');
 
   const [attachments, setAttachments] = useState<CalendarAttachment[]>([]);
@@ -179,6 +182,9 @@ export const ActivityAnnouncementModal: React.FC<ActivityAnnouncementModalProps>
         details: details.trim(),
         status,
         attachments,
+        notifyLine,
+        notifyTiming,
+        customNotifyDate: notifyTiming === 'custom' ? customNotifyDate : undefined,
         createdAt: editingEvent?.createdAt || nowIso,
         updatedAt: nowIso,
         completedAt: status === 'completed' ? editingEvent?.completedAt || nowIso : undefined,
@@ -598,6 +604,96 @@ export const ActivityAnnouncementModal: React.FC<ActivityAnnouncementModalProps>
                     );
                   })}
                 </div>
+              </div>
+            )}
+          </div>
+
+
+          {/* 🔔 ตั้งค่าการแจ้งเตือนเข้ากลุ่ม LINE & อีเมล */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-purple-50/60 to-emerald-50/60 border border-indigo-200/80 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <label className="inline-flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifyLine}
+                  onChange={(e) => setNotifyLine(e.target.checked)}
+                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                    <Bell className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>ส่งแจ้งเตือนเข้ากลุ่ม LINE กองสาธารณสุข & อีเมล</span>
+                  </span>
+                  <span className="text-[11px] text-slate-500 block">
+                    (ปลดเครื่องหมายถูกออก หากต้องการบันทึกเงียบๆ โดยไม่รบกวนกลุ่ม LINE)
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {notifyLine && (
+              <div className="space-y-2 pt-2 border-t border-indigo-100 animate-in fade-in duration-200">
+                <label className="block text-[11px] font-bold text-slate-700">
+                  เลือกช่วงเวลาที่ต้องการให้ระบบส่งแจ้งเตือน:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNotifyTiming('instant')}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      notifyTiming === 'instant'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    ⚡ ส่งทันทีที่บันทึก
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNotifyTiming('on_date_morning')}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      notifyTiming === 'on_date_morning'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    🌅 เช้าวันจัดงาน (07:30 น.)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNotifyTiming('day_before')}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      notifyTiming === 'day_before'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    ⏰ ล่วงหน้า 1 วัน (08:00 น.)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNotifyTiming('custom')}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      notifyTiming === 'custom'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    🗓️ กำหนดวันเอง
+                  </button>
+                </div>
+
+                {notifyTiming === 'custom' && (
+                  <div className="pt-1 flex items-center gap-2">
+                    <span className="text-xs text-slate-600 font-medium">ระบุวันที่ต้องการให้ส่งแจ้งเตือน:</span>
+                    <input
+                      type="date"
+                      value={customNotifyDate}
+                      onChange={(e) => setCustomNotifyDate(e.target.value)}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-purple-300 focus:outline-purple-500 bg-white"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>

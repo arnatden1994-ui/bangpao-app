@@ -1535,6 +1535,332 @@ export function buildCalendarNotificationPayload(
 /**
  * 4. Build Notification for Medical Equipment Follow-up & Due Return Reminders
  */
+
+/**
+ * 3.1 Build Automated Daily Morning Briefing Notification (Sent before 08:00 AM)
+ * Aggregates all daily tasks across the public health systems:
+ *  - Municipal Calendar Events & Trainings
+ *  - Sewage Truck Orders scheduled today
+ *  - LTC Medical Supply Deliveries today
+ *  - Equipment follow-up calls due today
+ */
+export function buildDailyMorningDigestPayload(params: {
+  dateStr?: string;
+  events: CalendarScheduleItem[];
+  sewageOrders?: { code: string; customerName: string; moo: string; time?: string }[];
+  ltcStops?: { name: string; moo: string; items: string }[];
+  dueFollowUps?: { patientName: string; equipment: string; phone?: string }[];
+  signers?: SignerSettings;
+}): NotificationPayload {
+  const dateStr = params.dateStr || toLocalDateStr();
+  const refCode = `DIGEST-${dateStr.replace(/-/g, '')}`;
+  const thaiDate = formatThaiDateWithDay(dateStr);
+  const signers = params.signers || DEFAULT_SIGNER_SETTINGS;
+
+  const totalTasks =
+    params.events.length +
+    (params.sewageOrders?.length || 0) +
+    (params.ltcStops?.length || 0) +
+    (params.dueFollowUps?.length || 0);
+
+  const title = `🌅 สรุปภารกิจประจำวัน: ${thaiDate}`;
+  const subtitle = `ภารกิจเตรียมพร้อมปฏิบัติงานวันนี้ รวม ${totalTasks} รายการ • กองสาธารณสุขและสิ่งแวดล้อม ทต.บางเป้า`;
+
+  // Attachments: A4 daily schedule plan
+  const htmlSource = generateOfficialCalendarPlanHtml(params.events, `สรุปภารกิจประจำวัน ${thaiDate}`, signers);
+  const pseudoPetition: PublicPetition = {
+    id: refCode,
+    trackingCode: refCode,
+    submissionDate: dateStr,
+    citizenName: signers.directorName || 'กองสาธารณสุขและสิ่งแวดล้อม ทต.บางเป้า',
+    phone: '075-251-xxx',
+    address: 'ต.บางเป้า อ.กันตัง จ.ตรัง',
+    title: `สรุปภารกิจเช้าประจำวัน ${thaiDate}`,
+    category: 'other',
+    description: `สรุปกำหนดการปฏิบัติงานช่วงเช้าประจำวัน ${thaiDate} รวม ${totalTasks} ภารกิจ`,
+    status: 'accepted',
+    assignedOfficer: 'กองสาธารณสุขและสิ่งแวดล้อม',
+  };
+  const docxBytes = generatePetitionDocxBytes(pseudoPetition, signers);
+  const docxBase64 = uint8ArrayToBase64(docxBytes);
+
+  const attachment: NotificationAttachment = {
+    id: `att-digest-${Date.now()}`,
+    title: `ตารางสรุปภารกิจประจำวัน (A4) - ${thaiDate}`,
+    formType: 'calendar_plan',
+    fileNamePdf: `สรุปภารกิจประจำวัน_${refCode}.pdf`,
+    fileNameDocx: `สรุปภารกิจประจำวัน_${refCode}.docx`,
+    htmlSource,
+    docxBase64,
+  };
+
+  const portalCalendarUrl = `https://bangpao-app.vercel.app/?tab=calendar`;
+
+  // Build specialized Morning Digest Flex Card
+  const lineFlexContents: Record<string, any> = {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#0F766E',
+      paddingAll: '16px',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            {
+              type: 'text',
+              text: '🌅 สรุปภารกิจเช้า (ก่อน 08:00 น.)',
+              color: '#FFFFFF',
+              size: 'xs',
+              weight: 'bold',
+              flex: 1,
+            },
+            {
+              type: 'text',
+              text: refCode,
+              color: '#CCFBF1',
+              size: 'xs',
+              align: 'end',
+              weight: 'bold',
+            },
+          ],
+        },
+        {
+          type: 'text',
+          text: title,
+          weight: 'bold',
+          size: 'lg',
+          color: '#FFFFFF',
+          wrap: true,
+          margin: 'md',
+        },
+        {
+          type: 'text',
+          text: subtitle,
+          size: 'xs',
+          color: '#E6FFFA',
+          wrap: true,
+          margin: 'xs',
+        },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '16px',
+      spacing: 'md',
+      contents: [
+        {
+          type: 'text',
+          text: `📋 สรุปงานวันนี้ (${totalTasks} รายการ):`,
+          weight: 'bold',
+          size: 'sm',
+          color: '#0F172A',
+        },
+        ...(params.events.length > 0
+          ? [
+              {
+                type: 'box',
+                layout: 'vertical',
+                backgroundColor: '#F0FDFA',
+                cornerRadius: '8px',
+                paddingAll: '10px',
+                contents: [
+                  {
+                    type: 'text',
+                    text: `🗓️ นัดหมาย & กิจกรรมราชการ (${params.events.length} งาน):`,
+                    weight: 'bold',
+                    size: 'xs',
+                    color: '#0D9488',
+                  },
+                  ...params.events.slice(0, 4).map((e, idx) => ({
+                    type: 'text',
+                    text: `${idx + 1}. [${e.time || '09:00 น.'}] ${e.title} (${e.location || 'ทต.บางเป้า'})`,
+                    size: 'xs',
+                    color: '#334155',
+                    wrap: true,
+                    margin: 'xs',
+                  })),
+                ],
+              },
+            ]
+          : []),
+        ...(params.sewageOrders && params.sewageOrders.length > 0
+          ? [
+              {
+                type: 'box',
+                layout: 'vertical',
+                backgroundColor: '#FFFBEB',
+                cornerRadius: '8px',
+                paddingAll: '10px',
+                contents: [
+                  {
+                    type: 'text',
+                    text: `🚛 คิวรถดูดสิ่งปฏิกูลวันนี้ (${params.sewageOrders.length} คิว):`,
+                    weight: 'bold',
+                    size: 'xs',
+                    color: '#D97706',
+                  },
+                  ...params.sewageOrders.map((s, idx) => ({
+                    type: 'text',
+                    text: `${idx + 1}. [${s.code}] ${s.customerName} (หมู่ ${s.moo})`,
+                    size: 'xs',
+                    color: '#451A03',
+                    wrap: true,
+                    margin: 'xs',
+                  })),
+                ],
+              },
+            ]
+          : []),
+        ...(params.ltcStops && params.ltcStops.length > 0
+          ? [
+              {
+                type: 'box',
+                layout: 'vertical',
+                backgroundColor: '#FFF1F2',
+                cornerRadius: '8px',
+                paddingAll: '10px',
+                contents: [
+                  {
+                    type: 'text',
+                    text: `🚑 ส่งมอบพัสดุ สปสช. LTC (${params.ltcStops.length} ราย):`,
+                    weight: 'bold',
+                    size: 'xs',
+                    color: '#E11D48',
+                  },
+                  ...params.ltcStops.slice(0, 3).map((l, idx) => ({
+                    type: 'text',
+                    text: `${idx + 1}. ผู้ป่วย ${l.name} (${l.moo}) - ${l.items}`,
+                    size: 'xs',
+                    color: '#881337',
+                    wrap: true,
+                    margin: 'xs',
+                  })),
+                ],
+              },
+            ]
+          : []),
+        ...(params.dueFollowUps && params.dueFollowUps.length > 0
+          ? [
+              {
+                type: 'box',
+                layout: 'vertical',
+                backgroundColor: '#F5F3FF',
+                cornerRadius: '8px',
+                paddingAll: '10px',
+                contents: [
+                  {
+                    type: 'text',
+                    text: `🩺 โทรติดตามอาการ/ยืมอุปกรณ์ (${params.dueFollowUps.length} ราย):`,
+                    weight: 'bold',
+                    size: 'xs',
+                    color: '#7C3AED',
+                  },
+                  ...params.dueFollowUps.slice(0, 3).map((f, idx) => ({
+                    type: 'text',
+                    text: `${idx + 1}. ${f.patientName} (${f.equipment})`,
+                    size: 'xs',
+                    color: '#4C1D95',
+                    wrap: true,
+                    margin: 'xs',
+                  })),
+                ],
+              },
+            ]
+          : []),
+        {
+          type: 'text',
+          text: '📁 แนบไฟล์ตารางแผนงานประจำวัน A4 (.pdf & .docx) ทางอีเมลแล้ว',
+          size: 'xxs',
+          color: '#64748B',
+        },
+      ],
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '14px',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#0F766E',
+          height: 'sm',
+          action: {
+            type: 'uri',
+            label: '📅 เปิดดูตารางภารกิจวันนี้ในระบบ',
+            uri: portalCalendarUrl,
+          },
+        },
+        {
+          type: 'button',
+          style: 'secondary',
+          height: 'sm',
+          action: {
+            type: 'uri',
+            label: '⏰ เปิดดูใน Google Calendar',
+            uri: 'https://calendar.google.com/calendar/r',
+          },
+        },
+      ],
+    },
+  };
+
+  const summaryLines = [
+    { label: '🗓️ วันที่', value: thaiDate },
+    { label: '📊 ภารกิจทั้งหมด', value: `${totalTasks} รายการ` },
+    { label: '📌 นัดหมายปฏิทิน', value: `${params.events.length} งาน` },
+    ...(params.sewageOrders?.length ? [{ label: '🚛 รถดูดส้วม', value: `${params.sewageOrders.length} คิว` }] : []),
+    ...(params.ltcStops?.length ? [{ label: '🚑 ส่งมอบ LTC', value: `${params.ltcStops.length} ราย` }] : []),
+    ...(params.dueFollowUps?.length ? [{ label: '🩺 ติดตามอุปกรณ์', value: `${params.dueFollowUps.length} ราย` }] : []),
+  ];
+
+  const emailSubject = `[กองสาธารณสุข ทต.บางเป้า] 🌅 สรุปภารกิจและแผนงานประจำวัน ${thaiDate} (${totalTasks} รายการ)`;
+  const emailHtmlBody = buildOfficialEmailHtml({
+    badgeText: '🌅 สรุปภารกิจเช้าก่อน 08:00 น.',
+    headerBgColor: '#0F766E',
+    referenceCode: refCode,
+    title,
+    subtitle,
+    summaryLines,
+    attachments: [attachment],
+  });
+
+  const lineTextFallback = [
+    `🌅 สรุปภารกิจประจำวัน: ${thaiDate}`,
+    `รวมทั้งหมด ${totalTasks} รายการ:`,
+    ...params.events.map((e, i) => `${i + 1}. [${e.time || '09:00'}] ${e.title} (${e.location || 'ทต.บางเป้า'})`),
+    ...(params.sewageOrders || []).map((s) => `• 🚛 [${s.code}] ${s.customerName} (ม.${s.moo})`),
+    ...(params.ltcStops || []).map((l) => `• 🚑 [LTC] ${l.name} (${l.items})`),
+    ...(params.dueFollowUps || []).map((f) => `• 🩺 [ติดตาม] ${f.patientName} (${f.equipment})`),
+    `📅 เปิดดูในระบบ: ${portalCalendarUrl}`,
+  ].join('\n');
+
+  return {
+    eventType: 'calendar_event',
+    referenceCode: refCode,
+    title,
+    subtitle,
+    urgency: 'normal',
+    requesterName: 'ระบบสรุปภารกิจเช้า กองสาธารณสุขฯ',
+    requesterPhone: '-',
+    villageName: 'ทุกหมู่บ้าน (หมู่ที่ 1 - 7)',
+    address: 'เทศบาลตำบลบางเป้า',
+    summaryLines,
+    lineTextFallback,
+    lineFlexContents,
+    emailSubject,
+    emailHtmlBody,
+    attachments: [attachment],
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export function buildFollowUpNotificationPayload(
   loans: (EquipmentLoan & Record<string, any>)[],
   signers: SignerSettings = DEFAULT_SIGNER_SETTINGS

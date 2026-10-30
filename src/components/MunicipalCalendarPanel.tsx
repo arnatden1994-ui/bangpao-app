@@ -74,6 +74,10 @@ export interface CalendarEventItem {
   completedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  notifyLine?: boolean;
+  notifyTiming?: 'instant' | 'on_date_morning' | 'day_before' | 'custom' | 'none';
+  customNotifyDate?: string;
+  isNotified?: boolean;
 }
 
 /** งานปฏิบัติการที่ต้อง "ปิดงาน" เมื่อทำเสร็จ (ถ้าเลยวันแล้วยังไม่ปิด = เลยกำหนด) */
@@ -194,6 +198,7 @@ export const INITIAL_CALENDAR_EVENTS: CalendarEventItem[] = [
   },
 ];
 
+export const STORAGE_KEY_DEMO_CLEARED = 'bangpao_calendar_demo_cleared_v1';
 export const DEMO_CALENDAR_EVENT_IDS = new Set(INITIAL_CALENDAR_EVENTS.map((e) => e.id));
 
 interface MunicipalCalendarPanelProps {
@@ -204,6 +209,7 @@ interface MunicipalCalendarPanelProps {
   onOpenCreateEventModal?: () => void;
   onOpenAttachment?: (att: CalendarAttachment, ev: CalendarEventItem) => void;
   onOpenActivityEditor?: (ev?: CalendarEventItem, presetDate?: string) => void;
+  onSendMorningBriefing?: () => void;
 }
 
 export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
@@ -214,17 +220,25 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
   onOpenCreateEventModal,
   onOpenAttachment,
   onOpenActivityEditor,
+  onSendMorningBriefing,
 }) => {
   const calendarEmail = 'bangpaohealthy@gmail.com';
 
   // Internal events fallback if not provided via props
   const [internalEvents, setInternalEvents] = useState<CalendarEventItem[]>(() => {
     try {
+      const isCleared = typeof window !== 'undefined' && localStorage.getItem('bangpao_calendar_demo_cleared_v1') === 'true';
       const stored = localStorage.getItem('bangpao_calendar_events_v2');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          if (isCleared) {
+            return parsed.filter((e) => !DEMO_CALENDAR_EVENT_IDS.has(e.id));
+          }
+          return parsed;
+        }
       }
+      if (isCleared) return [];
     } catch (e) {
       console.warn('Failed to parse local calendar events', e);
     }
@@ -333,20 +347,21 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
 
   const hasDemoEvents = events.some((e) => DEMO_CALENDAR_EVENT_IDS.has(e.id));
   const handleClearDemoEvents = () => {
-    if (window.confirm('คุณต้องการลบรายการนัดหมายตัวอย่าง (Demo) ทั้งหมด เพื่อเริ่มบันทึกข้อมูลงานจริงใช่หรือไม่?')) {
+    if (window.confirm('คุณต้องการลบรายการนัดหมายตัวอย่าง (Demo) ทั้งหมด เพื่อเริ่มบันทึกข้อมูลงานจริงใช่หรือไม่?\n\n(ข้อมูลตัวอย่าง 6 รายการจะถูกลบออกถาวร และจะไม่กลับมาอีกเมื่อรีเฟรชหน้าเว็บ)')) {
+      try {
+        localStorage.setItem('bangpao_calendar_demo_cleared_v1', 'true');
+      } catch {}
       const remaining = events.filter((e) => !DEMO_CALENDAR_EVENT_IDS.has(e.id));
       events.forEach((e) => {
-        if (DEMO_CALENDAR_EVENT_IDS.has(e.id) && propOnDeleteEvent) {
-          propOnDeleteEvent(e.id);
+        if (DEMO_CALENDAR_EVENT_IDS.has(e.id)) {
+          if (propOnDeleteEvent) propOnDeleteEvent(e.id);
         }
       });
-      if (!propOnDeleteEvent) {
-        setInternalEvents(remaining);
-      }
+      setInternalEvents(remaining);
       try {
         localStorage.setItem('bangpao_calendar_events_v2', JSON.stringify(remaining));
       } catch {}
-      setToastMessage('ล้างข้อมูลนัดหมายตัวอย่าง (Demo) เรียบร้อยแล้ว พร้อมเริ่มใช้งานจริง!');
+      setToastMessage('ล้างข้อมูลตัวอย่าง (Demo) ถาวรเรียบร้อยแล้ว และจะไม่กลับมาอีกเมื่อรีเฟรช');
       setTimeout(() => setToastMessage(null), 4000);
     }
   };
@@ -390,6 +405,9 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
   const [formLocation, setFormLocation] = useState('ตำบลบางเป้า อ.กันตัง จ.ตรัง');
   const [formOfficer, setFormOfficer] = useState('เจ้าหน้าที่กองสาธารณสุขและสิ่งแวดล้อม');
   const [formDetails, setFormDetails] = useState('');
+  const [formNotifyLine, setFormNotifyLine] = useState(true);
+  const [formNotifyTiming, setFormNotifyTiming] = useState<'instant' | 'on_date_morning' | 'day_before' | 'custom'>('instant');
+  const [formCustomNotifyDate, setFormCustomNotifyDate] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Month & Year calculations
@@ -489,6 +507,9 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
       responsibleOfficer: formOfficer.trim() || 'กองสาธารณสุขและสิ่งแวดล้อม',
       details: formDetails.trim() || 'กำหนดการปฏิบัติงานกองสาธารณสุขและสิ่งแวดล้อม ทต.บางเป้า',
       status: 'pending',
+      notifyLine: formNotifyLine,
+      notifyTiming: formNotifyTiming,
+      customNotifyDate: formNotifyTiming === 'custom' ? formCustomNotifyDate : undefined,
     };
 
     // 1. Add to system
@@ -757,6 +778,18 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
             </button>
           )}
 
+          {/* Morning Briefing button (Send before 08:00 AM) */}
+          {onSendMorningBriefing && (
+            <button
+              type="button"
+              onClick={onSendMorningBriefing}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-teal-600 hover:from-amber-600 hover:to-teal-700 text-white text-xs font-bold transition-all shadow-md hover:scale-105 cursor-pointer"
+              title="ส่งสรุปภารกิจและแผนงานประจำวันของวันนี้ (นัดหมาย + รถดูดส้วม + ส่งมอบ LTC) เข้ากลุ่ม LINE และอีเมล ก่อน 08:00 น."
+            >
+              <span>🌅 สรุปภารกิจเช้า (ก่อน 08:00 น.)</span>
+            </button>
+          )}
+
           {/* Main Direct Add Button */}
           <button
             type="button"
@@ -976,6 +1009,92 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
                 className="w-full px-3 py-1.5 rounded-lg border border-slate-300 focus:outline-emerald-600 bg-white resize-none"
               />
             </div>
+          </div>
+
+
+          {/* Notification Preferences */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50/80 via-teal-50/70 to-indigo-50/70 border border-emerald-200/90 space-y-2.5">
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formNotifyLine}
+                onChange={(e) => setFormNotifyLine(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+              />
+              <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-emerald-700" />
+                <span>ส่งแจ้งเตือนเข้ากลุ่ม LINE กองสาธารณสุข & อีเมล</span>
+              </span>
+            </label>
+            <p className="text-[11px] text-slate-500 ml-6">
+              (ปลดเครื่องหมายถูกออก หากต้องการบันทึกเงียบๆ ลงปฏิทินโดยไม่ส่งเข้ากลุ่ม LINE)
+            </p>
+
+            {formNotifyLine && (
+              <div className="space-y-1.5 pt-2 border-t border-emerald-100 ml-6">
+                <span className="block text-[11px] font-bold text-slate-700">
+                  เลือกช่วงเวลาส่งแจ้งเตือน:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFormNotifyTiming('instant')}
+                    className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      formNotifyTiming === 'instant'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    ⚡ ส่งทันทีที่บันทึก
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormNotifyTiming('on_date_morning')}
+                    className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      formNotifyTiming === 'on_date_morning'
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    🌅 เช้าวันงาน (07:30 น.)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormNotifyTiming('day_before')}
+                    className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      formNotifyTiming === 'day_before'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    ⏰ ล่วงหน้า 1 วัน (08:00 น.)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormNotifyTiming('custom')}
+                    className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all text-center cursor-pointer ${
+                      formNotifyTiming === 'custom'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    🗓️ กำหนดวันเอง
+                  </button>
+                </div>
+
+                {formNotifyTiming === 'custom' && (
+                  <div className="pt-1 flex items-center gap-2">
+                    <span className="text-xs text-slate-600">ระบุวันที่แจ้งเตือน:</span>
+                    <input
+                      type="date"
+                      value={formCustomNotifyDate}
+                      onChange={(e) => setFormCustomNotifyDate(e.target.value)}
+                      className="px-2 py-0.5 text-xs rounded-lg border border-purple-300 focus:outline-purple-500 bg-white"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Form Action Buttons: 2 Clear options */}
