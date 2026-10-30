@@ -52,9 +52,11 @@ import {
   MunicipalCalendarPanel,
   CalendarEventItem,
   INITIAL_CALENDAR_EVENTS,
+  DEMO_CALENDAR_EVENT_IDS,
   CalendarAttachment,
   ACTIVITY_DOC_TYPES,
   getEventDisplayStatus,
+  eventCoversDate,
 } from './MunicipalCalendarPanel.tsx';
 import {
   saveToFirestore,
@@ -73,6 +75,7 @@ import {
   parseFlexibleDate,
   formatFileSize,
   toLocalDateStr,
+  formatThaiDateShort,
 } from '../utils/dateUtils.ts';
 import {
   Establishment,
@@ -85,6 +88,8 @@ import {
   NhsoProject,
   PublicPetition,
   MainNavTab,
+  SignerSettings,
+  DEFAULT_SIGNER_SETTINGS,
 } from '../types/index.ts';
 
 interface ExecutiveCommandDashboardProps {
@@ -97,6 +102,7 @@ interface ExecutiveCommandDashboardProps {
   equipmentList: MedicalEquipment[];
   loans: EquipmentLoan[];
   inspections: InspectionRecord[];
+  signerSettings?: SignerSettings;
   onNavigateTab: (tab: MainNavTab, subTab?: string) => void;
   onOpenPrintModal: (petition?: PublicPetition) => void;
   onOpenCitizenShareModal?: () => void;
@@ -113,6 +119,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   equipmentList = [],
   loans = [],
   inspections = [],
+  signerSettings = DEFAULT_SIGNER_SETTINGS,
   onNavigateTab,
   onOpenPrintModal,
   onOpenCitizenShareModal,
@@ -458,7 +465,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         id: ev.id,
         title: ev.title,
         date: ev.date,
-        time: ev.startTime ? `${ev.startTime} - ${ev.endTime || '12:00'} น.` : ev.time || '09:00 น.',
+        time: ev.startTime ? `${ev.startTime} - ${ev.endTime || '12:00'} น.` : '09:00 - 12:00 น.',
         type: ev.category,
         location: ev.location,
         assignee: ev.responsibleOfficer,
@@ -472,26 +479,26 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         .map((p) => ({
           code: p.trackingCode || p.id,
           customerName: p.citizenName,
-          moo: p.moo || '1',
+          moo: (p as any).moo || '1',
           time: (p as any).appointmentTime,
         }));
 
       // 3. LTC stops
       const todayLtc = ltcPatients
         .slice(0, 4)
-        .map((l) => ({
-          name: l.name || (l as any).fullName,
+        .map((l: any) => ({
+          name: l.fullName || l.name || l.hn || 'ผู้ป่วย LTC',
           moo: l.moo || '1',
-          items: l.itemsNeeded || 'ชุดดูแล LTC / ผ้าอ้อม',
+          items: (l.supplies && l.supplies.length > 0 ? l.supplies.join(', ') : '') || l.carePlan || 'ชุดดูแล LTC / ผ้าอ้อม',
         }));
 
       // 4. Due follow ups
       const todayFollowUps = loans
         .filter((l) => l.status === 'borrowed')
         .slice(0, 4)
-        .map((l) => ({
-          patientName: l.patientName,
-          equipment: l.equipmentName,
+        .map((l: any) => ({
+          patientName: l.patientName || 'ผู้ยืมอุปกรณ์',
+          equipment: l.equipmentName || 'อุปกรณ์การแพทย์',
           phone: l.borrowerPhone || l.phone,
         }));
 
@@ -501,7 +508,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         sewageOrders: todaySewage,
         ltcStops: todayLtc,
         dueFollowUps: todayFollowUps,
-        signers: signerSettings,
+        signers: signerSettings || DEFAULT_SIGNER_SETTINGS,
       });
 
       await dispatchNotification(payload);

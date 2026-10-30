@@ -18,6 +18,7 @@ import {
   Sparkles,
   ExternalLink,
   Eye,
+  Bell,
 } from 'lucide-react';
 import {
   CalendarEventItem,

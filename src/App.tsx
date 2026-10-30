@@ -1258,6 +1258,7 @@ unsubLicenses();
                 equipmentList={equipmentList}
                 loans={loans}
                 inspections={inspections}
+                signerSettings={signerSettings}
                 onShowToast={showToast}
                 onNavigateTab={(tab, subTab) => {
                   if (tab === 'settings' && subTab) {
