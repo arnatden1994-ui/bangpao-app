@@ -27,19 +27,96 @@ import {
   Download,
   Check,
   Pencil,
+  Paperclip,
+  FileText,
+  Megaphone,
 } from 'lucide-react';
+import { StoredFileAttachment } from '../services/fileStorageService.ts';
+import { toLocalDateStr, daysFromToday, formatThaiDateShort, formatFileSize } from '../utils/dateUtils.ts';
+
+export type CalendarAttachment = StoredFileAttachment;
+
+/** ประเภทหนังสือ / กิจกรรมประชาสัมพันธ์ */
+export type ActivityDocType =
+  | 'invitation_training'
+  | 'invitation_meeting'
+  | 'invitation_event'
+  | 'announcement'
+  | 'official_order'
+  | 'other';
+
+export const ACTIVITY_DOC_TYPES: Record<ActivityDocType, { label: string; emoji: string; color: string }> = {
+  invitation_training: { label: 'หนังสือเชิญอบรม / สัมมนา', emoji: '🎓', color: 'bg-violet-50 text-violet-800 border-violet-200' },
+  invitation_meeting: { label: 'หนังสือเชิญประชุม', emoji: '🗂️', color: 'bg-sky-50 text-sky-800 border-sky-200' },
+  invitation_event: { label: 'หนังสือเชิญร่วมงาน / พิธี', emoji: '🎉', color: 'bg-pink-50 text-pink-800 border-pink-200' },
+  announcement: { label: 'ประชาสัมพันธ์กิจกรรม', emoji: '📢', color: 'bg-orange-50 text-orange-800 border-orange-200' },
+  official_order: { label: 'คำสั่ง / หนังสือราชการ', emoji: '📜', color: 'bg-slate-100 text-slate-800 border-slate-300' },
+  other: { label: 'เอกสารอื่น ๆ', emoji: '📎', color: 'bg-slate-50 text-slate-700 border-slate-200' },
+};
 
 export interface CalendarEventItem {
   id: string;
   title: string;
-  category: 'ltc' | 'inspection' | 'sewage' | 'nhso' | 'equipment' | 'general';
-  date: string; // YYYY-MM-DD
+  category: 'ltc' | 'inspection' | 'sewage' | 'nhso' | 'equipment' | 'general' | 'activity';
+  date: string; // YYYY-MM-DD (วันเริ่ม)
+  endDate?: string; // YYYY-MM-DD (กรณีกิจกรรมหลายวัน เช่น อบรม 3 วัน)
   startTime: string; // HH:mm
   endTime: string; // HH:mm
   location: string;
   responsibleOfficer: string;
   details: string;
   status: 'pending' | 'in_progress' | 'completed';
+  // ประชาสัมพันธ์ / หนังสือเชิญ
+  docType?: ActivityDocType;
+  docNo?: string; // เลขที่หนังสือ เช่น ตง 0023.4/ว 1234
+  fromAgency?: string; // หน่วยงานเจ้าของหนังสือ
+  attachments?: CalendarAttachment[];
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** งานปฏิบัติการที่ต้อง "ปิดงาน" เมื่อทำเสร็จ (ถ้าเลยวันแล้วยังไม่ปิด = เลยกำหนด) */
+export const OPERATIONAL_CATEGORIES: CalendarEventItem['category'][] = ['ltc', 'inspection', 'sewage', 'equipment'];
+
+/** ตรวจว่ากิจกรรมครอบคลุมวันที่ระบุหรือไม่ (รองรับกิจกรรมหลายวัน) */
+export function eventCoversDate(ev: CalendarEventItem, dateKey: string): boolean {
+  const end = ev.endDate && ev.endDate >= ev.date ? ev.endDate : ev.date;
+  return dateKey >= ev.date && dateKey <= end;
+}
+
+export type EventDisplayStatus = 'completed' | 'ongoing' | 'today' | 'upcoming' | 'overdue' | 'past';
+
+/**
+ * สถานะจริงของกิจกรรม ณ เวลาปัจจุบัน (คำนวณสด ไม่ใช้ค่าที่บันทึกค้างไว้)
+ */
+export function getEventDisplayStatus(ev: CalendarEventItem, now: Date = new Date()): EventDisplayStatus {
+  if (ev.status === 'completed') return 'completed';
+  const today = toLocalDateStr(now);
+  const end = ev.endDate && ev.endDate >= ev.date ? ev.endDate : ev.date;
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  if (today < ev.date) return 'upcoming';
+  if (today > end) return OPERATIONAL_CATEGORIES.includes(ev.category) ? 'overdue' : 'past';
+
+  const isMultiDay = end !== ev.date;
+  if (isMultiDay) return 'ongoing';
+  if (hhmm >= (ev.startTime || '00:00') && hhmm <= (ev.endTime || '23:59')) return 'ongoing';
+  if (hhmm > (ev.endTime || '23:59') && !OPERATIONAL_CATEGORIES.includes(ev.category)) return 'past';
+  return 'today';
+}
+
+/** เรียงลำดับ: วันนี้/กำลังดำเนินการ → ที่จะถึง (ใกล้สุดก่อน) → เลยกำหนด → ผ่านไปแล้ว/เสร็จสิ้น (ล่าสุดก่อน) */
+export function sortEventsSmart(list: CalendarEventItem[]): CalendarEventItem[] {
+  const rank: Record<EventDisplayStatus, number> = { ongoing: 0, today: 1, upcoming: 2, overdue: 3, past: 4, completed: 5 };
+  return [...list].sort((a, b) => {
+    const sa = getEventDisplayStatus(a);
+    const sb = getEventDisplayStatus(b);
+    if (rank[sa] !== rank[sb]) return rank[sa] - rank[sb];
+    const ka = `${a.date} ${a.startTime}`;
+    const kb = `${b.date} ${b.startTime}`;
+    return rank[sa] <= 2 ? ka.localeCompare(kb) : kb.localeCompare(ka);
+  });
 }
 
 export const INITIAL_CALENDAR_EVENTS: CalendarEventItem[] = [
@@ -117,12 +194,16 @@ export const INITIAL_CALENDAR_EVENTS: CalendarEventItem[] = [
   },
 ];
 
+export const DEMO_CALENDAR_EVENT_IDS = new Set(INITIAL_CALENDAR_EVENTS.map((e) => e.id));
+
 interface MunicipalCalendarPanelProps {
   events?: CalendarEventItem[];
   onAddEvent?: (newEvent: CalendarEventItem) => void;
   onUpdateEvent?: (updatedEvent: CalendarEventItem) => void;
   onDeleteEvent?: (id: string) => void;
   onOpenCreateEventModal?: () => void;
+  onOpenAttachment?: (att: CalendarAttachment, ev: CalendarEventItem) => void;
+  onOpenActivityEditor?: (ev?: CalendarEventItem, presetDate?: string) => void;
 }
 
 export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
@@ -131,6 +212,8 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
   onUpdateEvent: propOnUpdateEvent,
   onDeleteEvent: propOnDeleteEvent,
   onOpenCreateEventModal,
+  onOpenAttachment,
+  onOpenActivityEditor,
 }) => {
   const calendarEmail = 'bangpaohealthy@gmail.com';
 
@@ -228,6 +311,44 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
     setToastMessage(`แก้ไขข้อมูลนัดหมาย "${updated.title}" เรียบร้อยแล้ว`);
     setTimeout(() => setToastMessage(null), 4000);
     setEditingEvent(null);
+  };
+
+  const handleToggleComplete = (ev: CalendarEventItem) => {
+    const nowIso = new Date().toISOString();
+    const isDone = ev.status === 'completed';
+    const updated: CalendarEventItem = {
+      ...ev,
+      status: isDone ? 'pending' : 'completed',
+      completedAt: isDone ? undefined : nowIso,
+      updatedAt: nowIso,
+    };
+    if (propOnUpdateEvent) {
+      propOnUpdateEvent(updated);
+    } else {
+      setInternalEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    }
+    setToastMessage(isDone ? `เปิดงาน "${ev.title}" อีกครั้ง` : `ปิดงาน "${ev.title}" เรียบร้อย ✅`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const hasDemoEvents = events.some((e) => DEMO_CALENDAR_EVENT_IDS.has(e.id));
+  const handleClearDemoEvents = () => {
+    if (window.confirm('คุณต้องการลบรายการนัดหมายตัวอย่าง (Demo) ทั้งหมด เพื่อเริ่มบันทึกข้อมูลงานจริงใช่หรือไม่?')) {
+      const remaining = events.filter((e) => !DEMO_CALENDAR_EVENT_IDS.has(e.id));
+      events.forEach((e) => {
+        if (DEMO_CALENDAR_EVENT_IDS.has(e.id) && propOnDeleteEvent) {
+          propOnDeleteEvent(e.id);
+        }
+      });
+      if (!propOnDeleteEvent) {
+        setInternalEvents(remaining);
+      }
+      try {
+        localStorage.setItem('bangpao_calendar_events_v2', JSON.stringify(remaining));
+      } catch {}
+      setToastMessage('ล้างข้อมูลนัดหมายตัวอย่าง (Demo) เรียบร้อยแล้ว พร้อมเริ่มใช้งานจริง!');
+      setTimeout(() => setToastMessage(null), 4000);
+    }
   };
 
   const handleConfirmDelete = () => {
@@ -462,18 +583,39 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = toLocalDateStr();
 
-  const filteredEvents = events.filter((ev) => {
-    if (selectedDate && ev.date !== selectedDate) return false;
-    if (categoryFilter === 'all') return true;
-    if (categoryFilter === 'today') return ev.date === todayStr;
-    if (categoryFilter === 'urgent') return ev.date <= todayStr;
-    return ev.category === categoryFilter;
-  });
+  const filteredEvents = sortEventsSmart(
+    events.filter((ev) => {
+      if (selectedDate && !eventCoversDate(ev, selectedDate)) return false;
+      const st = getEventDisplayStatus(ev);
+      if (categoryFilter === 'all') return true;
+      if (categoryFilter === 'upcoming') return st === 'upcoming' || st === 'today' || st === 'ongoing';
+      if (categoryFilter === 'today') return eventCoversDate(ev, todayStr);
+      if (categoryFilter === 'overdue') return st === 'overdue';
+      if (categoryFilter === 'done') return st === 'completed' || st === 'past';
+      if (categoryFilter === 'urgent') return st === 'overdue' || st === 'today' || st === 'ongoing';
+      if (categoryFilter === 'activity') return ev.category === 'activity' || (ev.attachments?.length || 0) > 0;
+      return ev.category === categoryFilter;
+    })
+  );
+
+  const countByFilter = {
+    upcoming: events.filter((e) => ['upcoming', 'today', 'ongoing'].includes(getEventDisplayStatus(e))).length,
+    overdue: events.filter((e) => getEventDisplayStatus(e) === 'overdue').length,
+    activity: events.filter((e) => e.category === 'activity' || (e.attachments?.length || 0) > 0).length,
+    done: events.filter((e) => ['completed', 'past'].includes(getEventDisplayStatus(e))).length,
+  };
 
   const getCategoryBadge = (cat: CalendarEventItem['category']) => {
     switch (cat) {
+      case 'activity':
+        return {
+          label: 'ประชาสัมพันธ์ / หนังสือเชิญ',
+          color: 'bg-violet-50 text-violet-700 border-violet-200',
+          dot: 'bg-violet-500',
+          icon: Megaphone,
+        };
       case 'ltc':
         return {
           label: 'LTC ผู้ป่วยติดเตียง',
@@ -519,15 +661,30 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
     }
   };
 
-  const getUrgencyText = (eventDate: string) => {
-    if (eventDate === todayStr) return { text: '🚨 วันนี้', color: 'bg-red-500 text-white' };
-    const diffDays = Math.ceil(
-      (new Date(eventDate).getTime() - new Date(todayStr).getTime()) / (1000 * 60 * 60 * 24)
-    );
-    if (diffDays === 1) return { text: '⚡ พรุ่งนี้', color: 'bg-amber-500 text-white' };
-    if (diffDays > 1 && diffDays <= 3) return { text: `ใน ${diffDays} วัน`, color: 'bg-sky-600 text-white' };
-    if (diffDays > 3 && diffDays <= 7) return { text: 'สัปดาห์นี้', color: 'bg-emerald-600 text-white' };
-    return { text: 'เร็วๆ นี้', color: 'bg-slate-600 text-white' };
+  const getUrgencyText = (ev: CalendarEventItem) => {
+    const st = getEventDisplayStatus(ev);
+    const diffDays = daysFromToday(ev.date) ?? 0;
+    const endDiff = daysFromToday(ev.endDate && ev.endDate >= ev.date ? ev.endDate : ev.date) ?? 0;
+    switch (st) {
+      case 'completed':
+        return { text: '✅ เสร็จสิ้นแล้ว', color: 'bg-emerald-600 text-white' };
+      case 'ongoing':
+        return { text: '🟢 กำลังดำเนินการ', color: 'bg-teal-600 text-white animate-pulse' };
+      case 'today':
+        return { text: '🚨 วันนี้', color: 'bg-red-500 text-white' };
+      case 'overdue':
+        return { text: `⏰ เลยกำหนด ${Math.abs(endDiff)} วัน (รอปิดงาน)`, color: 'bg-rose-100 text-rose-800 border border-rose-300' };
+      case 'past':
+        return {
+          text: endDiff === 0 ? '✔ ผ่านไปแล้ว (วันนี้)' : `✔ ผ่านไปแล้ว ${Math.abs(endDiff)} วัน`,
+          color: 'bg-slate-200 text-slate-600',
+        };
+      default:
+        if (diffDays === 1) return { text: '⚡ พรุ่งนี้', color: 'bg-amber-500 text-white' };
+        if (diffDays <= 3) return { text: `ใน ${diffDays} วัน`, color: 'bg-sky-600 text-white' };
+        if (diffDays <= 7) return { text: `สัปดาห์นี้ (อีก ${diffDays} วัน)`, color: 'bg-emerald-600 text-white' };
+        return { text: `อีก ${diffDays} วัน`, color: 'bg-slate-600 text-white' };
+    }
   };
 
   return (
@@ -576,6 +733,30 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {onOpenActivityEditor && (
+            <button
+              type="button"
+              onClick={() => onOpenActivityEditor(undefined, selectedDate || undefined)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs font-bold transition-all shadow-md hover:scale-105 cursor-pointer"
+              title="ประชาสัมพันธ์กิจกรรม / บันทึกหนังสือเชิญอบรม ประชุม ร่วมงาน พร้อมแนบไฟล์"
+            >
+              <Megaphone className="w-4 h-4" />
+              <span>📢 ประชาสัมพันธ์ / แนบหนังสือเชิญ</span>
+            </button>
+          )}
+
+          {hasDemoEvents && (
+            <button
+              type="button"
+              onClick={handleClearDemoEvents}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition-all cursor-pointer shadow-xs"
+              title="ลบรายการนัดหมายตัวอย่าง 6 รายการ เพื่อเริ่มใช้งานด้วยข้อมูลจริง"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+              <span>ล้างข้อมูลตัวอย่าง (Demo)</span>
+            </button>
+          )}
+
           {/* Main Direct Add Button */}
           <button
             type="button"
@@ -941,8 +1122,10 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
 
                 const isToday = dateKey === todayStr;
                 const isSelected = dateKey === selectedDate;
-                const dayEvents = events.filter((e) => e.date === dateKey);
+                const dayEvents = events.filter((e) => eventCoversDate(e, dateKey));
                 const hasEvents = dayEvents.length > 0;
+                const hasAttachment = dayEvents.some((e) => (e.attachments?.length || 0) > 0);
+                const isPastDay = dateKey < todayStr;
 
                 return (
                   <button
@@ -957,10 +1140,18 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
                         ? 'bg-emerald-600 text-white font-black shadow-md scale-105'
                         : isToday
                         ? 'bg-emerald-100 text-emerald-900 font-black border-2 border-emerald-500'
+                        : isPastDay
+                        ? 'bg-slate-50 hover:bg-emerald-50 text-slate-400 border border-slate-100 hover:border-emerald-200'
                         : 'bg-white hover:bg-emerald-50 text-slate-700 border border-slate-100 hover:border-emerald-200'
                     }`}
+                    title={dayEvents.map((e) => `• ${e.title}`).join('\n') || undefined}
                   >
                     <span>{dayNum}</span>
+                    {hasAttachment && (
+                      <Paperclip
+                        className={`absolute top-0.5 right-0.5 w-2.5 h-2.5 ${isSelected ? 'text-amber-200' : 'text-violet-500'}`}
+                      />
+                    )}
 
                     {hasEvents && (
                       <span className="flex items-center gap-0.5 mt-0.5">
@@ -1015,14 +1206,61 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCategoryFilter('urgent')}
-                  className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
-                    categoryFilter === 'urgent'
-                      ? 'bg-rose-600 text-white font-bold shadow-xs'
-                      : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                  onClick={() => setCategoryFilter('upcoming')}
+                  className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryFilter === 'upcoming'
+                      ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                   }`}
                 >
-                  🚨 เร่งด่วน / วันนี้
+                  <span>⚡ เร็วๆ นี้ / วันนี้</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/30">
+                    {countByFilter.upcoming}
+                  </span>
+                </button>
+                {countByFilter.overdue > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCategoryFilter('overdue')}
+                    className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                      categoryFilter === 'overdue'
+                        ? 'bg-rose-600 text-white font-bold shadow-xs'
+                        : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                    }`}
+                  >
+                    <span>⏰ เลยกำหนด (รอปิดงาน)</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-200 text-rose-900 font-black">
+                      {countByFilter.overdue}
+                    </span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('activity')}
+                  className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryFilter === 'activity'
+                      ? 'bg-violet-600 text-white font-bold shadow-xs'
+                      : 'bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200'
+                  }`}
+                >
+                  <span>📢 กิจกรรม & หนังสือเชิญ</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-violet-200 text-violet-900 font-black">
+                    {countByFilter.activity}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('done')}
+                  className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                    categoryFilter === 'done'
+                      ? 'bg-slate-700 text-white font-bold shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>✔ ผ่านไปแล้ว / เสร็จสิ้น</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-800">
+                    {countByFilter.done}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1033,7 +1271,7 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
                       : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
                   }`}
                 >
-                  LTC เยี่ยมบ้าน
+                  LTC
                 </button>
                 <button
                   type="button"
@@ -1071,58 +1309,89 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
             </div>
 
             {/* List of Notification Cards */}
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[540px] overflow-y-auto pr-1">
               {filteredEvents.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
-                  <CalendarIcon className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                  <span>ไม่มีรายการนัดหมายในวันที่หรือหมวดหมู่ที่เลือก</span>
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs space-y-2">
+                  <CalendarIcon className="w-8 h-8 mx-auto text-slate-300" />
+                  <p>ไม่มีรายการนัดหมายในวันที่หรือหมวดหมู่ที่เลือก</p>
+                  {onOpenActivityEditor && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenActivityEditor(undefined, selectedDate || undefined)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                    >
+                      <Megaphone className="w-3.5 h-3.5" />
+                      <span>+ บันทึกกิจกรรม / หนังสือเชิญในวันนี้</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 filteredEvents.map((ev) => {
                   const badge = getCategoryBadge(ev.category);
-                  const urgency = getUrgencyText(ev.date);
+                  const urgency = getUrgencyText(ev);
                   const CategoryIcon = badge.icon;
+                  const isDone = ev.status === 'completed';
+                  const docMeta = ev.docType ? ACTIVITY_DOC_TYPES[ev.docType] : null;
 
                   return (
                     <div
                       key={ev.id}
-                      className="bg-white rounded-2xl p-4 sm:p-4.5 border border-slate-200/80 hover:border-emerald-400 hover:shadow-md transition-all space-y-2.5 relative group"
+                      className={`bg-white rounded-2xl p-4 sm:p-4.5 border transition-all space-y-2.5 relative group ${
+                        isDone
+                          ? 'border-slate-200 bg-slate-50/50 opacity-90'
+                          : 'border-slate-200/90 hover:border-emerald-400 hover:shadow-md'
+                      }`}
                     >
-                      {/* Top Meta Line: Urgency + Category Badge + Time + Delete Button */}
+                      {/* Top Meta Line: Urgency + Category Badge + Time + Action Buttons */}
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide ${urgency.color}`}
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide shadow-2xs ${urgency.color}`}
                           >
                             {urgency.text}
                           </span>
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.color}`}
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.color}`}
                           >
                             <CategoryIcon className="w-3 h-3" />
                             <span>{badge.label}</span>
                           </span>
+                          {docMeta && (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${docMeta.color}`}
+                            >
+                              <span>{docMeta.emoji}</span>
+                              <span>{docMeta.label}</span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-slate-500 font-semibold flex items-center gap-1 mr-1">
                             <Clock className="w-3.5 h-3.5 text-amber-500" />
                             <span>
-                              {ev.date} • {ev.startTime} - {ev.endTime} น.
+                              {ev.date}
+                              {ev.endDate && ev.endDate !== ev.date ? ` ถึง ${ev.endDate}` : ''} • {ev.startTime} - {ev.endTime} น.
                             </span>
                           </span>
 
                           {/* ปุ่มแก้ไขข้อมูล */}
                           <button
                             type="button"
-                            onClick={() => handleStartEdit(ev)}
+                            onClick={() => {
+                              if (ev.category === 'activity' && onOpenActivityEditor) {
+                                onOpenActivityEditor(ev);
+                              } else {
+                                handleStartEdit(ev);
+                              }
+                            }}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
                             title="แก้ไขข้อมูลนัดหมายนี้"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* ปุ่มลบ (เปิดหน้าต่างยืนยันการลบแบบสวยงาม) */}
+                          {/* ปุ่มลบ */}
                           <button
                             type="button"
                             onClick={() => setEventToDelete(ev)}
@@ -1135,9 +1404,45 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
                       </div>
 
                       {/* Title */}
-                      <h5 className="text-sm font-bold text-slate-900 group-hover:text-emerald-800 transition-colors leading-snug">
-                        {ev.title}
-                      </h5>
+                      <div className="flex items-start justify-between gap-2">
+                        <h5
+                          className={`text-sm font-bold leading-snug ${
+                            isDone ? 'text-slate-600 line-through decoration-slate-400' : 'text-slate-900 group-hover:text-emerald-800'
+                          }`}
+                        >
+                          {ev.title}
+                        </h5>
+                        {/* ปุ่มปิดงาน / ทำแล้ว (Quick Toggle) */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleComplete(ev)}
+                          className={`shrink-0 px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            isDone
+                              ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 hover:scale-105 shadow-2xs'
+                          }`}
+                          title={isDone ? 'คลิกเพื่อเปิดงานใหม่อีกครั้ง' : 'คลิกเพื่อปิดงาน (ปฏิบัติงานเรียบร้อย)'}
+                        >
+                          <CheckCircle2 className={`w-3.5 h-3.5 ${isDone ? 'text-slate-600' : 'text-emerald-600'}`} />
+                          <span>{isDone ? 'เปิดใหม่อีกครั้ง' : 'ทำแล้ว / ปิดงาน'}</span>
+                        </button>
+                      </div>
+
+                      {/* Header details: docNo & agency if available */}
+                      {(ev.docNo || ev.fromAgency) && (
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 bg-amber-50/70 border border-amber-200/80 px-2.5 py-1 rounded-xl">
+                          {ev.docNo && (
+                            <span className="font-semibold">
+                              เลขที่หนังสือ: <strong className="font-mono text-slate-800">{ev.docNo}</strong>
+                            </span>
+                          )}
+                          {ev.fromAgency && (
+                            <span>
+                              หน่วยงาน: <strong className="text-slate-800">{ev.fromAgency}</strong>
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {/* Location & Officer */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 font-medium">
@@ -1152,27 +1457,71 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
                       </div>
 
                       {/* Details Snippet */}
-                      <p className="text-xs text-slate-500 leading-relaxed bg-slate-50/80 p-2 rounded-xl border border-slate-100">
-                        {ev.details}
-                      </p>
+                      {ev.details && (
+                        <p className="text-xs text-slate-500 leading-relaxed bg-slate-50/80 p-2 rounded-xl border border-slate-100 whitespace-pre-line">
+                          {ev.details}
+                        </p>
+                      )}
+
+                      {/* File Attachments (หนังสือเชิญ/เอกสาร/รูปภาพที่อัปโหลด) */}
+                      {ev.attachments && ev.attachments.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center gap-1 text-[11px] font-bold text-violet-700">
+                            <Paperclip className="w-3 h-3" />
+                            <span>ไฟล์แนบ ({ev.attachments.length} ไฟล์) — คลิกเพื่อเปิดดู:</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {ev.attachments.map((att) => {
+                              const isPdf = att.mimeType === 'application/pdf' || att.name.toLowerCase().endsWith('.pdf');
+                              const isImg = att.mimeType.startsWith('image/');
+                              return (
+                                <button
+                                  key={att.id}
+                                  type="button"
+                                  onClick={() => (onOpenAttachment ? onOpenAttachment(att, ev) : null)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-900 text-xs font-medium transition-all shadow-2xs hover:scale-105 cursor-pointer max-w-full"
+                                  title={`คลิกเปิดดูไฟล์ "${att.name}" (${formatFileSize(att.size)})`}
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                                  <span className="truncate max-w-[200px]">{att.name}</span>
+                                  <span className="text-[10px] px-1 py-0.2 rounded bg-violet-200/70 text-violet-800 font-semibold shrink-0">
+                                    {isPdf ? 'PDF' : isImg ? 'รูป' : formatFileSize(att.size)}
+                                  </span>
+                                  <Eye className="w-3 h-3 text-violet-500 shrink-0" />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Card Footer: 1-Click Action Buttons */}
                       <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
                         <div className="text-[11px] text-slate-400">
-                          ซิงก์กับ: <span className="font-mono text-emerald-700">{calendarEmail}</span>
+                          {isDone ? (
+                            <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> ดำเนินการเรียบร้อยแล้ว
+                            </span>
+                          ) : (
+                            <>
+                              ซิงก์กับ: <span className="font-mono text-emerald-700">{calendarEmail}</span>
+                            </>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {/* ปุ่มแก้ไขในแถบล่าง */}
-                          <button
-                            type="button"
-                            onClick={() => handleStartEdit(ev)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold transition-all cursor-pointer hover:scale-105 shadow-2xs"
-                            title="แก้ไขรายละเอียดนัดหมาย"
-                          >
-                            <Pencil className="w-3 h-3 text-amber-600" />
-                            <span>แก้ไข</span>
-                          </button>
+                          {/* ปุ่มแนบไฟล์เพิ่ม (สำหรับกิจกรรมที่ยังไม่มีไฟล์) */}
+                          {(!ev.attachments || ev.attachments.length === 0) && onOpenActivityEditor && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenActivityEditor(ev)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 font-semibold transition-all cursor-pointer"
+                              title="อัปโหลดหนังสือเชิญหรือเอกสารแนบ"
+                            >
+                              <Paperclip className="w-3 h-3 text-violet-500" />
+                              <span>แนบไฟล์</span>
+                            </button>
+                          )}
 
                           <button
                             type="button"
@@ -1201,7 +1550,7 @@ export const MunicipalCalendarPanel: React.FC<MunicipalCalendarPanelProps> = ({
                             title="เปิดและบันทึกลงใน Google Calendar (เชิญ bangpaohealthy@gmail.com)"
                           >
                             <CalendarIcon className="w-3 h-3 text-amber-200" />
-                            <span>เปิดใน Google Calendar</span>
+                            <span>Google Cal</span>
                             <ExternalLink className="w-2.5 h-2.5 opacity-80" />
                           </button>
                         </div>

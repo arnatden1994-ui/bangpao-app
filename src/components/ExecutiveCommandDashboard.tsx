@@ -39,20 +39,40 @@ import {
   Bell,
   Send,
   Mail,
+  Paperclip,
+  Megaphone,
+  FileText,
+  Plus,
 } from 'lucide-react';
 import { GoogleCalendarModal } from './GoogleCalendarModal.tsx';
 import { CitizenPortalShareModal } from './CitizenPortalShareModal.tsx';
+import { ActivityAnnouncementModal } from './ActivityAnnouncementModal.tsx';
+import { AttachmentViewerModal } from './AttachmentViewerModal.tsx';
 import {
   MunicipalCalendarPanel,
   CalendarEventItem,
   INITIAL_CALENDAR_EVENTS,
+  CalendarAttachment,
+  ACTIVITY_DOC_TYPES,
+  getEventDisplayStatus,
 } from './MunicipalCalendarPanel.tsx';
-import { saveToFirestore, deleteFromFirestore, COLLECTIONS } from '../services/firebaseService.ts';
+import {
+  saveToFirestore,
+  deleteFromFirestore,
+  subscribeCollection,
+  COLLECTIONS,
+} from '../services/firebaseService.ts';
 import {
   buildCalendarNotificationPayload,
   dispatchNotification,
   openAttachmentPrintableHtml,
 } from '../services/notificationService.ts';
+import {
+  formatRelativeThai,
+  parseFlexibleDate,
+  formatFileSize,
+  toLocalDateStr,
+} from '../utils/dateUtils.ts';
 import {
   Establishment,
   HazardousBusiness,
@@ -119,68 +139,54 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   const availableEquipmentUnits = equipmentList.reduce((acc, eq) => acc + (eq.availableQuantity || 0), 0) || 26;
   const inUseEquipmentUnits = equipmentList.reduce((acc, eq) => acc + (eq.inUseQuantity || 0), 0) || 58;
 
-  // 2. Ratings breakdown (36 establishments in Bangpao)
-  const ratingCounts = {
-    excellent: 11,
-    good: 18,
-    fair: 5,
-    reinspect: 2,
-  };
+  // 2. Ratings breakdown calculated dynamically from establishments / inspections
+  const totalEstablishmentsCount = establishments.length || 36;
+  const ratingCounts = (() => {
+    let excellent = 0;
+    let good = 0;
+    let fair = 0;
+    let reinspect = 0;
 
-  // 3. Activity Feed / Audit Log
-  const activities = [
-    {
-      id: 1,
-      title: 'ยื่นคำร้องสูบสิ่งปฏิกูลใหม่',
-      detail: 'ST-68004 • บ้านเลขที่ 195/1 หมู่ 5 ต.บางเป้า (นายนิรันดร์ ใจดี)',
-      time: '15 นาทีที่แล้ว',
-      type: 'petition',
-      icon: Truck,
-      color: 'bg-amber-100 text-amber-800',
-    },
-    {
-      id: 2,
-      title: 'ผลตรวจประเมินสุขลักษณะผ่านเกณฑ์ (88%)',
-      detail: 'ร้าน ก.ไก่ • นายตรวจบันทึกคะแนนผ่านเกณฑ์มาตรฐานสุขาภิบาล',
-      time: '1 ชั่วโมงที่แล้ว',
-      type: 'inspection',
-      icon: ClipboardCheck,
-      color: 'bg-emerald-100 text-emerald-800',
-    },
-    {
-      id: 3,
-      title: 'ต่ออายุใบอนุญาตประกอบกิจการ',
-      detail: 'บ.เอสทีเอส กันตัง โลจิสติกส์ • ออกใบอนุญาตเลขที่ 08/2569 แล้ว',
-      time: '3 ชั่วโมงที่แล้ว',
-      type: 'license',
-      icon: FileCheck2,
-      color: 'bg-teal-100 text-teal-800',
-    },
-    {
-      id: 4,
-      title: 'ส่งมอบชุดดูแล LTC สปสช.',
-      detail: 'เยี่ยมบ้านผู้ป่วยติดเตียง หมู่ 2 ต.บางเป้า มอบผ้าอ้อมและแผ่นรองซับ',
-      time: 'เมื่อวานนี้',
-      type: 'ltc',
-      icon: HeartPulse,
-      color: 'bg-pink-100 text-pink-800',
-    },
-    {
-      id: 5,
-      title: 'ทำสัญญายืมอุปกรณ์การแพทย์',
-      detail: 'เตียงผู้ป่วย 3 ไกร์ (EQ-002) • ผู้ยืม: นายวิเชียร สุขเกษม',
-      time: '2 วันที่แล้ว',
-      type: 'equipment',
-      icon: Stethoscope,
-      color: 'bg-indigo-100 text-indigo-800',
-    },
-  ];
+    establishments.forEach((est) => {
+      const score = est.latestScore;
+      const rating = est.latestRating;
+      if (est.status === 'needs_reinspection' || est.status === 'failed' || (score !== undefined && score < 60)) {
+        reinspect++;
+      } else if (rating === 'excellent' || (score !== undefined && score >= 85)) {
+        excellent++;
+      } else if (rating === 'good' || (score !== undefined && score >= 70)) {
+        good++;
+      } else if (rating === 'fair' || (score !== undefined && score >= 60)) {
+        fair++;
+      } else {
+        if (est.status === 'passed') good++;
+        else fair++;
+      }
+    });
+
+    if (excellent + good + fair + reinspect === 0) {
+      return { excellent: 11, good: 18, fair: 5, reinspect: 2 };
+    }
+    return { excellent, good, fair, reinspect };
+  })();
+
+  const passingRatePercent = totalEstablishmentsCount > 0
+    ? Math.round(((totalEstablishmentsCount - ratingCounts.reinspect) / totalEstablishmentsCount) * 100)
+    : 94;
 
   const [isArtworkModalOpen, setIsArtworkModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isCitizenShareModalOpen, setIsCitizenShareModalOpen] = useState(false);
   const [isCopiedDirectLink, setIsCopiedDirectLink] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  // Activity Announcement & Attachment Viewer Modals State
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [activityEditingEvent, setActivityEditingEvent] = useState<CalendarEventItem | null>(null);
+  const [activityPresetDate, setActivityPresetDate] = useState<string | undefined>(undefined);
+  const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
+  const [viewerAttachment, setViewerAttachment] = useState<CalendarAttachment | null>(null);
+  const [viewerLinkedEvent, setViewerLinkedEvent] = useState<CalendarEventItem | null>(null);
 
   // Shared Calendar Events State
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>(() => {
@@ -196,10 +202,151 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
     return INITIAL_CALENDAR_EVENTS;
   });
 
+  // Real-time Firestore synchronization for Calendar Events & Announcements
+  useEffect(() => {
+    const unsub = subscribeCollection<CalendarEventItem>(COLLECTIONS.CALENDAR_EVENTS, (remoteItems) => {
+      if (remoteItems && Array.isArray(remoteItems)) {
+        setCalendarEvents((prev) => {
+          const map = new Map<string, CalendarEventItem>();
+          prev.forEach((e) => map.set(e.id, e));
+          remoteItems.forEach((e) => map.set(e.id, e));
+          const merged = Array.from(map.values());
+          try {
+            localStorage.setItem('bangpao_calendar_events_v2', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // 3. Dynamic Activity Feed / Audit Log generated from real events & records
+  interface AuditActivityItem {
+    id: string;
+    title: string;
+    detail: string;
+    time: string;
+    timestamp: number;
+    type: 'petition' | 'inspection' | 'license' | 'ltc' | 'equipment' | 'activity';
+    icon: any;
+    color: string;
+    actionTab?: MainNavTab;
+  }
+
+  const activities: AuditActivityItem[] = (() => {
+    const list: AuditActivityItem[] = [];
+
+    // A. Real Petitions
+    petitions.forEach((p) => {
+      const dt = parseFlexibleDate(p.createdAt || p.submissionDate) || new Date();
+      const isSewage = p.category === 'waste_sewage' || p.title.includes('สิ่งปฏิกูล') || p.title.includes('ส้วม');
+      const statusLabel = p.status === 'resolved' ? 'ดำเนินการแล้ว' : p.status === 'assigned' ? 'จ่ายงานแล้ว' : 'รอดำเนินการ';
+      list.push({
+        id: `pet-${p.id}`,
+        title: isSewage ? `คำร้องสูบสิ่งปฏิกูล (${statusLabel})` : `คำร้อง: ${p.title} (${statusLabel})`,
+        detail: `${p.trackingCode || p.id} • ${p.address || 'ต.บางเป้า'} (${p.citizenName || 'ประชาชน'})`,
+        time: formatRelativeThai(dt),
+        timestamp: dt.getTime(),
+        type: 'petition',
+        icon: isSewage ? Truck : MessageSquareWarning,
+        color: isSewage ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800',
+        actionTab: 'petitions',
+      });
+    });
+
+    // B. Real Inspections
+    inspections.forEach((ins) => {
+      const dt = parseFlexibleDate(ins.createdAt || ins.inspectionDate) || new Date();
+      const statusText = ins.status === 'passed' ? 'ผ่านเกณฑ์' : 'ต้องตรวจซ้ำ';
+      list.push({
+        id: `ins-${ins.id}`,
+        title: `ตรวจสุขลักษณะ ${ins.establishmentName} (${statusText} ${ins.totalScore}%)`,
+        detail: `${ins.establishmentType || 'สถานประกอบการ'} • ผู้ตรวจ: ${ins.inspectorName || 'เจ้าพนักงานสาธารณสุข'}`,
+        time: formatRelativeThai(dt),
+        timestamp: dt.getTime(),
+        type: 'inspection',
+        icon: ClipboardCheck,
+        color: ins.status === 'passed' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800',
+        actionTab: 'hazardous',
+      });
+    });
+
+    // C. Real Equipment Loans
+    loans.forEach((l) => {
+      const dt = parseFlexibleDate(l.createdAt || l.loanDate) || new Date();
+      const isReturned = l.status === 'returned';
+      list.push({
+        id: `loan-${l.id}`,
+        title: isReturned ? `ส่งคืนอุปกรณ์การแพทย์ (${l.equipmentName})` : `ทำสัญญายืมอุปกรณ์ (${l.equipmentName})`,
+        detail: `${l.loanCode || l.id} • ผู้ยืม: ${l.borrowerName || l.patientName || 'ประชาชน'} (${l.address || 'ต.บางเป้า'})`,
+        time: formatRelativeThai(dt),
+        timestamp: dt.getTime(),
+        type: 'equipment',
+        icon: Stethoscope,
+        color: isReturned ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800',
+        actionTab: 'equipment',
+      });
+    });
+
+    // D. Real License Records
+    licenses.forEach((lic) => {
+      const dt = parseFlexibleDate(lic.approvalDate || lic.createdAtFormatted) || new Date();
+      list.push({
+        id: `lic-${lic.id}`,
+        title: `ใบอนุญาต อภ.2: ${lic.businessName}`,
+        detail: `เลขที่ ${lic.licenseNumber || '-'}/${lic.licenseYear || '2569'} • เจ้าของ: ${lic.ownerName || '-'}`,
+        time: formatRelativeThai(dt),
+        timestamp: dt.getTime(),
+        type: 'license',
+        icon: FileCheck2,
+        color: 'bg-teal-100 text-teal-800',
+        actionTab: 'hazardous',
+      });
+    });
+
+    // E. Calendar Announcements & Events with attachments
+    calendarEvents.forEach((ev) => {
+      if (ev.category === 'activity' || (ev.attachments && ev.attachments.length > 0)) {
+        const dt = parseFlexibleDate(ev.createdAt || ev.date) || new Date();
+        const docInfo = ev.docType ? ACTIVITY_DOC_TYPES[ev.docType] : null;
+        list.push({
+          id: `cal-${ev.id}`,
+          title: `${docInfo ? docInfo.emoji + ' ' : ''}${ev.title}`,
+          detail: `${ev.fromAgency ? `จาก: ${ev.fromAgency} • ` : ''}${ev.location || 'ต.บางเป้า'}${ev.attachments?.length ? ` (${ev.attachments.length} ไฟล์แนบ)` : ''}`,
+          time: formatRelativeThai(dt),
+          timestamp: dt.getTime(),
+          type: 'activity',
+          icon: Megaphone,
+          color: 'bg-violet-100 text-violet-800',
+        });
+      }
+    });
+
+    list.sort((a, b) => b.timestamp - a.timestamp);
+
+    if (list.length === 0) {
+      return [
+        {
+          id: 'fb-1',
+          title: 'พร้อมใช้งานระบบบริหารข้อมูลสาธารณสุข',
+          detail: 'ข้อมูลจะอัปเดตแบบเรียลไทม์เมื่อมีการยื่นคำร้อง หรือบันทึกภารกิจ',
+          time: 'พร้อมใช้งาน',
+          timestamp: Date.now(),
+          type: 'petition',
+          icon: Activity,
+          color: 'bg-emerald-100 text-emerald-800',
+        },
+      ];
+    }
+
+    return list.slice(0, 10);
+  })();
+
   const [isNotifyCalendarSending, setIsNotifyCalendarSending] = useState(false);
 
   const handleAddCalendarEvent = (newEvent: CalendarEventItem) => {
-    setCalendarEvents((prev) => [newEvent, ...prev]);
+    setCalendarEvents((prev) => [newEvent, ...prev.filter((e) => e.id !== newEvent.id)]);
     saveToFirestore(COLLECTIONS.CALENDAR_EVENTS, newEvent).catch(() => {});
 
     // Automatically dispatch notification + A4 Schedule Form attachment for the new calendar appointment/plan
@@ -209,11 +356,11 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
           id: newEvent.id,
           title: newEvent.title,
           date: newEvent.date,
-          time: newEvent.time,
-          type: newEvent.type,
+          time: `${newEvent.startTime || '09:00'} - ${newEvent.endTime || '12:00'} น.`,
+          type: newEvent.category,
           location: newEvent.location,
-          assignee: newEvent.assignee,
-          description: newEvent.notes,
+          assignee: newEvent.responsibleOfficer,
+          description: newEvent.details,
         },
       ],
       `นัดหมาย/แผนงานใหม่: ${newEvent.title}`
@@ -232,11 +379,11 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         id: ev.id,
         title: ev.title,
         date: ev.date,
-        time: ev.time,
-        type: ev.type,
+        time: `${ev.startTime || '09:00'} - ${ev.endTime || '12:00'} น.`,
+        type: ev.category,
         location: ev.location,
-        assignee: ev.assignee,
-        description: ev.notes,
+        assignee: ev.responsibleOfficer,
+        description: ev.details,
       }));
       const payload = buildCalendarNotificationPayload(
         mapped,
@@ -815,8 +962,239 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
           onUpdateEvent={handleUpdateCalendarEvent}
           onDeleteEvent={handleDeleteCalendarEvent}
           onOpenCreateEventModal={() => setIsCalendarModalOpen(true)}
+          onOpenAttachment={(att, ev) => {
+            setViewerAttachment(att);
+            setViewerLinkedEvent(ev || null);
+            setIsViewerModalOpen(true);
+          }}
+          onOpenActivityEditor={(ev, presetDate) => {
+            setActivityEditingEvent(ev || null);
+            setActivityPresetDate(presetDate);
+            setIsActivityModalOpen(true);
+          }}
         />
       </div>
+
+      {/* ========================================================================= */}
+      {/* SECTION: ประชาสัมพันธ์กิจกรรม & คลังเอกสารหนังสือราชการล่าสุด (อัปโหลด & เปิดดูไฟล์) */}
+      {/* ========================================================================= */}
+      {(() => {
+        const activityEvents = calendarEvents.filter(
+          (e) => e.category === 'activity' || (e.attachments && e.attachments.length > 0)
+        );
+
+        return (
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center font-bold">
+                    <Megaphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base sm:text-lg text-slate-900 flex items-center gap-2">
+                      <span>ศูนย์ประชาสัมพันธ์กิจกรรม & คลังหนังสือราชการ (อบรม / ประชุม / ร่วมงาน)</span>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-violet-100 text-violet-800">
+                        {activityEvents.length} รายการ
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      บันทึกกิจกรรม ประชาสัมพันธ์กำหนดการ แนบไฟล์หนังสือเชิญ A4/PDF และคลิกเปิดดูเอกสารตัวจริงได้ทันที
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivityEditingEvent(null);
+                    setActivityPresetDate(undefined);
+                    setIsActivityModalOpen(true);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all hover:scale-105 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ บันทึกกิจกรรม / แนบหนังสือเชิญ</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List or Grid of Recent Activities */}
+            {activityEvents.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-gradient-to-br from-violet-50/50 to-fuchsia-50/30 border border-dashed border-violet-200 text-center space-y-2.5">
+                <div className="w-12 h-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mx-auto">
+                  <Megaphone className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-slate-800 text-sm">ยังไม่มีรายการประชาสัมพันธ์หรือหนังสือเชิญ</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  คลิกปุ่มด้านบนเพื่อบันทึกหนังสือเชิญอบรม, หนังสือเชิญประชุม หรือกิจกรรมสาธารณสุข พร้อมอัปโหลดไฟล์หนังสือราชการ A4/PDF
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivityEditingEvent(null);
+                    setActivityPresetDate(undefined);
+                    setIsActivityModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>เริ่มบันทึกกิจกรรมแรก</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                {activityEvents.slice(0, 6).map((act) => {
+                  const docMeta = act.docType ? ACTIVITY_DOC_TYPES[act.docType] : null;
+                  const isDone = act.status === 'completed';
+                  const attCount = act.attachments?.length || 0;
+
+                  return (
+                    <div
+                      key={act.id}
+                      className="p-4 rounded-2xl border border-slate-200/90 hover:border-violet-400 bg-white hover:shadow-md transition-all space-y-2.5 flex flex-col justify-between"
+                    >
+                      <div className="space-y-2">
+                        {/* Header: DocType Tag + Status */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                              docMeta ? docMeta.color : 'bg-violet-50 text-violet-800 border-violet-200'
+                            }`}
+                          >
+                            <span>{docMeta ? docMeta.emoji : '📢'}</span>
+                            <span>{docMeta ? docMeta.label : 'กิจกรรมประชาสัมพันธ์'}</span>
+                          </span>
+
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {isDone ? '✅ เสร็จสิ้นแล้ว' : 'รอดำเนินการ'}
+                          </span>
+                        </div>
+
+                        {/* Title */}
+                        <h4 className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">
+                          {act.title}
+                        </h4>
+
+                        {/* Meta info: Doc No / Agency */}
+                        {(act.docNo || act.fromAgency) && (
+                          <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl space-y-0.5">
+                            {act.docNo && (
+                              <div>
+                                <span className="text-slate-400">เลขที่: </span>
+                                <strong className="font-mono text-slate-800">{act.docNo}</strong>
+                              </div>
+                            )}
+                            {act.fromAgency && (
+                              <div>
+                                <span className="text-slate-400">จาก: </span>
+                                <strong className="text-slate-800">{act.fromAgency}</strong>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Date & Location */}
+                        <div className="text-xs text-slate-500 space-y-1">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Calendar className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                            <span className="font-medium">
+                              {act.date}
+                              {act.endDate && act.endDate !== act.date ? ` ถึง ${act.endDate}` : ''} ({act.startTime} - {act.endTime} น.)
+                            </span>
+                          </div>
+                          {act.location && (
+                            <div className="flex items-center gap-1.5 truncate">
+                              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                              <span className="truncate">{act.location}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Attachments Chips (Clickable to open) */}
+                        {attCount > 0 && (
+                          <div className="space-y-1 pt-1 border-t border-slate-100">
+                            <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                              <Paperclip className="w-3 h-3 text-violet-500" />
+                              <span>เอกสารแนบ ({attCount} ไฟล์) — คลิกเพื่อเปิดดู:</span>
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {act.attachments!.map((att) => (
+                                <button
+                                  key={att.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setViewerAttachment(att);
+                                    setViewerLinkedEvent(act);
+                                    setIsViewerModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-900 border border-violet-200 text-[11px] font-medium transition-all hover:scale-105 cursor-pointer max-w-full"
+                                  title={`เปิดดู ${att.name}`}
+                                >
+                                  <FileText className="w-3 h-3 text-violet-600 shrink-0" />
+                                  <span className="truncate max-w-[130px]">{att.name}</span>
+                                  <Eye className="w-3 h-3 text-violet-400 shrink-0" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card Footer Actions */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivityEditingEvent(act);
+                            setIsActivityModalOpen(true);
+                          }}
+                          className="text-slate-500 hover:text-violet-700 font-semibold cursor-pointer"
+                        >
+                          แก้ไขข้อมูล
+                        </button>
+
+                        {attCount > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewerAttachment(act.attachments![0]);
+                              setViewerLinkedEvent(act);
+                              setIsViewerModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-[11px] shadow-2xs transition-all cursor-pointer hover:scale-105"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>เปิดดูเอกสาร</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActivityEditingEvent(act);
+                              setIsActivityModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 text-violet-700 hover:text-violet-900 font-bold text-[11px] cursor-pointer"
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span>+ แนบไฟล์</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Quick Action Bar (ปุ่มลัดไปยังงานเร่งด่วน) */}
       <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs">
@@ -946,65 +1324,113 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
             {/* Visual Bar */}
             <div className="space-y-2">
               <div className="h-4 rounded-full overflow-hidden flex bg-slate-100 shadow-inner">
-                <div style={{ width: '40%' }} className="bg-emerald-500" title="ดีมาก 40%" />
-                <div style={{ width: '45%' }} className="bg-teal-500" title="ดี 45%" />
-                <div style={{ width: '10%' }} className="bg-amber-400" title="พอใช้ 10%" />
-                <div style={{ width: '5%' }} className="bg-rose-500" title="ต้องตรวจซ้ำ 5%" />
+                <div
+                  style={{ width: `${Math.round((ratingCounts.excellent / totalEstablishmentsCount) * 100)}%` }}
+                  className="bg-emerald-500 transition-all duration-500"
+                  title={`ดีมาก ${Math.round((ratingCounts.excellent / totalEstablishmentsCount) * 100)}%`}
+                />
+                <div
+                  style={{ width: `${Math.round((ratingCounts.good / totalEstablishmentsCount) * 100)}%` }}
+                  className="bg-teal-500 transition-all duration-500"
+                  title={`ดี ${Math.round((ratingCounts.good / totalEstablishmentsCount) * 100)}%`}
+                />
+                <div
+                  style={{ width: `${Math.round((ratingCounts.fair / totalEstablishmentsCount) * 100)}%` }}
+                  className="bg-amber-400 transition-all duration-500"
+                  title={`พอใช้ ${Math.round((ratingCounts.fair / totalEstablishmentsCount) * 100)}%`}
+                />
+                <div
+                  style={{ width: `${Math.round((ratingCounts.reinspect / totalEstablishmentsCount) * 100)}%` }}
+                  className="bg-rose-500 transition-all duration-500"
+                  title={`ต้องตรวจซ้ำ ${Math.round((ratingCounts.reinspect / totalEstablishmentsCount) * 100)}%`}
+                />
               </div>
               <div className="flex items-center justify-between text-xs text-slate-500 px-1 font-semibold">
-                <span className="text-emerald-700">อัตราผ่านเกณฑ์สะสม 94.4%</span>
+                <span className="text-emerald-700">อัตราผ่านเกณฑ์สะสม {passingRatePercent}%</span>
                 <span>เป้าหมายประจำปี 100%</span>
               </div>
             </div>
           </div>
 
           {/* Card: สถิติการให้บริการประชาชน 4 มิติ */}
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/90 shadow-xs">
-            <h3 className="font-bold text-base sm:text-lg text-slate-900 mb-1">
-              สัดส่วนคำร้องบริการประชาชนแยกตามประเภทงาน
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-500 mb-5">
-              สถิติการยื่นคำร้องผ่านระบบออนไลน์และจุดบริการ One Stop Service กองสาธารณสุข
-            </p>
+          {(() => {
+            const totalCount = Math.max(petitions.length, 1);
+            const sewCount = petitions.filter(
+              (p) => p.category === 'waste_sewage' || p.title.includes('สิ่งปฏิกูล') || p.title.includes('ส้วม')
+            ).length;
+            const nuisanceCount = petitions.filter(
+              (p) => p.category === 'nuisance_smell' || p.category === 'nuisance_noise'
+            ).length;
+            const licCount = petitions.filter((p) => p.category === 'license_request').length;
 
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-xs sm:text-[13px] font-bold text-slate-700 mb-1.5">
-                  <span className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-amber-500" /> ขอรับบริการกำจัดสิ่งปฏิกูล (สูบส้วม)
-                  </span>
-                  <span className="text-amber-700 font-black">{sewagePetitions.length || 12} งาน (65%)</span>
-                </div>
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                  <div className="bg-amber-500 h-full rounded-full" style={{ width: '65%' }} />
+            const sewPct = Math.round((sewCount / totalCount) * 100) || (sewCount > 0 ? 100 : 0);
+            const nuisancePct = Math.round((nuisanceCount / totalCount) * 100);
+            const licPct = Math.round((licCount / totalCount) * 100);
+
+            return (
+              <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/90 shadow-xs">
+                <h3 className="font-bold text-base sm:text-lg text-slate-900 mb-1">
+                  สัดส่วนคำร้องบริการประชาชนแยกตามประเภทงาน
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 mb-5">
+                  สถิติการยื่นคำร้องผ่านระบบออนไลน์และจุดบริการ One Stop Service กองสาธารณสุข
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs sm:text-[13px] font-bold text-slate-700 mb-1.5">
+                      <span className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-amber-500" /> ขอรับบริการกำจัดสิ่งปฏิกูล (สูบส้วม)
+                      </span>
+                      <span className="text-amber-700 font-black">
+                        {sewCount} งาน ({sewPct}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                      <div
+                        className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${sewPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs sm:text-[13px] font-bold text-slate-700 mb-1.5">
+                      <span className="flex items-center gap-2">
+                        <MessageSquareWarning className="w-4 h-4 text-rose-500" /> ร้องเรียนเหตุเดือดร้อนรำคาญ / มลพิษ
+                      </span>
+                      <span className="text-rose-700 font-black">
+                        {nuisanceCount} งาน ({nuisancePct}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                      <div
+                        className="bg-rose-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${nuisancePct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs sm:text-[13px] font-bold text-slate-700 mb-1.5">
+                      <span className="flex items-center gap-2">
+                        <FileCheck2 className="w-4 h-4 text-teal-600" /> ยื่นขอรับ / ต่ออายุใบอนุญาตประกอบกิจการ
+                      </span>
+                      <span className="text-teal-700 font-black">
+                        {licCount} งาน ({licPct}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                      <div
+                        className="bg-teal-600 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${licPct}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div>
-                <div className="flex justify-between text-xs sm:text-[13px] font-bold text-slate-700 mb-1.5">
-                  <span className="flex items-center gap-2">
-                    <MessageSquareWarning className="w-4 h-4 text-rose-500" /> ร้องเรียนเหตุเดือดร้อนรำคาญ / มลพิษ
-                  </span>
-                  <span className="text-rose-700 font-black">{petitions.filter((p) => p.category === 'nuisance_smell' || p.category === 'nuisance_noise').length || 4} งาน (20%)</span>
-                </div>
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                  <div className="bg-rose-500 h-full rounded-full" style={{ width: '20%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs sm:text-[13px] font-bold text-slate-700 mb-1.5">
-                  <span className="flex items-center gap-2">
-                    <FileCheck2 className="w-4 h-4 text-teal-600" /> ยื่นขอรับ / ต่ออายุใบอนุญาตประกอบกิจการ
-                  </span>
-                  <span className="text-teal-700 font-black">{petitions.filter((p) => p.category === 'license_request').length || 3} งาน (15%)</span>
-                </div>
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                  <div className="bg-teal-600 h-full rounded-full" style={{ width: '15%' }} />
-                </div>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
         {/* Right Column (1 Col): Activity Feed (Audit Log) */}
@@ -1024,7 +1450,16 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
             {activities.map((act) => {
               const Icon = act.icon;
               return (
-                <div key={act.id} className="flex items-start gap-3 p-3 rounded-2xl hover:bg-slate-50/80 transition-all border border-slate-100 hover:border-slate-200 shadow-2xs">
+                <div
+                  key={act.id}
+                  onClick={() => {
+                    if (act.actionTab) onNavigateTab(act.actionTab);
+                  }}
+                  className={`flex items-start gap-3 p-3 rounded-2xl transition-all border border-slate-100 hover:border-slate-300 shadow-2xs ${
+                    act.actionTab ? 'cursor-pointer hover:bg-slate-50/90' : 'hover:bg-slate-50/50'
+                  }`}
+                  title={act.actionTab ? 'คลิกเพื่อเปิดไปยังระบบงานนี้' : undefined}
+                >
                   <div className={`w-9 h-9 rounded-xl ${act.color} flex items-center justify-center shrink-0 mt-0.5 shadow-xs`}>
                     <Icon className="w-4 h-4" />
                   </div>
@@ -1103,6 +1538,45 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
       <CitizenPortalShareModal
         isOpen={isCitizenShareModalOpen}
         onClose={() => setIsCitizenShareModalOpen(false)}
+      />
+
+      {/* Modal: Activity Announcement & Document Upload Modal */}
+      <ActivityAnnouncementModal
+        isOpen={isActivityModalOpen}
+        onClose={() => {
+          setIsActivityModalOpen(false);
+          setActivityEditingEvent(null);
+          setActivityPresetDate(undefined);
+        }}
+        onSave={async (savedEvent) => {
+          if (activityEditingEvent) {
+            handleUpdateCalendarEvent(savedEvent);
+          } else {
+            handleAddCalendarEvent(savedEvent);
+          }
+          if (onShowToast) {
+            onShowToast('success', `บันทึกกิจกรรม "${savedEvent.title}" พร้อมไฟล์แนบเรียบร้อยแล้ว`);
+          }
+        }}
+        editingEvent={activityEditingEvent}
+        presetDate={activityPresetDate}
+        onOpenAttachment={(att) => {
+          setViewerAttachment(att);
+          setViewerLinkedEvent(activityEditingEvent || null);
+          setIsViewerModalOpen(true);
+        }}
+      />
+
+      {/* Modal: Universal Attachment & Document Viewer Modal */}
+      <AttachmentViewerModal
+        isOpen={isViewerModalOpen}
+        onClose={() => {
+          setIsViewerModalOpen(false);
+          setViewerAttachment(null);
+          setViewerLinkedEvent(null);
+        }}
+        attachment={viewerAttachment}
+        event={viewerLinkedEvent}
       />
     </div>
   );
