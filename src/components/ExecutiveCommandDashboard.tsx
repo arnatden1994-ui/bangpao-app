@@ -359,14 +359,23 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
           id: newEvent.id,
           title: newEvent.title,
           date: newEvent.date,
-          time: `${newEvent.startTime || '09:00'} - ${newEvent.endTime || '12:00'} น.`,
+          endDate: newEvent.endDate,
+          startTime: newEvent.startTime,
+          endTime: newEvent.endTime,
+          time: newEvent.startTime
+            ? `${newEvent.startTime} - ${newEvent.endTime || '16:30'} น.`
+            : '09:00 - 16:30 น.',
           type: newEvent.category,
           location: newEvent.location,
           assignee: newEvent.responsibleOfficer,
           description: newEvent.details,
+          docType: (newEvent as any).docType,
+          docNumber: (newEvent as any).docNumber,
+          fromAgency: (newEvent as any).fromAgency,
+          attachments: (newEvent as any).attachments,
         },
       ],
-      `นัดหมาย/แผนงานใหม่: ${newEvent.title}`
+      newEvent.title
     );
     dispatchNotification(payload).then(() => {
       if (onShowToast) {
@@ -421,6 +430,40 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
       localStorage.setItem('bangpao_calendar_events_v2', JSON.stringify(calendarEvents));
     } catch (e) {
       console.warn('Failed to save calendar events', e);
+    }
+  }, [calendarEvents]);
+
+  // Support deep-linking to specific calendar event from LINE or URL (?event=... or ?tab=calendar)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const search = new URLSearchParams(window.location.search);
+    const eventParam = search.get('event') || search.get('job');
+    const isAttachmentParam = search.get('attachment') === 'true';
+    const tabParam = search.get('tab');
+
+    if (tabParam === 'calendar' || eventParam) {
+      setTimeout(() => {
+        const calSec = document.getElementById('calendar-panel-section');
+        if (calSec) calSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    }
+
+    if (!eventParam) return;
+
+    const cleanParam = eventParam.trim().toLowerCase();
+    const matched = calendarEvents.find((ev) => {
+      const idMatch = (ev.id || '').toLowerCase() === cleanParam;
+      const refMatch = ((ev as any).referenceCode || '').toLowerCase() === cleanParam;
+      const titleMatch = cleanParam.length > 5 && (ev.title || '').toLowerCase().includes(cleanParam);
+      return idMatch || refMatch || titleMatch;
+    });
+
+    if (matched) {
+      if (isAttachmentParam && matched.attachments && matched.attachments.length > 0) {
+        setViewerAttachment(matched.attachments[0]);
+        setViewerLinkedEvent(matched);
+        setIsViewerModalOpen(true);
+      }
     }
   }, [calendarEvents]);
 

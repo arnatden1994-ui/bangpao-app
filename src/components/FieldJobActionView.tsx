@@ -17,6 +17,7 @@ import {
   Stethoscope,
   Megaphone,
   ClipboardCheck,
+  Calendar,
   X,
 } from 'lucide-react';
 import { PublicPetition, EquipmentLoan, SignerSettings, DEFAULT_SIGNER_SETTINGS, User } from '../types/index.ts';
@@ -366,12 +367,14 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
       return { jobType: 'loan' as const, petition: undefined, loan: sampleLoan };
     }
 
-    // Default to newest petition or loan if none specified
-    if (petitions.length > 0) {
-      return { jobType: 'petition' as const, petition: petitions[0], loan: undefined };
-    }
-    if (loans.length > 0) {
-      return { jobType: 'loan' as const, petition: undefined, loan: loans[0] };
+    // Default to newest petition or loan ONLY if no code was specified in the URL
+    if (!cleanCode) {
+      if (petitions.length > 0) {
+        return { jobType: 'petition' as const, petition: petitions[0], loan: undefined };
+      }
+      if (loans.length > 0) {
+        return { jobType: 'loan' as const, petition: undefined, loan: loans[0] };
+      }
     }
     return null;
   }, [selectedCode, petitions, loans]);
@@ -410,18 +413,63 @@ export const FieldJobActionView: React.FC<FieldJobActionViewProps> = ({
   };
 
   if (!matchedJob) {
+    const upperCode = (selectedCode || '').toUpperCase();
+    const isCalendarCode =
+      upperCode.startsWith('PLAN-') ||
+      upperCode.startsWith('CAL-') ||
+      upperCode.startsWith('ACT-') ||
+      upperCode.startsWith('EV-');
+
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-6 max-w-md w-full text-center space-y-4 shadow-xl">
-          <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
-          <h3 className="text-lg font-extrabold text-slate-900">ไม่พบข้อมูลใบงานรหัส {selectedCode}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3 rounded-2xl bg-emerald-700 text-white font-bold cursor-pointer"
-          >
-            กลับสู่หน้าหลัก
-          </button>
+      <div className="min-h-screen bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full text-center space-y-5 shadow-2xl border border-slate-200">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto shadow-sm">
+            {isCalendarCode ? <Calendar className="w-8 h-8" /> : <AlertTriangle className="w-8 h-8 text-amber-500" />}
+          </div>
+          <div>
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              รหัสอ้างอิง: {selectedCode || '-'}
+            </span>
+            <h3 className="text-xl font-black text-slate-900 mt-3">
+              {isCalendarCode
+                ? 'รายการนี้เป็น "กำหนดการนัดหมาย / แผนงานในปฏิทิน"'
+                : `ไม่พบใบงานภาคสนามรหัส ${selectedCode}`}
+            </h3>
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+              {isCalendarCode
+                ? 'รหัสนี้เป็นกำหนดการนัดหมายที่บันทึกอยู่ในระบบปฏิทินกิจกรรมสาธารณสุขและแผนงานเทศบาล (ไม่ใช่ใบสั่งงานรถดูดส้วมหรือส่งมอบอุปกรณ์การแพทย์)'
+                : 'ไม่พบข้อมูลใบงานหรือคำร้องภาคสนามที่ตรงกับรหัสนี้'}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                try {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('job');
+                  url.searchParams.set('tab', 'calendar');
+                  if (selectedCode) url.searchParams.set('event', selectedCode);
+                  window.history.pushState({}, '', url.toString());
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                } catch {
+                  window.location.href = `/?tab=calendar&event=${encodeURIComponent(selectedCode || '')}`;
+                }
+              }}
+              className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>เปิดดูในปฏิทินเทศบาล</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer transition-colors"
+            >
+              กลับสู่หน้าระบบหลัก
+            </button>
+          </div>
         </div>
       </div>
     );

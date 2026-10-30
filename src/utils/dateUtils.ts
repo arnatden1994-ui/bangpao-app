@@ -16,6 +16,10 @@ export const THAI_MONTHS_SHORT = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
 
+export const THAI_DAY_NAMES = [
+  'วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์',
+];
+
 /** YYYY-MM-DD of a Date in local time */
 export function toLocalDateStr(d: Date = new Date()): string {
   const y = d.getFullYear();
@@ -84,6 +88,13 @@ export function formatThaiDateLong(input?: string | Date | null): string {
   const d = input instanceof Date ? input : parseFlexibleDate(input as string);
   if (!d) return '-';
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+}
+
+/** "วันศุกร์ที่ 30 ตุลาคม 2569" */
+export function formatThaiDateWithDay(input?: string | Date | null): string {
+  const d = input instanceof Date ? input : parseFlexibleDate(input as string);
+  if (!d) return '-';
+  return `${THAI_DAY_NAMES[d.getDay()]}ที่ ${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
 
 /** Relative Thai time label e.g. "5 นาทีที่แล้ว", "เมื่อวาน", "3 วันที่แล้ว", "12 ต.ค. 2569" */

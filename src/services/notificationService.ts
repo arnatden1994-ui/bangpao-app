@@ -5,6 +5,11 @@ import {
   generateOfficialMedicalLoanDocxBytes,
 } from './medicalLoanDocGenerator.ts';
 import { saveLtcQueueToFirestore } from './firebaseService.ts';
+import {
+  formatThaiDateWithDay,
+  formatThaiDateShort,
+  formatFileSize,
+} from '../utils/dateUtils.ts';
 
 export type { NotificationSettings };
 
@@ -114,12 +119,25 @@ export interface CalendarScheduleItem {
   id: string;
   title: string;
   date: string;
+  endDate?: string;
   time?: string;
+  startTime?: string;
+  endTime?: string;
   type: string;
   location?: string;
   assignee?: string;
   description?: string;
   status?: string;
+  docType?: string;
+  docNumber?: string;
+  fromAgency?: string;
+  attachments?: {
+    id: string;
+    name: string;
+    fileUrl?: string;
+    fileType?: string;
+    fileSize?: number;
+  }[];
 }
 
 const STORAGE_KEY_NOTIFY_SETTINGS = 'bangpao_notification_settings_v1';
@@ -277,6 +295,9 @@ function buildLineFlexBubble(params: {
   googleMapsUrl?: string;
   phone?: string;
   portalUrl?: string;
+  primaryButtonLabel?: string;
+  primaryButtonColor?: string;
+  hidePrimaryButton?: boolean;
 }): Record<string, any> {
   const bodyRows = params.summaryLines.map((row) => ({
     type: 'box',
@@ -291,6 +312,7 @@ function buildLineFlexBubble(params: {
         size: 'sm',
         flex: 4,
         weight: 'bold',
+        wrap: true,
       },
       {
         type: 'text',
@@ -308,17 +330,19 @@ function buildLineFlexBubble(params: {
     params.portalUrl ||
     `https://bangpao-app.vercel.app/?job=${encodeURIComponent(params.referenceCode)}`;
 
-  footerButtons.push({
-    type: 'button',
-    style: 'primary',
-    color: '#1D4ED8',
-    height: 'sm',
-    action: {
-      type: 'uri',
-      label: '👷 รับงาน / แจ้งจบงาน • ติดขัด',
-      uri: jobActionUrl,
-    },
-  });
+  if (!params.hidePrimaryButton) {
+    footerButtons.push({
+      type: 'button',
+      style: 'primary',
+      color: params.primaryButtonColor || '#1D4ED8',
+      height: 'sm',
+      action: {
+        type: 'uri',
+        label: params.primaryButtonLabel || '👷 รับงาน / แจ้งจบงาน • ติดขัด',
+        uri: jobActionUrl,
+      },
+    });
+  }
 
   if (params.googleMapsUrl) {
     footerButtons.push({
@@ -444,6 +468,478 @@ function buildLineFlexBubble(params: {
       layout: 'vertical',
       spacing: 'sm',
       paddingAll: '12px',
+      contents: footerButtons,
+    },
+  };
+}
+
+
+/**
+ * Direct 1-Click Google Calendar Event URL
+ */
+export function buildGoogleCalendarDirectAddUrl(event: {
+  title: string;
+  date: string;
+  time?: string;
+  startTime?: string;
+  endTime?: string;
+  location?: string;
+  description?: string;
+  assignee?: string;
+}): string {
+  const cleanDate = (event.date || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+  let startH = '090000';
+  let endH = '163000';
+
+  if (event.startTime) {
+    startH = event.startTime.replace(/:/g, '').padEnd(4, '0') + '00';
+  }
+  if (event.endTime) {
+    endH = event.endTime.replace(/:/g, '').padEnd(4, '0') + '00';
+  } else if (event.time) {
+    const m = event.time.match(/(\d{1,2})[:.](\d{2})\s*[-–to]\s*(\d{1,2})[:.](\d{2})/);
+    if (m) {
+      startH = `${m[1].padStart(2, '0')}${m[2]}00`;
+      endH = `${m[3].padStart(2, '0')}${m[4]}00`;
+    }
+  }
+
+  const dates = `${cleanDate}T${startH}/${cleanDate}T${endH}`;
+  const details = [
+    event.description || '',
+    event.assignee ? `ผู้รับผิดชอบ: ${event.assignee}` : '',
+    'หน่วยงาน: กองสาธารณสุขและสิ่งแวดล้อม เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง',
+    'ระบบสารสนเทศเทศบาล: https://bangpao-app.vercel.app/?tab=calendar',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const query = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: event.title || 'นัดหมายราชการ ทต.บางเป้า',
+    details,
+    location: event.location || 'สำนักงานเทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง',
+    dates,
+    add: 'bangpaohealthy@gmail.com',
+    authuser: 'bangpaohealthy@gmail.com',
+    ctz: 'Asia/Bangkok',
+  });
+
+  return `https://calendar.google.com/calendar/render?${query.toString()}`;
+}
+
+/**
+ * Direct Google Maps Search / Navigation URL
+ */
+export function buildGoogleMapsNavUrl(location?: string): string {
+  const loc = (location || '').trim();
+  const queryStr = loc ? `${loc} เทศบาลตำบลบางเป้า ตรัง` : 'เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง';
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}`;
+}
+
+/**
+ * Dedicated LINE Flex Bubble specifically designed for Calendar, Activities, Meetings & Trainings
+ * - Clean semantic typography with zero text truncation
+ * - NO "รับงาน/แจ้งจบงาน" button!
+ * - Includes: "📅 เปิดดูในปฏิทินเทศบาล", "📍 นำทาง (Google Maps)", "⏰ เพิ่มลง Google Calendar", "📎 เปิดดูหนังสือ / ไฟล์แนบ"
+ */
+function buildCalendarFlexBubble(params: {
+  badgeText: string;
+  headerBgColor?: string;
+  referenceCode: string;
+  title: string;
+  subtitle: string;
+  events: CalendarScheduleItem[];
+  attachmentNames?: string[];
+  portalCalendarUrl: string;
+  attachmentViewUrl?: string;
+}): Record<string, any> {
+  const isSingle = params.events.length === 1;
+  const firstEvent = params.events[0];
+  const headerBg = params.headerBgColor || '#312E81';
+
+  const googleCalUrl = isSingle && firstEvent
+    ? buildGoogleCalendarDirectAddUrl(firstEvent)
+    : undefined;
+
+  const mapsUrl = isSingle && firstEvent?.location
+    ? buildGoogleMapsNavUrl(firstEvent.location)
+    : undefined;
+
+  const bodyContents: any[] = [];
+
+  if (isSingle && firstEvent) {
+    const thaiDate = formatThaiDateWithDay(firstEvent.date);
+    const timeDisplay =
+      firstEvent.time ||
+      (firstEvent.startTime
+        ? `${firstEvent.startTime} - ${firstEvent.endTime || '16:30'} น.`
+        : 'ตามเวลาราชการ (09:00 - 16:30 น.)');
+
+    bodyContents.push(
+      // Row 1: วันและเวลา
+      {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'text',
+            text: '🗓️ วันเวลา',
+            weight: 'bold',
+            size: 'sm',
+            color: '#475569',
+            flex: 3,
+            wrap: true,
+          },
+          {
+            type: 'text',
+            text: `${thaiDate}\n⏰ เวลา ${timeDisplay}`,
+            weight: 'bold',
+            size: 'sm',
+            color: '#0F172A',
+            wrap: true,
+            flex: 7,
+          },
+        ],
+      },
+      // Row 2: สถานที่
+      {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        margin: 'md',
+        contents: [
+          {
+            type: 'text',
+            text: '📍 สถานที่',
+            weight: 'bold',
+            size: 'sm',
+            color: '#475569',
+            flex: 3,
+            wrap: true,
+          },
+          {
+            type: 'text',
+            text: firstEvent.location || 'สำนักงานเทศบาลตำบลบางเป้า',
+            size: 'sm',
+            color: '#0F172A',
+            wrap: true,
+            flex: 7,
+          },
+        ],
+      },
+      // Row 3: ผู้รับผิดชอบ
+      {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        margin: 'md',
+        contents: [
+          {
+            type: 'text',
+            text: '👤 ผู้รับผิดชอบ',
+            weight: 'bold',
+            size: 'sm',
+            color: '#475569',
+            flex: 3,
+            wrap: true,
+          },
+          {
+            type: 'text',
+            text: firstEvent.assignee || 'กองสาธารณสุขและสิ่งแวดล้อม',
+            size: 'sm',
+            color: '#0F172A',
+            wrap: true,
+            flex: 7,
+          },
+        ],
+      }
+    );
+
+    // Row 4: เอกสาร / หนังสือต้นเรื่อง (ถ้ามี)
+    if (firstEvent.docType || firstEvent.docNumber || firstEvent.fromAgency) {
+      bodyContents.push({
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        margin: 'md',
+        contents: [
+          {
+            type: 'text',
+            text: '📜 หนังสือเรื่อง',
+            weight: 'bold',
+            size: 'sm',
+            color: '#475569',
+            flex: 3,
+            wrap: true,
+          },
+          {
+            type: 'text',
+            text: `${firstEvent.docType || 'หนังสือราชการ'}${
+              firstEvent.docNumber ? ` ที่ ${firstEvent.docNumber}` : ''
+            }${firstEvent.fromAgency ? ` (${firstEvent.fromAgency})` : ''}`,
+            size: 'sm',
+            color: '#0F172A',
+            wrap: true,
+            flex: 7,
+          },
+        ],
+      });
+    }
+
+    // Row 5: สาระสำคัญ / วาระการประชุม (ถ้ามี)
+    if (firstEvent.description && firstEvent.description.trim()) {
+      bodyContents.push({
+        type: 'box',
+        layout: 'vertical',
+        margin: 'lg',
+        paddingAll: '12px',
+        backgroundColor: '#F8FAFC',
+        cornerRadius: '10px',
+        borderColor: '#E2E8F0',
+        borderWidth: '1px',
+        contents: [
+          {
+            type: 'text',
+            text: '📝 สาระสำคัญ / วาระการประชุม:',
+            weight: 'bold',
+            size: 'xs',
+            color: '#475569',
+          },
+          {
+            type: 'text',
+            text: firstEvent.description,
+            size: 'sm',
+            color: '#1E293B',
+            wrap: true,
+            margin: 'xs',
+          },
+        ],
+      });
+    }
+  } else {
+    // Multi-event summary
+    bodyContents.push({
+      type: 'text',
+      text: `สรุปตารางปฏิบัติงานและนัดหมายประจำวัน (${params.events.length} ภารกิจ):`,
+      weight: 'bold',
+      size: 'sm',
+      color: '#1E293B',
+      margin: 'xs',
+    });
+
+    params.events.slice(0, 6).forEach((ev, idx) => {
+      bodyContents.push({
+        type: 'box',
+        layout: 'vertical',
+        margin: 'md',
+        paddingAll: '10px',
+        backgroundColor: '#F8FAFC',
+        cornerRadius: '8px',
+        borderColor: '#E2E8F0',
+        borderWidth: '1px',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              {
+                type: 'text',
+                text: `${idx + 1}. ⏰ ${ev.time || '09:00 น.'} • ${formatThaiDateShort(ev.date)}`,
+                weight: 'bold',
+                size: 'xs',
+                color: '#4338CA',
+                flex: 1,
+              },
+            ],
+          },
+          {
+            type: 'text',
+            text: ev.title,
+            weight: 'bold',
+            size: 'sm',
+            color: '#0F172A',
+            wrap: true,
+            margin: 'xs',
+          },
+          {
+            type: 'text',
+            text: `📍 ${ev.location || 'ทต.บางเป้า'} • 👤 ${ev.assignee || 'กองสาธารณสุขฯ'}`,
+            size: 'xs',
+            color: '#64748B',
+            wrap: true,
+            margin: 'xs',
+          },
+        ],
+      });
+    });
+  }
+
+  // File Attachments info card
+  const attachedFiles = firstEvent?.attachments || [];
+  if (attachedFiles.length > 0 || (params.attachmentNames && params.attachmentNames.length > 0)) {
+    const fileItems =
+      attachedFiles.length > 0
+        ? attachedFiles.map((a) => `• 📄 ${a.name}${a.fileSize ? ` (${formatFileSize(a.fileSize)})` : ''}`)
+        : (params.attachmentNames || []).map((n) => `• 📄 ${n}`);
+
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      margin: 'md',
+      paddingAll: '12px',
+      backgroundColor: '#ECFDF5',
+      cornerRadius: '10px',
+      borderColor: '#A7F3D0',
+      borderWidth: '1px',
+      contents: [
+        {
+          type: 'text',
+          text: `📎 เอกสารแนบในระบบ & แบบฟอร์มราชการ:`,
+          weight: 'bold',
+          size: 'xs',
+          color: '#065F46',
+        },
+        ...fileItems.map((item) => ({
+          type: 'text',
+          text: item,
+          size: 'xs',
+          color: '#047857',
+          wrap: true,
+          margin: 'xs',
+        })),
+        {
+          type: 'text',
+          text: '📁 ส่งไฟล์แบบฟอร์มตารางแผนงาน A4 (.pdf & .docx) เข้าอีเมลกองสาธารณสุขแล้ว',
+          size: 'xxs',
+          color: '#059669',
+          margin: 'sm',
+        },
+      ],
+    });
+  }
+
+  // Footer Action Buttons
+  const footerButtons: any[] = [];
+
+  // Button 1: Open in Municipal Calendar (Primary Indigo)
+  footerButtons.push({
+    type: 'button',
+    style: 'primary',
+    color: '#4338CA',
+    height: 'sm',
+    action: {
+      type: 'uri',
+      label: '📅 เปิดดูในปฏิทินงานเทศบาล',
+      uri: params.portalCalendarUrl,
+    },
+  });
+
+  // Button 2: Google Maps Navigation (Emerald)
+  if (mapsUrl) {
+    footerButtons.push({
+      type: 'button',
+      style: 'primary',
+      color: '#059669',
+      height: 'sm',
+      action: {
+        type: 'uri',
+        label: '📍 นำทาง (Google Maps)',
+        uri: mapsUrl,
+      },
+    });
+  }
+
+  // Button 3: Add to Google Calendar (1-click direct link)
+  if (googleCalUrl) {
+    footerButtons.push({
+      type: 'button',
+      style: 'secondary',
+      height: 'sm',
+      action: {
+        type: 'uri',
+        label: '⏰ เพิ่มลง Google Calendar',
+        uri: googleCalUrl,
+      },
+    });
+  }
+
+  // Button 4: Open Document / Attachment (if available)
+  if (attachedFiles.length > 0 || params.attachmentViewUrl) {
+    footerButtons.push({
+      type: 'button',
+      style: 'secondary',
+      height: 'sm',
+      action: {
+        type: 'uri',
+        label: '📎 เปิดดูหนังสือเชิญ / ไฟล์แนบ',
+        uri: params.attachmentViewUrl || params.portalCalendarUrl,
+      },
+    });
+  }
+
+  return {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: headerBg,
+      paddingAll: '16px',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            {
+              type: 'text',
+              text: params.badgeText,
+              color: '#FFFFFF',
+              size: 'xs',
+              weight: 'bold',
+              flex: 1,
+            },
+            {
+              type: 'text',
+              text: params.referenceCode,
+              color: '#CBD5E1',
+              size: 'xs',
+              align: 'end',
+              weight: 'bold',
+            },
+          ],
+        },
+        {
+          type: 'text',
+          text: params.title,
+          weight: 'bold',
+          size: 'lg',
+          color: '#FFFFFF',
+          wrap: true,
+          margin: 'md',
+        },
+        {
+          type: 'text',
+          text: params.subtitle,
+          size: 'xs',
+          color: '#E0E7FF',
+          wrap: true,
+          margin: 'xs',
+        },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '16px',
+      contents: bodyContents,
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '14px',
       contents: footerButtons,
     },
   };
@@ -909,7 +1405,14 @@ export function buildCalendarNotificationPayload(
   planTitle: string = 'แจ้งเตือนนัดหมายและแผนปฏิบัติงานประจำวัน',
   signers: SignerSettings = DEFAULT_SIGNER_SETTINGS
 ): NotificationPayload {
-  const refCode = `PLAN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+  const isSingle = events.length === 1;
+  const firstEvent = events[0];
+  const refCode = isSingle && firstEvent?.id
+    ? (firstEvent.id.startsWith('PLAN-') || firstEvent.id.startsWith('CAL-') || firstEvent.id.startsWith('ACT-')
+        ? firstEvent.id
+        : `PLAN-${firstEvent.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16)}`)
+    : `PLAN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+
   const htmlSource = generateOfficialCalendarPlanHtml(events, planTitle, signers);
 
   // Also create a clean .docx Petition-formatted schedule summary so Word users can open it
@@ -943,31 +1446,46 @@ export function buildCalendarNotificationPayload(
     docxBase64,
   };
 
-  const summaryLines = events.slice(0, 6).map((ev, idx) => ({
-    label: `นัดหมายที่ ${idx + 1} (${ev.date})`,
-    value: `${ev.time ? `[${ev.time} น.] ` : ''}${ev.title} • ${ev.location || 'ทต.บางเป้า'}`,
-  }));
+  const portalCalendarUrl = `https://bangpao-app.vercel.app/?tab=calendar&event=${encodeURIComponent(firstEvent?.id || refCode)}`;
+  const attachmentViewUrl = `https://bangpao-app.vercel.app/?tab=calendar&event=${encodeURIComponent(firstEvent?.id || refCode)}&attachment=true`;
 
-  const badgeText = '📅 นัดหมายปฏิทิน & แผนปฏิบัติงาน';
-  const headerBgColor = '#4F46E5';
-  const accentColor = '#4338CA';
-  const subtitle = `จำนวน ${events.length} ภารกิจ • กองสาธารณสุขและสิ่งแวดล้อม ทต.บางเป้า`;
+  const badgeText = isSingle && (firstEvent?.docType || firstEvent?.type === 'meeting' || firstEvent?.type === 'training')
+    ? '📢 หนังสือเชิญ & ประชุมอบรม'
+    : '📅 นัดหมายปฏิทิน & แผนงาน';
 
-  const lineFlexContents = buildLineFlexBubble({
+  const subtitle = isSingle
+    ? `${firstEvent?.assignee || 'กองสาธารณสุขและสิ่งแวดล้อม'} • ทต.บางเป้า`
+    : `จำนวน ${events.length} ภารกิจ • กองสาธารณสุขและสิ่งแวดล้อม ทต.บางเป้า`;
+
+  const lineFlexContents = buildCalendarFlexBubble({
     badgeText,
-    headerBgColor,
-    accentColor,
+    headerBgColor: '#312E81',
     referenceCode: refCode,
     title: planTitle,
     subtitle,
-    summaryLines,
+    events,
     attachmentNames: [attachment.fileNamePdf, attachment.fileNameDocx],
+    portalCalendarUrl,
+    attachmentViewUrl,
   });
+
+  const summaryLines = isSingle && firstEvent
+    ? [
+        { label: '🗓️ วันเวลา', value: `${formatThaiDateWithDay(firstEvent.date)} • ${firstEvent.time || (firstEvent.startTime ? `${firstEvent.startTime} - ${firstEvent.endTime || '16:30'} น.` : 'ตามเวลาราชการ')}` },
+        { label: '📍 สถานที่', value: firstEvent.location || 'สำนักงานเทศบาลตำบลบางเป้า' },
+        { label: '👤 ผู้รับผิดชอบ', value: firstEvent.assignee || 'กองสาธารณสุขและสิ่งแวดล้อม' },
+        ...(firstEvent.docType || firstEvent.docNumber ? [{ label: '📜 เอกสารต้นเรื่อง', value: `${firstEvent.docType || 'หนังสือราชการ'}${firstEvent.docNumber ? ` ที่ ${firstEvent.docNumber}` : ''}${firstEvent.fromAgency ? ` (${firstEvent.fromAgency})` : ''}` }] : []),
+        ...(firstEvent.description ? [{ label: '📝 วาระ/รายละเอียด', value: firstEvent.description }] : []),
+      ]
+    : events.slice(0, 6).map((ev, idx) => ({
+        label: `${idx + 1}. [${ev.time || '09:00 น.'}] ${formatThaiDateShort(ev.date)}`,
+        value: `${ev.title} • 📍 ${ev.location || 'ทต.บางเป้า'} • 👤 ${ev.assignee || 'กองสาธารณสุขฯ'}`,
+      }));
 
   const emailSubject = `[กองสาธารณสุข ทต.บางเป้า] 📅 ${planTitle} (${events.length} รายการ พร้อมไฟล์ตารางแผนงาน A4)`;
   const emailHtmlBody = buildOfficialEmailHtml({
     badgeText,
-    headerBgColor,
+    headerBgColor: '#312E81',
     referenceCode: refCode,
     title: planTitle,
     subtitle,
@@ -975,12 +1493,24 @@ export function buildCalendarNotificationPayload(
     attachments: [attachment],
   });
 
-  const lineTextFallback = [
-    `${badgeText} [${refCode}]`,
-    `เรื่อง: ${planTitle}`,
-    ...events.map((e, i) => `${i + 1}. ${e.date} ${e.time || ''} - ${e.title} (${e.location || 'ทต.บางเป้า'})`),
-    `📎 แนบไฟล์ตารางแผนปฏิบัติงาน A4 (${attachment.fileNamePdf}) เข้าอีเมลกองสาธารณสุขแล้ว`,
-  ].join('\n');
+  const lineTextFallback = isSingle && firstEvent
+    ? [
+        `${badgeText} [${refCode}]`,
+        `เรื่อง: ${planTitle}`,
+        `🗓️ วันเวลา: ${formatThaiDateWithDay(firstEvent.date)} (${firstEvent.time || 'เวลาราชการ'})`,
+        `📍 สถานที่: ${firstEvent.location || 'สำนักงานเทศบาลตำบลบางเป้า'}`,
+        `👤 ผู้รับผิดชอบ: ${firstEvent.assignee || 'กองสาธารณสุขและสิ่งแวดล้อม'}`,
+        firstEvent.description ? `📝 รายละเอียด: ${firstEvent.description}` : '',
+        `📅 เปิดดูในปฏิทินเทศบาล: ${portalCalendarUrl}`,
+        `📎 แนบไฟล์แบบฟอร์มแผนงาน A4 (${attachment.fileNamePdf}) ทางอีเมลแล้ว`,
+      ].filter(Boolean).join('\n')
+    : [
+        `${badgeText} [${refCode}]`,
+        `เรื่อง: ${planTitle}`,
+        ...events.map((e, i) => `${i + 1}. ${formatThaiDateShort(e.date)} ${e.time || ''} - ${e.title} (${e.location || 'ทต.บางเป้า'})`),
+        `📅 เปิดดูในปฏิทินเทศบาล: ${portalCalendarUrl}`,
+        `📎 แนบไฟล์ตารางแผนปฏิบัติงาน A4 (${attachment.fileNamePdf}) เข้าอีเมลกองสาธารณสุขแล้ว`,
+      ].join('\n');
 
   return {
     eventType: 'calendar_event',
@@ -1049,6 +1579,9 @@ export function buildFollowUpNotificationPayload(
     summaryLines,
     attachmentNames: attachments.map((a) => a.fileNamePdf),
     phone: targetLoans[0]?.borrowerPhone || targetLoans[0]?.phone,
+    portalUrl: 'https://bangpao-app.vercel.app/?tab=equipment&sub=loans',
+    primaryButtonLabel: '📋 ดูรายการอุปกรณ์และโทรติดตาม',
+    primaryButtonColor: '#BE123C',
   });
 
   const emailSubject = `[กองสาธารณสุข ทต.บางเป้า] ⏰ แจ้งเตือนติดตามอาการและกำหนดคืนอุปกรณ์การแพทย์ (${loans.length} ราย)`;

@@ -212,7 +212,14 @@ export default function App() {
   const [citizenShareModalOpen, setCitizenShareModalOpen] = useState(false);
   const [activeFieldJobCode, setActiveFieldJobCode] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
-    return new URLSearchParams(window.location.search).get('job');
+    const j = new URLSearchParams(window.location.search).get('job');
+    if (j) {
+      const up = j.toUpperCase();
+      if (up.startsWith('PLAN-') || up.startsWith('CAL-') || up.startsWith('ACT-') || up.startsWith('EV-')) {
+        return null;
+      }
+    }
+    return j;
   });
   // Current logged in officer (Default: พันจ่าเอกอานัส เด็นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
@@ -262,7 +269,19 @@ export default function App() {
   
   // Sidebar & Navigation State for 6 Modules (Desktop default open, Mobile/Tablet default collapsed)
   const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1024 : true));
-  const [currentTab, setCurrentTab] = useState<MainNavTab>('overview');
+  const [currentTab, setCurrentTab] = useState<MainNavTab>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const tab = p.get('tab');
+      if (tab === 'calendar' || tab === 'overview') return 'overview';
+      if (tab === 'hazardous') return 'hazardous';
+      if (tab === 'nhso_ltc' || tab === 'ltc') return 'nhso_ltc';
+      if (tab === 'equipment') return 'equipment';
+      if (tab === 'petitions' || tab === 'sewage') return 'petitions';
+      if (tab === 'settings') return 'settings';
+    }
+    return 'overview';
+  });
 
   // Sub-tabs for each of the 6 modules
   const [hazardousSubTab, setHazardousSubTab] = useState<'dashboard' | 'form'>('dashboard');
@@ -559,18 +578,53 @@ unsubLicenses();
   }, []);
 
 
-  // Global Field Job (?job=...) URL & In-App Click Interceptor
+  // Global Field Job (?job=...) URL & In-App Click Interceptor + Calendar Deep-link
   useEffect(() => {
+    const isCalendarCode = (code: string | null) => {
+      if (!code) return false;
+      const up = code.toUpperCase();
+      return up.startsWith('PLAN-') || up.startsWith('CAL-') || up.startsWith('ACT-') || up.startsWith('EV-');
+    };
+
     const handleCustomJobOpen = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && typeof detail === 'string') {
+        if (isCalendarCode(detail)) {
+          setActiveFieldJobCode(null);
+          setCurrentTab('overview');
+          setTimeout(() => {
+            const calSec = document.getElementById('calendar-panel-section');
+            if (calSec) calSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 200);
+          return;
+        }
         setActiveFieldJobCode(detail);
       }
     };
+
     const handlePopState = () => {
-      const j = new URLSearchParams(window.location.search).get('job');
-      setActiveFieldJobCode(j);
+      const search = new URLSearchParams(window.location.search);
+      const j = search.get('job');
+      if (isCalendarCode(j)) {
+        setActiveFieldJobCode(null);
+        setCurrentTab('overview');
+        setTimeout(() => {
+          const calSec = document.getElementById('calendar-panel-section');
+          if (calSec) calSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 200);
+      } else {
+        setActiveFieldJobCode(j);
+      }
+      const t = search.get('tab');
+      if (t === 'calendar') {
+        setCurrentTab('overview');
+        setTimeout(() => {
+          const calSec = document.getElementById('calendar-panel-section');
+          if (calSec) calSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 200);
+      }
     };
+
     const handleDocClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       const anchor = target?.closest?.('a') as HTMLAnchorElement | null;
@@ -581,6 +635,17 @@ unsubLicenses();
           const urlObj = new URL(href, window.location.origin);
           const jobParam = urlObj.searchParams.get('job');
           if (jobParam) {
+            if (isCalendarCode(jobParam)) {
+              e.preventDefault();
+              e.stopPropagation();
+              setActiveFieldJobCode(null);
+              setCurrentTab('overview');
+              setTimeout(() => {
+                const calSec = document.getElementById('calendar-panel-section');
+                if (calSec) calSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 200);
+              return;
+            }
             e.preventDefault();
             e.stopPropagation();
             setActiveFieldJobCode(jobParam);
