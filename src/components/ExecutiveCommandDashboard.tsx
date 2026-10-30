@@ -103,12 +103,15 @@ interface ExecutiveCommandDashboardProps {
 }
 
 export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps> = ({
-  establishments,
-  licenses,
-  petitions,
-  ltcPatients,
-  equipmentList,
-  loans,
+  establishments = [],
+  licenses = [],
+  hazardousBusinesses = [],
+  petitions = [],
+  nhsoProjects = [],
+  ltcPatients = [],
+  equipmentList = [],
+  loans = [],
+  inspections = [],
   onNavigateTab,
   onOpenPrintModal,
   onOpenCitizenShareModal,
