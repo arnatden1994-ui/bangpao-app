@@ -49,7 +49,6 @@ import { GoogleCalendarModal } from './GoogleCalendarModal.tsx';
 import { CitizenPortalShareModal } from './CitizenPortalShareModal.tsx';
 import { ActivityAnnouncementModal } from './ActivityAnnouncementModal.tsx';
 import { AttachmentViewerModal } from './AttachmentViewerModal.tsx';
-import { MunicipalHeroCarousel } from './MunicipalHeroCarousel.tsx';
 import {
   MunicipalCalendarPanel,
   CalendarEventItem,
@@ -867,31 +866,6 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         </div>
       </div>
 
-      {/* ======================================================== */}
-      {/* 🏛️ MUNICIPAL HERO ACTIVITY & PR CAROUSEL (สไตล์เว็บเทศบาล bangpao.go.th) */}
-      {/* ======================================================== */}
-      <MunicipalHeroCarousel
-        events={calendarEvents}
-        onOpenCreateActivity={() => {
-          setActivityEditingEvent(null);
-          setActivityPresetDate(undefined);
-          setIsActivityModalOpen(true);
-        }}
-        onOpenAttachment={(att, ev) => {
-          setViewerAttachment(att);
-          setViewerLinkedEvent(ev || null);
-          setIsViewerModalOpen(true);
-        }}
-        onOpenActivityDetails={(ev) => {
-          setActivityEditingEvent(ev);
-          setIsActivityModalOpen(true);
-        }}
-        onScrollToCalendar={() => {
-          const el = document.getElementById('calendar-panel-section');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-          else setIsCalendarModalOpen(true);
-        }}
-      />
 
       {/* ======================================================== */}
       {/* CITIZEN PORTAL SHARE & ACCESS BANNER (เด่นชัด แดชบอร์ดหลัก) */}
