@@ -74,6 +74,7 @@ import {
   INITIAL_EQUIPMENT_LOANS,
   INITIAL_LICENSE_RECORDS,
 } from './data/mockData.ts';
+import { INITIAL_NHSO_FUND_PROJECTS } from './data/initialNhsoFundProjects.ts';
 
 // 100% Original Google Apps Script Live View
 import { LoginGateway } from './components/LoginGateway.tsx';

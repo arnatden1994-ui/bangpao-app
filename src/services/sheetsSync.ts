@@ -44,7 +44,7 @@ const STORAGE_KEYS = {
 
 export function safeSetItem(key: string, value: string): boolean {
   try {
-    safeSetItem(key, value);
+    localStorage.setItem(key, value);
     return true;
   } catch (e: any) {
     console.warn(`LocalStorage write skipped or quota exceeded for key "${key}":`, e?.message || e);
@@ -53,7 +53,7 @@ export function safeSetItem(key: string, value: string): boolean {
       localStorage.removeItem('ph_nhso_projects_v2');
       localStorage.removeItem('hygiene_inspections_v1');
       localStorage.removeItem('ph_hazardous_businesses_v1');
-      safeSetItem(key, value);
+      localStorage.setItem(key, value);
       return true;
     } catch (_) {
       return false;

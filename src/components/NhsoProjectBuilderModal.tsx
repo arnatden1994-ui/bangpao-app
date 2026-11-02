@@ -16,6 +16,7 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  Coins,
 } from 'lucide-react';
 import {
   NhsoProject,
