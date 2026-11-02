@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Coins,
@@ -46,6 +46,23 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
   const [outcomesSummary, setOutcomesSummary] = useState<string>(
     project.outcomesSummary || ''
   );
+
+  // Sync state when project changes or modal opens
+  useEffect(() => {
+    if (project && isOpen) {
+      setRecords(project.disbursementRecords || []);
+      setImplStatus(
+        project.implementationStatus ||
+          (project.status === 'completed'
+            ? 'completed_reported'
+            : project.status === 'approved' || project.status === 'approved_reduced'
+            ? 'in_progress'
+            : 'not_started')
+      );
+      setOutcomesSummary(project.outcomesSummary || '');
+      setDisbursementRound((project.disbursementRecords || []).length + 1);
+    }
+  }, [project, isOpen]);
 
   // New disbursement entry state
   const [disbursementDate, setDisbursementDate] = useState<string>(
@@ -101,12 +118,22 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
   const handleSaveAll = () => {
     const updatedProject: NhsoProject = {
       ...project,
+      budgetApproved: project.budgetApproved || project.budgetRequested,
       disbursedAmount: totalDisbursed,
       disbursementRecords: records,
       implementationStatus: implStatus,
       outcomesSummary: outcomesSummary.trim(),
-      // Automatically update main status to completed if reported
-      status: implStatus === 'completed_reported' ? 'completed' : project.status,
+      // Automatically update main status to completed if reported, or ensure approved if disbursed
+      status:
+        implStatus === 'completed_reported'
+          ? 'completed'
+          : project.status === 'submitted' || project.status === 'under_review' || project.status === 'draft'
+          ? 'approved'
+          : project.status,
+      committeeDecision:
+        project.committeeDecision === 'pending' || !project.committeeDecision
+          ? 'approve'
+          : project.committeeDecision,
       updatedAt: new Date().toISOString(),
     };
 

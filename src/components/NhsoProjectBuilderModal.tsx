@@ -57,6 +57,28 @@ const PRESET_ORGS = [
   'กองทุนสวัสดิการชุมชนตำบลบางเป้า',
 ];
 
+export const KNOWN_PROPOSERS = [
+  { org: 'กองสาธารณสุขและสิ่งแวดล้อม', name: 'นางสาวปฐมาภรณ์  จันทร์แจ่ม', title: 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม' },
+  { org: 'กองการศึกษา ศาสนาและวัฒนธรรม', name: 'นางสาวอรวรรณ  ทองแท่น', title: 'ผู้อำนวยการกองการศึกษา ศาสนาและวัฒนธรรม' },
+  { org: 'รพ.สต.บางเป้า', name: 'นายเอกชัย  คงเกลี้ยง', title: 'ผู้อำนวยการ รพ.สต.บางเป้า' },
+  { org: 'โรงพยาบาลกันตัง', name: 'แพทย์หญิงณัฐริญา  ศรีวสุธากุล', title: 'ผู้อำนวยการโรงพยาบาลกันตัง' },
+  { org: 'ชมรมผู้สูงอายุโรงพยาบาลกันตัง', name: 'นางเพียงใจ  ปานาพุฒ', title: 'ประธานชมรมผู้สูงอายุโรงพยาบาลกันตัง' },
+  { org: 'ชมรมผู้สูงอายุตำบลบางเป้า', name: 'นางสมจิตต์  แก้วมณี', title: 'ประธานชมรมผู้สูงอายุตำบลบางเป้า' },
+  { org: 'ชมรม อสม. ม.1', name: 'นางวิไล  พูลสวัสดิ์', title: 'ประธาน อสม. หมู่ที่ 1 ตำบลบางเป้า' },
+  { org: 'ชมรม อสม. ม.2', name: 'นางมาลี  โสะเด็น', title: 'ประธาน อสม. หมู่ที่ 2 ตำบลบางเป้า' },
+  { org: 'ชมรม อสม. ม.3', name: 'นายสมพงษ์  หมาดเทียน', title: 'ประธาน อสม. หมู่ที่ 3 ตำบลบางเป้า' },
+  { org: 'ชมรม อสม. ม.4', name: 'นางสาวสุภาพรรณ  ทอดทิ้ง', title: 'ประธาน อสม. หมู่ที่ 4 ตำบลบางเป้า' },
+  { org: 'ชมรม อสม. ม.5', name: 'นางสาววรรณี  จิตรพงษ์', title: 'ประธาน อสม. หมู่ที่ 5 ตำบลบางเป้า' },
+  { org: 'ชมรม อสม. ม.6', name: 'นางศุภลักษณ์  ผู้อยู่สุข', title: 'ประธาน อสม. หมู่ที่ 6 ตำบลบางเป้า' },
+  { org: 'ชมรม อสม. ม.7', name: 'นางสุดา  เกื้อเดช', title: 'ประธาน อสม. หมู่ที่ 7 ตำบลบางเป้า' },
+  { org: 'รร.บ้านป่าเตียว', name: 'นายปรีชา  สุทธิรักษ์', title: 'ผู้อำนวยการโรงเรียนบ้านป่าเตียว' },
+  { org: 'รร.วัดสีหราษฎร์ศรัทธา', name: 'นายอุทัย  ทองรักษ์', title: 'ผู้อำนวยการโรงเรียนวัดสีหราษฎร์ศรัทธา' },
+  { org: 'รร.บ้านบางเป้า', name: 'นางวันดี  ชูประสูติ', title: 'ผู้อำนวยการโรงเรียนบ้านบางเป้า' },
+  { org: 'ศพด.มัสยิดบ้านบางเป้า', name: 'นางมารีย๊ะ  หมาดเด็น', title: 'หัวหน้าศูนย์พัฒนาเด็กเล็กมัสยิดบ้านบางเป้า' },
+  { org: 'ศพด.บ้านควนทองสีห์', name: 'นางทิพวรรณ  คงแก้ว', title: 'หัวหน้าศูนย์พัฒนาเด็กเล็กบ้านควนทองสีห์' },
+  { org: 'กองทุนสวัสดิการชุมชนตำบลบางเป้า', name: 'นายสมเกียรติ  เพชรประพันธ์', title: 'ประธานกองทุนสวัสดิการชุมชนตำบลบางเป้า' },
+];
+
 export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = ({
   isOpen,
   onClose,
@@ -166,16 +188,123 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
-  // Auto-update proposer when org preset changes
+  // Reset form cleanly whenever modal opens or initialProject changes
   useEffect(() => {
-    if (selectedOrgPreset !== 'custom' && settings.orgProposerDefaults?.[selectedOrgPreset]) {
-      const match = settings.orgProposerDefaults[selectedOrgPreset];
-      if (!initialProject?.signers?.proposerName) {
-        setProposerName(match.name);
-        setProposerTitle(match.title);
+    if (!isOpen) return;
+
+    if (initialProject) {
+      setFiscalYear(initialProject.fiscalYear || settings.fiscalYear || '2570');
+      setProjectCode(initialProject.projectCode || `กองทุน-70-00${existingProjects.length + 1}`);
+      setProjectName(initialProject.projectName || '');
+      setCategoryNumber(initialProject.categoryNumber || 1);
+
+      const org = initialProject.proposingOrg || PRESET_ORGS[0];
+      if (PRESET_ORGS.includes(org)) {
+        setSelectedOrgPreset(org);
+        setCustomOrgText('');
+      } else {
+        setSelectedOrgPreset('custom');
+        setCustomOrgText(org);
       }
+
+      setResponsiblePerson(initialProject.responsiblePerson || '');
+      setPhone(initialProject.phone || '');
+
+      if (initialProject.activityGroups && initialProject.activityGroups.length > 0) {
+        setActivityGroups(initialProject.activityGroups);
+      } else {
+        setActivityGroups([
+          {
+            id: `act_${Date.now()}_1`,
+            activityName: '1. กิจกรรมดำเนินงาน',
+            activities: initialProject.activities || '',
+            objectives: initialProject.objectives || '',
+            targetGroup: initialProject.targetGroup || '',
+            targetParticipants: initialProject.targetParticipants || 0,
+            kpi: initialProject.kpi || '',
+            location: initialProject.location || 'พื้นที่ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง',
+            duration: initialProject.duration || 'ต.ค. 2569 - ก.ย. 2570',
+            budgetLines: initialProject.budgetLines || [],
+            subtotal: initialProject.budgetRequested || 0,
+          },
+        ]);
+      }
+
+      setProposerName(initialProject.signers?.proposerName || '');
+      setProposerTitle(initialProject.signers?.proposerTitle || 'ผู้เสนอโครงการ');
+      setEndorserName(initialProject.signers?.endorserName || settings.defaultEndorserName);
+      setEndorserTitle(initialProject.signers?.endorserTitle || settings.defaultEndorserTitle);
+      setApproverName(initialProject.signers?.approverName || settings.defaultApproverName);
+      setApproverTitle(initialProject.signers?.approverTitle || settings.defaultApproverTitle);
+      setActiveStep(1);
+    } else {
+      // RESET TO CLEAN BLANK NEW PROJECT!
+      const targetYear = settings.fiscalYear || '2570';
+      const yearCount = existingProjects.filter((p) => p.fiscalYear === targetYear).length;
+      setFiscalYear(targetYear);
+      setProjectCode(`กองทุน-${targetYear.slice(-2)}-00${yearCount + 1}`);
+      setProjectName('');
+      setCategoryNumber(1);
+      setSelectedOrgPreset(PRESET_ORGS[0]);
+      setCustomOrgText('');
+
+      const defaultProposer = KNOWN_PROPOSERS[0];
+      setResponsiblePerson(defaultProposer.name);
+      setPhone('075-207038');
+
+      setActivityGroups([
+        {
+          id: `act_${Date.now()}_1`,
+          activityName: '1. กิจกรรมดำเนินงาน',
+          activities: '',
+          objectives: '',
+          targetGroup: '',
+          targetParticipants: 30,
+          kpi: '',
+          location: 'พื้นที่ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง',
+          duration: `ต.ค. ${Number(targetYear) - 1} - ก.ย. ${targetYear}`,
+          budgetLines: [
+            {
+              id: `line_init_1`,
+              activityCategory: '1. กิจกรรมดำเนินงาน',
+              name: '1.1) ค่าตอบแทนวิทยากร',
+              quantity: 5,
+              unit: 'ชั่วโมง',
+              unitPrice: settings.standardRates?.speakerHourly || 600,
+              total: 5 * (settings.standardRates?.speakerHourly || 600),
+            },
+            {
+              id: `line_init_2`,
+              activityCategory: '1. กิจกรรมดำเนินงาน',
+              name: '1.2) ค่าอาหารกลางวัน',
+              quantity: 30,
+              unit: 'มื้อ',
+              unitPrice: settings.standardRates?.lunchPerMeal || 75,
+              total: 30 * (settings.standardRates?.lunchPerMeal || 75),
+            },
+            {
+              id: `line_init_3`,
+              activityCategory: '1. กิจกรรมดำเนินงาน',
+              name: '1.3) ค่าอาหารว่างและเครื่องดื่ม',
+              quantity: 60,
+              unit: 'ชุด',
+              unitPrice: settings.standardRates?.snackPerMeal || 25,
+              total: 60 * (settings.standardRates?.snackPerMeal || 25),
+            },
+          ],
+          subtotal: 5 * 600 + 30 * 75 + 60 * 25,
+        },
+      ]);
+
+      setProposerName(defaultProposer.name);
+      setProposerTitle(defaultProposer.title);
+      setEndorserName(settings.defaultEndorserName || 'นายโชคชัย  รอดรักษา');
+      setEndorserTitle(settings.defaultEndorserTitle || 'เลขานุการกองทุนฯ ทต.บางเป้า');
+      setApproverName(settings.defaultApproverName || 'นายละดม  เชื้อช่วย');
+      setApproverTitle(settings.defaultApproverTitle || 'ประธานกองทุนฯ ทต.บางเป้า');
+      setActiveStep(1);
     }
-  }, [selectedOrgPreset, settings.orgProposerDefaults]);
+  }, [isOpen, initialProject]);
 
   if (!isOpen) return null;
 
@@ -663,6 +792,36 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     placeholder="เช่น กองสาธารณสุขและสิ่งแวดล้อม หรือ นางสาวปฐมาภรณ์  จันทร์แจ่ม"
                   />
                 </div>
+
+                {/* Quick Proposer Selector */}
+                <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700/60">
+                  <span className="block text-xs font-semibold text-emerald-800 dark:text-emerald-300 mb-1 flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5 text-emerald-600" />
+                    เลือกผู้เสนอโครงการ / ผู้รับผิดชอบ จากรายชื่อมาตรฐาน (แนะนำ - กรอกให้อัตโนมัติทุกช่อง):
+                  </span>
+                  <select
+                    onChange={(e) => {
+                      const idx = Number(e.target.value);
+                      if (!isNaN(idx) && KNOWN_PROPOSERS[idx]) {
+                        const chosen = KNOWN_PROPOSERS[idx];
+                        setSelectedOrgPreset(chosen.org);
+                        setCustomOrgText('');
+                        setResponsiblePerson(chosen.name);
+                        setProposerName(chosen.name);
+                        setProposerTitle(chosen.title);
+                      }
+                    }}
+                    defaultValue=""
+                    className="w-full px-3 py-2 rounded-lg border border-emerald-400 dark:border-emerald-600 bg-emerald-50/50 dark:bg-slate-900 text-xs font-medium text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="" disabled>-- คลิกเพื่อเลือกผู้เสนอโครงการ / หน่วยงาน --</option>
+                    {KNOWN_PROPOSERS.map((kp, idx) => (
+                      <option key={idx} value={idx}>
+                        {kp.org} — {kp.name} ({kp.title})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           )}
@@ -1060,6 +1219,29 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                       ระดับที่ 1: ผู้เสนอโครงการ
                     </h4>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] text-slate-500 mb-1">
+                      เลือกจากรายชื่อผู้เสนอมาตรฐาน:
+                    </span>
+                    <select
+                      onChange={(e) => {
+                        const idx = Number(e.target.value);
+                        if (!isNaN(idx) && KNOWN_PROPOSERS[idx]) {
+                          setProposerName(KNOWN_PROPOSERS[idx].name);
+                          setProposerTitle(KNOWN_PROPOSERS[idx].title);
+                        }
+                      }}
+                      defaultValue=""
+                      className="w-full px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200"
+                    >
+                      <option value="" disabled>-- เลือกชื่อ-ตำแหน่งผู้เสนอ --</option>
+                      {KNOWN_PROPOSERS.map((kp, idx) => (
+                        <option key={idx} value={idx}>
+                          {kp.name} ({kp.title})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
