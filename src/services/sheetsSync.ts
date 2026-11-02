@@ -932,7 +932,20 @@ export function getStoredNhsoFundSettings(): NhsoFundSettings {
     const raw = localStorage.getItem(STORAGE_KEYS.NHSO_FUND_SETTINGS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.fiscalYear) return parsed;
+      if (parsed && parsed.fiscalYear) {
+        return {
+          ...DEFAULT_NHSO_FUND_SETTINGS,
+          ...parsed,
+          revenueSourcesByYear: {
+            ...(DEFAULT_NHSO_FUND_SETTINGS.revenueSourcesByYear || {}),
+            ...(parsed.revenueSourcesByYear || {}),
+          },
+          clause10_4_PlansByYear: {
+            ...(DEFAULT_NHSO_FUND_SETTINGS.clause10_4_PlansByYear || {}),
+            ...(parsed.clause10_4_PlansByYear || {}),
+          },
+        };
+      }
     }
   } catch (e) {
     console.error('Failed to read nhso fund settings from storage', e);

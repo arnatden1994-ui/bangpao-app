@@ -55,6 +55,7 @@ import { NhsoProjectBuilderModal } from './NhsoProjectBuilderModal.tsx';
 import { NhsoFundSettingsModal } from './NhsoFundSettingsModal.tsx';
 import { PrintNhsoProjectModal } from './PrintNhsoProjectModal.tsx';
 import { NhsoDisbursementModal } from './NhsoDisbursementModal.tsx';
+import { NhsoFundRevenueModal } from './NhsoFundRevenueModal.tsx';
 
 interface NhsoFundViewProps {
   projects?: NhsoProject[];
@@ -98,6 +99,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   // Modals state
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'single' | 'summary'>('single');
   const [editingProject, setEditingProject] = useState<NhsoProject | null>(null);
@@ -250,7 +252,12 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     return selectedYear === 'all' ? projects : projects.filter((p) => p.fiscalYear === selectedYear);
   }, [projects, selectedYear]);
 
-  const totalFundBudget = fundSettings.totalFundBudget || 0;
+  const currentRevenueSource = fundSettings.revenueSourcesByYear?.[selectedYear];
+  const currentClause10_4_Plan = fundSettings.clause10_4_PlansByYear?.[selectedYear];
+  const totalFundBudget =
+    currentRevenueSource?.totalAnnualBudget ||
+    (selectedYear === fundSettings.fiscalYear ? fundSettings.totalFundBudget : 0) ||
+    0;
   const totalBudgetRequested = yearProjects.reduce((acc, p) => acc + (p.budgetRequested || 0), 0);
   const totalBudgetApproved = yearProjects.reduce(
     (acc, p) =>
@@ -398,6 +405,15 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
             </button>
 
             <button
+              onClick={() => setIsRevenueModalOpen(true)}
+              className="px-3.5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
+              title="คำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) และงบประชุม 10(4)"
+            >
+              <Coins className="w-4 h-4 text-slate-950" />
+              ที่มาเงินกองทุน & ข้อ 10(4)
+            </button>
+
+            <button
               onClick={() => {
                 setPrintingProject(null);
                 setPrintMode('summary');
@@ -481,71 +497,73 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* 1. กรอบงบกองทุน (พร้อมช่องแก้ไขโดยตรงสำหรับปี 70 ที่ยังไม่ได้ตั้งงบ) */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm relative group">
+        {/* 1. กรอบงบกองทุน (พร้อมคำนวณ 4 แหล่งที่มาของเงิน และข้อ 10(4)) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm relative group hover:border-amber-400 dark:hover:border-amber-600 transition-all">
           <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span>กรอบงบกองทุน {selectedYear !== 'all' ? `ปี ${selectedYear}` : ''}</span>
-            <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 rounded-lg">
-              <Coins className="w-4 h-4" />
-            </div>
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
+              กรอบงบกองทุน {selectedYear !== 'all' ? `ปี ${selectedYear}` : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsRevenueModalOpen(true)}
+              className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-bold"
+              title="เปิดหน้าต่างคำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) & ข้อ 10(4)"
+            >
+              <Coins className="w-3.5 h-3.5" />
+              <span>ที่มางบ</span>
+            </button>
           </div>
 
-          {isEditingFundBudget ? (
-            <div className="mt-1 space-y-1.5 animate-in fade-in-50 duration-150">
-              <input
-                type="number"
-                value={tempFundBudget}
-                onChange={(e) => setTempFundBudget(e.target.value)}
-                placeholder="ระบุงบประมาณ เช่น 650000"
-                className="w-full px-2 py-1 text-sm font-bold border border-emerald-500 rounded-lg bg-emerald-50/50 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-                autoFocus
-              />
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleSaveFundBudget}
-                  className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded"
-                >
-                  บันทึก
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingFundBudget(false)}
-                  className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] rounded"
-                >
-                  ยกเลิก
-                </button>
-              </div>
+          <div
+            onClick={() => setIsRevenueModalOpen(true)}
+            className="cursor-pointer rounded-lg p-1 -m-1 transition-colors"
+            title="คลิกเพื่อคำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) และงบประชุม 10(4)"
+          >
+            <div className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center justify-between">
+              <span>
+                {totalFundBudget > 0 ? (
+                  <>
+                    {totalFundBudget.toLocaleString()}{' '}
+                    <span className="text-xs font-normal text-slate-500">บาท</span>
+                  </>
+                ) : (
+                  <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                    ยังไม่ได้ตั้งงบ (คลิกตั้งงบ)
+                  </span>
+                )}
+              </span>
+              <Coins className="w-4 h-4 text-emerald-600 opacity-60 group-hover:opacity-100 transition-opacity" />
             </div>
-          ) : (
-            <div
-              onClick={() => {
-                setTempFundBudget(String(totalFundBudget || ''));
-                setIsEditingFundBudget(true);
-              }}
-              className="cursor-pointer group-hover:bg-slate-50 dark:group-hover:bg-slate-800/40 rounded-lg p-1 -m-1 transition-colors"
-              title="คลิกเพื่อแก้ไขกรอบงบประมาณ"
-            >
-              <div className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center justify-between">
-                <span>
-                  {totalFundBudget > 0 ? (
-                    <>
-                      {totalFundBudget.toLocaleString()}{' '}
-                      <span className="text-xs font-normal text-slate-500">บาท</span>
-                    </>
-                  ) : (
-                    <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
-                      ยังไม่ได้ตั้งงบ (คลิกกรอก)
+
+            {currentRevenueSource ? (
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 space-y-0.5 border-t border-slate-100 dark:border-slate-800 pt-1.5 leading-tight">
+                <div className="flex items-center justify-between">
+                  <span>สปสช. (45บ. x {currentRevenueSource.populationCount?.toLocaleString()} คน):</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {(currentRevenueSource.nhsoPerCapitaTotal || 0).toLocaleString()} บ.
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>เทศบาลสมทบ ({currentRevenueSource.municipalMatchingRate}%):</span>
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                    {(currentRevenueSource.municipalMatchingTotal || 0).toLocaleString()} บ.
+                  </span>
+                </div>
+                {((currentRevenueSource.bankInterestTotal || 0) > 0 || (currentRevenueSource.carryOverTotal || 0) > 0) && (
+                  <div className="flex items-center justify-between text-[9.5px]">
+                    <span>ดอกเบี้ย + ยกยอด:</span>
+                    <span className="font-semibold text-purple-600 dark:text-purple-400">
+                      {((currentRevenueSource.bankInterestTotal || 0) + (currentRevenueSource.carryOverTotal || 0)).toLocaleString()} บ.
                     </span>
-                  )}
-                </span>
-                <Edit className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                )}
               </div>
+            ) : (
               <p className="text-[11px] text-slate-400 mt-1">
-                {totalFundBudget > 0 ? 'คลิกที่ตัวเลขเพื่อแก้ไข' : 'คลิกเพื่อระบุวงเงินปี 70'}
+                คลิกเพื่อคำนวณ 4 แหล่งที่มาของเงินกองทุน
               </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* 2. ยอดขอรับงบรวม */}
@@ -1316,6 +1334,17 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
           currentUserFullName={officerRecorder}
         />
       )}
+
+      {/* Fund Revenue Sources & Clause 10(4) Meeting Budget Modal */}
+      <NhsoFundRevenueModal
+        isOpen={isRevenueModalOpen}
+        onClose={() => setIsRevenueModalOpen(false)}
+        fiscalYear={selectedYear !== 'all' ? selectedYear : fundSettings.fiscalYear || '2570'}
+        settings={fundSettings}
+        projects={projects}
+        onSaveSettings={handleSaveSettings}
+        onUpsertProject={handleSaveProject}
+      />
     </div>
   );
 };

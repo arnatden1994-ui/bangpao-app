@@ -464,6 +464,63 @@ export interface NhsoFundSigners {
   approverTitle: string; // ตำแหน่งผู้อนุมัติ เช่น ประธานกองทุนฯ ทต.บางเป้า
 }
 
+// แหล่งที่มาของเงินกองทุนต่อรอบปีงบประมาณ
+export interface NhsoFundRevenueSource {
+  fiscalYear: string;
+  // 1. งบโอนจาก สปสช. (ตามรายหัวประชากร)
+  nhsoPerCapitaRate: number; // อัตราต่อหัว เช่น 45 บาท
+  populationCount: number; // จำนวนประชากร ต.บางเป้า เช่น 9874 คน
+  nhsoPerCapitaTotal: number; // ผลคูณประชากร x 45 (หรือกรอกแก้ไขเองได้)
+
+  // 2. งบสมทบจากเทศบาลตำบลบางเป้า (อปท. สมทบ ไม่น้อยกว่าร้อยละ 50 ของข้อ 1)
+  municipalMatchingRate: number; // เปอร์เซ็นต์ เช่น 50%
+  municipalMatchingTotal: number; // ยอดเงินสมทบจริงจากเทศบาล (กรอกแก้ไขได้อิสระ)
+
+  // 3. ดอกเบี้ยจากธนาคารและรายได้อื่นๆ
+  bankInterestTotal: number; // ดอกเบี้ยเงินฝากธนาคาร
+
+  // 4. เงินยกยอดจากปีเก่า (โครงการที่ไม่ได้ดำเนินการในปีก่อน)
+  carryOverProjectIds: string[]; // รายการ id โครงการปีก่อนที่ได้รับมติให้ยกยอด
+  carryOverTotal: number; // ยอดเงินยกยอดรวม
+  carryOverMeetingRound?: string; // มติที่ประชุม เช่น ครั้งที่ 1/2570
+  carryOverNote?: string; // รายละเอียด/หมายเหตุการยกยอด
+
+  // ยอดรวมรายรับกองทุนทั้งสิ้น (1 + 2 + 3 + 4)
+  totalAnnualBudget: number;
+  updatedAt?: string;
+}
+
+// รายการค่าใช้จ่ายบริหารกองทุนและการประชุม ตามข้อ 10(4)
+export interface NhsoClause10_4_ExpenseItem {
+  id: string;
+  category:
+    | 'meeting_allowance' // เบี้ยประชุมกรรมการ/อนุกรรมการ
+    | 'meal_snack' // อาหารกลางวันและอาหารว่างประชุม
+    | 'materials_office' // วัสดุอุปกรณ์สำนักงาน/เอกสาร
+    | 'travel_transport' // ค่าพาหนะ/เดินทาง
+    | 'assistant_wage' // ค่าจ้างผู้ช่วยบันทึกงาน
+    | 'other'; // อื่นๆ
+  name: string; // รายการ เช่น ค่าตอบแทนคณะกรรมการในการประชุม
+  quantity: number; // จำนวน เช่น 15 (คน)
+  unit: string; // คน, มื้อ, ชุด, รายการ, งาน
+  unitPrice: number; // ราคาต่อหน่วย เช่น 400 บาท
+  meetingCount?: number; // จำนวนครั้ง เช่น 4 ครั้ง
+  total: number; // รวมเงิน
+  note?: string; // หมายเหตุ
+}
+
+// แผนการใช้เงินข้อ 10(4) ต่อรอบปี
+export interface NhsoClause10_4_BudgetPlan {
+  fiscalYear: string;
+  maxCapPercent: number; // เพดานตามกฎหมาย เช่น 15% หรือ 20%
+  maxCapAmount: number; // วงเงินเพดานสูงสุดที่ใช้ได้
+  items: NhsoClause10_4_ExpenseItem[];
+  totalPlanned: number; // รวมเงินที่วางแผนใช้
+  linkedProjectId?: string; // ID โครงการประเภท 4 ในระบบ (ถ้ามี)
+  notes?: string;
+  updatedAt?: string;
+}
+
 export interface NhsoFundSettings {
   fiscalYear: string;
   totalFundBudget: number; // กรอบงบประมาณรวมของกองทุน เช่น 600000
@@ -477,8 +534,12 @@ export interface NhsoFundSettings {
     snackPerMeal: number; // 25
     vinylPerBanner: number; // 450
     adultDiaperPerPiece: number; // 9.50
+    meetingAllowanceBoard?: number; // 400
+    meetingAllowanceSubcommittee?: number; // 300
   };
   orgProposerDefaults?: Record<string, { name: string; title: string }>;
+  revenueSourcesByYear?: Record<string, NhsoFundRevenueSource>;
+  clause10_4_PlansByYear?: Record<string, NhsoClause10_4_BudgetPlan>;
   updatedAt?: string;
 }
 
