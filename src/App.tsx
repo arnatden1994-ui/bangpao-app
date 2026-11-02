@@ -80,7 +80,6 @@ import { OriginalGasAppView } from './components/OriginalGasAppView.tsx';
 
 // Main Navigation & Command Dashboard
 import { Navbar } from './components/Navbar.tsx';
-import { Sidebar } from './components/Sidebar.tsx';
 import { ExecutiveCommandDashboard } from './components/ExecutiveCommandDashboard.tsx';
 import { SettingsModuleView } from './components/SettingsModuleView.tsx';
 
@@ -1208,10 +1207,11 @@ unsubLicenses();
   }
 
   return (
-    <div className="relative h-screen bg-[#f4f7fa] flex overflow-hidden font-sans text-slate-800 antialiased">
-      {/* 1. Sidebar Navigation (Left Panel: 6 Strictly Ordered Modules) */}
-      <Sidebar
+    <div className="relative h-screen bg-[#f4f7fa] flex flex-col overflow-hidden font-sans text-slate-800 antialiased">
+      {/* 1. Municipal Top Header & Mega-Menu Navigation (สไตล์เว็บเทศบาล bangpao.go.th) */}
+      <Navbar
         currentTab={currentTab}
+        currentSubTabLabel={getCurrentSubTabLabel()}
         activeSubTabs={{
           hazardous: hazardousSubTab,
           nhso_ltc: nhsoLtcSubTab,
@@ -1220,38 +1220,22 @@ unsubLicenses();
           settings: settingsSubTab,
         }}
         onNavigate={handleSidebarNavigate}
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-        badgeCounts={badgeCounts}
+        config={config}
         currentUser={currentUser}
         onOpenAuthModal={() => setAuthModalOpen(true)}
         onLogout={handleLogout}
+        onOpenSheetsModal={() => setSheetsModalOpen(true)}
+        onOpenFirebaseModal={() => setFirebaseModalOpen(true)}
+        isSyncing={isSyncing}
+        onQuickSync={handleQuickSync}
+        onOpenSignerSettings={() => setSignerSettingsModalOpen(true)}
+        onOpenCitizenShareModal={() => setCitizenShareModalOpen(true)}
+        badgeCounts={badgeCounts}
       />
 
-      {/* 2. Main Container with Top Header and Scrollable Content */}
-      <div className="relative flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        {/* Top Header Bar without horizontal pills */}
-        <Navbar
-          sidebarOpen={sidebarOpen}
-          currentTab={currentTab}
-          currentSubTabLabel={getCurrentSubTabLabel()}
-          config={config}
-          currentUser={currentUser}
-          onOpenAuthModal={() => setAuthModalOpen(true)}
-          onLogout={handleLogout}
-          onOpenSheetsModal={() => setSheetsModalOpen(true)}
-          onOpenFirebaseModal={() => setFirebaseModalOpen(true)}
-          isSyncing={isSyncing}
-          onQuickSync={handleQuickSync}
-          onOpenSignerSettings={() => setSignerSettingsModalOpen(true)}
-          onOpenCitizenShareModal={() => setCitizenShareModalOpen(true)}
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          badgeCounts={badgeCounts}
-        />
-
-        {/* Scrollable View Area */}
-        <div className="relative flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
-          <main className="flex-1 w-full px-3 sm:px-5 lg:px-6 xl:px-8 py-4 max-w-[1920px] mx-auto print:p-0 print:m-0 print:max-w-none">
+      {/* 2. Scrollable View Area (Full Width 100%) */}
+      <div className="relative flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+        <main className="flex-1 w-full px-3 sm:px-6 lg:px-8 xl:px-10 py-5 max-w-[1920px] mx-auto print:p-0 print:m-0 print:max-w-none">
             {/* 1. 🏠 แดชบอร์ดหลักทุกระบบ (Master Overview Dashboard) */}
             {currentTab === 'overview' && (
               <ExecutiveCommandDashboard
@@ -1759,7 +1743,6 @@ unsubLicenses();
             onOpenCitizenPortal={() => setCitizenShareModalOpen(true)}
           />
         </div>
-      </div>
 
       {/* Toast Notification */}
       {toast && (
@@ -1996,22 +1979,6 @@ unsubLicenses();
           showToast('success', `บันทึกการยืม ${l.equipmentName} (${l.equipmentCode || 'ครุภัณฑ์'}) เรียบร้อย`);
         }}
       />
-
-      {/* Floating Action Button (FAB) for Mobile/Tablet Quick Navigation */}
-      {!sidebarOpen && (
-        <aside className="fixed bottom-5 left-4 z-40 lg:hidden pointer-events-auto animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="เปิดเมนูนำทางหลัก"
-            title="เปิดเมนูนำทางหลัก"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/35 border-2 border-white/90 hover:scale-105 active:scale-95 transition-all cursor-pointer backdrop-blur-md"
-          >
-            <Menu className="w-4 h-4 text-emerald-200 shrink-0" />
-            <span className="tracking-wide">เมนูระบบ</span>
-          </button>
-        </aside>
-      )}
     </div>
   );
 }
