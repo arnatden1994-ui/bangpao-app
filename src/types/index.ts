@@ -482,6 +482,20 @@ export interface NhsoFundSettings {
   updatedAt?: string;
 }
 
+export interface NhsoActivityGroup {
+  id: string;
+  activityName: string; // เช่น 1. กิจกรรมอบรมให้ความรู้
+  activities: string; // กิจกรรม (คอลัมน์ 2)
+  objectives: string; // วัตถุประสงค์ (คอลัมน์ 3)
+  targetGroup: string; // กลุ่มเป้าหมาย (คอลัมน์ 4)
+  targetParticipants?: number; // จำนวนกลุ่มเป้าหมาย (คน)
+  kpi: string; // ตัวชี้วัด (KPI) (คอลัมน์ 5)
+  location: string; // พื้นที่ดำเนินการ (คอลัมน์ 6)
+  duration: string; // ระยะเวลาดำเนินการ (คอลัมน์ 7)
+  budgetLines: NhsoFundBudgetLine[]; // รายการค่าใช้จ่าย
+  subtotal?: number; // รวมเงินของกิจกรรมนี้
+}
+
 export interface NhsoDisbursementRecord {
   id: string;
   disbursementDate: string; // วันที่เบิกจ่าย เช่น 2026-11-15
@@ -536,6 +550,7 @@ export interface NhsoProject {
   location?: string;
   duration?: string;
   budgetLines?: NhsoFundBudgetLine[];
+  activityGroups?: NhsoActivityGroup[];
   signers?: NhsoFundSigners;
   committeeDecision?: 'approve' | 'reject' | 'revision' | 'pending';
   committeeComment?: string;

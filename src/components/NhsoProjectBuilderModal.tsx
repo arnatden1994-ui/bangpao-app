@@ -14,12 +14,15 @@ import {
   Info,
   DollarSign,
   Copy,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   NhsoProject,
   NhsoFundBudgetLine,
   NhsoFundSettings,
   NHSO_FUND_CATEGORIES,
+  NhsoActivityGroup,
 } from '../types/index.ts';
 
 interface NhsoProjectBuilderModalProps {
@@ -61,9 +64,9 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
   settings,
   existingProjects = [],
 }) => {
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
 
-  // Form State
+  // Form General State
   const [fiscalYear, setFiscalYear] = useState<string>(
     initialProject?.fiscalYear || settings.fiscalYear || '2570'
   );
@@ -90,57 +93,52 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
   );
   const [phone, setPhone] = useState<string>(initialProject?.phone || '');
 
-  // 13 Columns Details
-  const [activities, setActivities] = useState<string>(initialProject?.activities || '');
-  const [objectives, setObjectives] = useState<string>(initialProject?.objectives || '');
-  const [targetGroup, setTargetGroup] = useState<string>(initialProject?.targetGroup || '');
-  const [targetParticipants, setTargetParticipants] = useState<number>(
-    initialProject?.targetParticipants || 0
-  );
-  const [kpi, setKpi] = useState<string>(initialProject?.kpi || '');
-  const [location, setLocation] = useState<string>(
-    initialProject?.location || 'พื้นที่ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง'
-  );
-  const [duration, setDuration] = useState<string>(
-    initialProject?.duration || 'ต.ค. 2569 - ก.ย. 2570'
-  );
+  // Activity Groups State (Multiple Activities support!)
+  const [activityGroups, setActivityGroups] = useState<NhsoActivityGroup[]>(() => {
+    if (initialProject?.activityGroups && initialProject.activityGroups.length > 0) {
+      return initialProject.activityGroups;
+    }
+    // Fallback: construct 1 group from initial project fields
+    return [
+      {
+        id: `act_${Date.now()}_1`,
+        activityName: '1. กิจกรรมดำเนินงาน',
+        activities: initialProject?.activities || '',
+        objectives: initialProject?.objectives || '',
+        targetGroup: initialProject?.targetGroup || '',
+        targetParticipants: initialProject?.targetParticipants || 0,
+        kpi: initialProject?.kpi || '',
+        location: initialProject?.location || 'พื้นที่ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง',
+        duration: initialProject?.duration || 'ต.ค. 2569 - ก.ย. 2570',
+        budgetLines:
+          initialProject?.budgetLines && initialProject.budgetLines.length > 0
+            ? initialProject.budgetLines
+            : [
+                {
+                  id: 'line_1_1',
+                  activityCategory: '1. กิจกรรมดำเนินงาน',
+                  name: '1.1) ค่าตอบแทนวิทยากร',
+                  quantity: 6,
+                  unit: 'ชั่วโมง',
+                  unitPrice: settings.standardRates?.speakerHourly || 600,
+                  total: 6 * (settings.standardRates?.speakerHourly || 600),
+                },
+                {
+                  id: 'line_1_2',
+                  activityCategory: '1. กิจกรรมดำเนินงาน',
+                  name: '1.2) ค่าอาหารกลางวัน',
+                  quantity: 40,
+                  unit: 'มื้อ',
+                  unitPrice: settings.standardRates?.lunchPerMeal || 75,
+                  total: 40 * (settings.standardRates?.lunchPerMeal || 75),
+                },
+              ],
+        subtotal: 0,
+      },
+    ];
+  });
 
-  // Budget Lines
-  const [budgetLines, setBudgetLines] = useState<NhsoFundBudgetLine[]>(
-    initialProject?.budgetLines && initialProject.budgetLines.length > 0
-      ? initialProject.budgetLines
-      : [
-          {
-            id: 'line_1',
-            activityCategory: '1. กิจกรรมอบรมให้ความรู้',
-            name: '1.1) ค่าตอบแทนวิทยากร',
-            quantity: 6,
-            unit: 'ชั่วโมง',
-            unitPrice: settings.standardRates?.speakerHourly || 600,
-            total: 6 * (settings.standardRates?.speakerHourly || 600),
-          },
-          {
-            id: 'line_2',
-            activityCategory: '1. กิจกรรมอบรมให้ความรู้',
-            name: '1.2) ค่าอาหารกลางวัน',
-            quantity: 50,
-            unit: 'มื้อ',
-            unitPrice: settings.standardRates?.lunchPerMeal || 75,
-            total: 50 * (settings.standardRates?.lunchPerMeal || 75),
-          },
-          {
-            id: 'line_3',
-            activityCategory: '1. กิจกรรมอบรมให้ความรู้',
-            name: '1.3) ค่าอาหารว่างและเครื่องดื่ม',
-            quantity: 50,
-            unit: 'ชุด',
-            unitPrice: settings.standardRates?.snackPerMeal || 25,
-            total: 50 * (settings.standardRates?.snackPerMeal || 25),
-          },
-        ]
-  );
-
-  // Signers
+  // Signers State
   const defaultOrgProposer = settings.orgProposerDefaults?.[effectiveOrg] || {
     name: responsiblePerson || '',
     title: 'ผู้เสนอโครงการ',
@@ -165,11 +163,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
     initialProject?.signers?.approverTitle || settings.defaultApproverTitle
   );
 
-  // Clone from template state
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
-
-  // Calculate total budget automatically
-  const calculatedBudgetTotal = budgetLines.reduce((sum, item) => sum + (item.total || 0), 0);
 
   // Auto-update proposer when org preset changes
   useEffect(() => {
@@ -184,47 +178,133 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
 
   if (!isOpen) return null;
 
-  // Add standard rate items
-  const handleAddBudgetLine = (
-    name = '',
-    unit = 'รายการ',
-    unitPrice = 0,
-    quantity = 1,
-    activityCategory = '1. กิจกรรมดำเนินงาน'
-  ) => {
-    const newLine: NhsoFundBudgetLine = {
-      id: `line_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      activityCategory,
-      name,
-      quantity,
-      unit,
-      unitPrice,
-      total: quantity * unitPrice,
+  // Calculate Grand Total across all activity groups
+  const grandTotal = activityGroups.reduce((sum, g) => {
+    const groupSum = (g.budgetLines || []).reduce((s, line) => s + (line.total || 0), 0);
+    return sum + groupSum;
+  }, 0);
+
+  // Add new activity group
+  const handleAddActivityGroup = () => {
+    const newIdx = activityGroups.length + 1;
+    const newGroup: NhsoActivityGroup = {
+      id: `act_${Date.now()}_${newIdx}`,
+      activityName: `${newIdx}. กิจกรรมใหม่`,
+      activities: '',
+      objectives: '',
+      targetGroup: '',
+      targetParticipants: 0,
+      kpi: '',
+      location: 'พื้นที่ตำบลบางเป้า',
+      duration: `ต.ค. ${Number(fiscalYear) - 1} - ก.ย. ${fiscalYear}`,
+      budgetLines: [
+        {
+          id: `line_${Date.now()}_1`,
+          activityCategory: `${newIdx}. กิจกรรมใหม่`,
+          name: `${newIdx}.1) ค่าอาหารว่างและเครื่องดื่ม`,
+          quantity: 40,
+          unit: 'ชุด',
+          unitPrice: settings.standardRates?.snackPerMeal || 25,
+          total: 40 * (settings.standardRates?.snackPerMeal || 25),
+        },
+      ],
+      subtotal: 40 * (settings.standardRates?.snackPerMeal || 25),
     };
-    setBudgetLines([...budgetLines, newLine]);
+    setActivityGroups([...activityGroups, newGroup]);
   };
 
-  const handleUpdateBudgetLine = (
-    id: string,
-    field: keyof NhsoFundBudgetLine,
-    value: string | number
+  const handleRemoveActivityGroup = (groupId: string) => {
+    if (activityGroups.length <= 1) {
+      alert('โครงการต้องมีอย่างน้อย 1 กิจกรรม');
+      return;
+    }
+    if (!window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบกิจกรรมนี้?')) return;
+    setActivityGroups(activityGroups.filter((g) => g.id !== groupId));
+  };
+
+  const handleUpdateActivityGroup = (
+    groupId: string,
+    field: keyof NhsoActivityGroup,
+    value: any
   ) => {
-    setBudgetLines((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        const updated = { ...item, [field]: value };
-        if (field === 'quantity' || field === 'unitPrice') {
-          const q = field === 'quantity' ? Number(value) : item.quantity;
-          const p = field === 'unitPrice' ? Number(value) : item.unitPrice;
-          updated.total = q * p;
-        }
-        return updated;
+    setActivityGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        return { ...g, [field]: value };
       })
     );
   };
 
-  const handleRemoveBudgetLine = (id: string) => {
-    setBudgetLines(budgetLines.filter((l) => l.id !== id));
+  // Add budget line to a specific activity group
+  const handleAddBudgetLineToGroup = (
+    groupId: string,
+    name = '',
+    unit = 'รายการ',
+    unitPrice = 0,
+    quantity = 1
+  ) => {
+    setActivityGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        const newLine: NhsoFundBudgetLine = {
+          id: `line_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          activityCategory: g.activityName,
+          name,
+          quantity,
+          unit,
+          unitPrice,
+          total: quantity * unitPrice,
+        };
+        const nextLines = [...(g.budgetLines || []), newLine];
+        return {
+          ...g,
+          budgetLines: nextLines,
+          subtotal: nextLines.reduce((s, l) => s + (l.total || 0), 0),
+        };
+      })
+    );
+  };
+
+  const handleUpdateBudgetLineInGroup = (
+    groupId: string,
+    lineId: string,
+    field: keyof NhsoFundBudgetLine,
+    value: string | number
+  ) => {
+    setActivityGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        const nextLines = (g.budgetLines || []).map((l) => {
+          if (l.id !== lineId) return l;
+          const updated = { ...l, [field]: value };
+          if (field === 'quantity' || field === 'unitPrice') {
+            const q = field === 'quantity' ? Number(value) : l.quantity;
+            const p = field === 'unitPrice' ? Number(value) : l.unitPrice;
+            updated.total = q * p;
+          }
+          return updated;
+        });
+        return {
+          ...g,
+          budgetLines: nextLines,
+          subtotal: nextLines.reduce((s, l) => s + (l.total || 0), 0),
+        };
+      })
+    );
+  };
+
+  const handleRemoveBudgetLineFromGroup = (groupId: string, lineId: string) => {
+    setActivityGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        const nextLines = (g.budgetLines || []).filter((l) => l.id !== lineId);
+        return {
+          ...g,
+          budgetLines: nextLines,
+          subtotal: nextLines.reduce((s, l) => s + (l.total || 0), 0),
+        };
+      })
+    );
   };
 
   // Copy from an existing project template
@@ -238,23 +318,40 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       setSelectedOrgPreset('custom');
       setCustomOrgText(tmpl.proposingOrg);
     }
-    setActivities(tmpl.activities || '');
-    setObjectives(tmpl.objectives || '');
-    setTargetGroup(tmpl.targetGroup || '');
-    setTargetParticipants(tmpl.targetParticipants || 0);
-    setKpi(tmpl.kpi || '');
-    setLocation(tmpl.location || 'พื้นที่ตำบลบางเป้า');
-    setDuration(`ต.ค. ${Number(fiscalYear) - 1} - ก.ย. ${fiscalYear}`);
     setResponsiblePerson(tmpl.responsiblePerson || '');
 
-    // Clone budget lines with new IDs
-    if (tmpl.budgetLines && tmpl.budgetLines.length > 0) {
-      setBudgetLines(
-        tmpl.budgetLines.map((l, idx) => ({
-          ...l,
-          id: `line_clone_${idx}_${Date.now()}`,
+    // Clone activity groups
+    if (tmpl.activityGroups && tmpl.activityGroups.length > 0) {
+      setActivityGroups(
+        tmpl.activityGroups.map((g, gIdx) => ({
+          ...g,
+          id: `act_clone_${gIdx}_${Date.now()}`,
+          budgetLines: (g.budgetLines || []).map((l, lIdx) => ({
+            ...l,
+            id: `line_clone_${gIdx}_${lIdx}_${Date.now()}`,
+          })),
         }))
       );
+    } else {
+      // Fallback single group
+      setActivityGroups([
+        {
+          id: `act_clone_${Date.now()}`,
+          activityName: '1. กิจกรรมดำเนินงาน',
+          activities: tmpl.activities || '',
+          objectives: tmpl.objectives || '',
+          targetGroup: tmpl.targetGroup || '',
+          targetParticipants: tmpl.targetParticipants || 0,
+          kpi: tmpl.kpi || '',
+          location: tmpl.location || 'พื้นที่ตำบลบางเป้า',
+          duration: tmpl.duration || `ต.ค. ${Number(fiscalYear) - 1} - ก.ย. ${fiscalYear}`,
+          budgetLines: (tmpl.budgetLines || []).map((l, lIdx) => ({
+            ...l,
+            id: `line_clone_${lIdx}_${Date.now()}`,
+          })),
+          subtotal: tmpl.budgetRequested || 0,
+        },
+      ]);
     }
 
     if (tmpl.signers?.proposerName) {
@@ -275,6 +372,12 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
 
     const categoryInfo = NHSO_FUND_CATEGORIES.find((c) => c.number === categoryNumber);
 
+    // Flatten all budget lines
+    const allLines: NhsoFundBudgetLine[] = [];
+    activityGroups.forEach((g) => {
+      (g.budgetLines || []).forEach((l) => allLines.push(l));
+    });
+
     const projectToSave: NhsoProject = {
       id: initialProject?.id || `NHSO-${fiscalYear.slice(-2)}-${Date.now().toString().slice(-4)}`,
       fiscalYear,
@@ -286,17 +389,21 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       responsiblePerson: responsiblePerson.trim() || effectiveOrg,
       phone: phone.trim(),
 
-      activities: activities.trim(),
-      objectives: objectives.trim(),
-      targetGroup: targetGroup.trim(),
-      targetParticipants: Number(targetParticipants) || 0,
-      kpi: kpi.trim(),
-      location: location.trim(),
-      duration: duration.trim(),
+      // Activity Groups
+      activityGroups,
 
-      budgetLines,
-      budgetRequested: calculatedBudgetTotal,
-      budgetApproved: initialProject?.budgetApproved || calculatedBudgetTotal,
+      // Top-level fallbacks
+      activities: activityGroups.map((g) => g.activities).filter(Boolean).join('\n\n'),
+      objectives: activityGroups.map((g) => g.objectives).filter(Boolean).join('\n\n'),
+      targetGroup: activityGroups.map((g) => g.targetGroup).filter(Boolean).join('\n\n'),
+      targetParticipants: activityGroups.reduce((s, g) => s + (g.targetParticipants || 0), 0),
+      kpi: activityGroups.map((g) => g.kpi).filter(Boolean).join('\n\n'),
+      location: activityGroups.map((g) => g.location).filter(Boolean).join(' / '),
+      duration: activityGroups.map((g) => g.duration).filter(Boolean).join(' / '),
+
+      budgetLines: allLines,
+      budgetRequested: grandTotal,
+      budgetApproved: initialProject?.budgetApproved || grandTotal,
       status: initialProject?.status || 'submitted',
       committeeDecision: initialProject?.committeeDecision || 'pending',
       committeeComment: initialProject?.committeeComment || '',
@@ -318,8 +425,8 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white">
           <div className="flex items-center gap-3">
@@ -334,12 +441,12 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                 </span>
               </h2>
               <p className="text-xs text-white/80 mt-0.5">
-                แม่แบบมาตรฐาน 13 คอลัมน์ กองทุนหลักประกันสุขภาพตำบลบางเป้า
+                รองรับหลายกิจกรรม (เช่น อบรม + ฝึกปฏิบัติว่ายน้ำ) และคิดคำนวณงบประมาณอัตโนมัติ
               </p>
             </div>
           </div>
+
           <div className="flex items-center gap-2">
-            {/* Clone Button */}
             {existingProjects.length > 0 && (
               <button
                 type="button"
@@ -360,8 +467,8 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
           </div>
         </div>
 
-        {/* Wizard Step Navigation */}
-        <div className="grid grid-cols-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-xs">
+        {/* 3 Step Wizard Navigation */}
+        <div className="grid grid-cols-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-xs">
           <button
             type="button"
             onClick={() => setActiveStep(1)}
@@ -376,6 +483,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
             </span>
             <span>ข้อมูลทั่วไป & ประเภท</span>
           </button>
+
           <button
             type="button"
             onClick={() => setActiveStep(2)}
@@ -388,8 +496,11 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
             <span className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-700 text-xs font-bold">
               2
             </span>
-            <span>เนื้อหา & ตัวชี้วัด (13 คอลัมน์)</span>
+            <span>
+              กิจกรรม & งบประมาณ ({activityGroups.length} กิจกรรม • {grandTotal.toLocaleString()} บ.)
+            </span>
           </button>
+
           <button
             type="button"
             onClick={() => setActiveStep(3)}
@@ -402,30 +513,16 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
             <span className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-700 text-xs font-bold">
               3
             </span>
-            <span>ตารางงบประมาณ ({calculatedBudgetTotal.toLocaleString()} บ.)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveStep(4)}
-            className={`py-3 px-4 font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
-              activeStep === 4
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-700 text-xs font-bold">
-              4
-            </span>
             <span>ผู้ลงนาม 3 ระดับ</span>
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* STEP 1: GENERAL & CATEGORY */}
+        {/* Modal Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          {/* STEP 1: GENERAL INFO */}
           {activeStep === 1 && (
             <div className="space-y-5 animate-in fade-in-50 duration-150">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     ปีงบประมาณ <span className="text-red-500">*</span>
@@ -474,7 +571,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="เช่น โครงการตรวจคัดกรองเบาหวานและความดันโลหิตสูงเชิงรุกในชุมชน ประจำปี 2570"
+                  placeholder="เช่น โครงการบางเป้าเฝ้าระวัง ป้องกันเด็กจมน้ำ ประจำปี 2570"
                   required
                 />
               </div>
@@ -508,7 +605,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                   หน่วยงานผู้ขอรับการสนับสนุนงบประมาณ <span className="text-red-500">*</span>
                 </label>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <span className="block text-xs text-slate-500 mb-1">เลือกจากรายการมาตรฐาน:</span>
                     <select
@@ -562,304 +659,399 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     value={responsiblePerson}
                     onChange={(e) => setResponsiblePerson(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="เช่น นางสาวปฐมาภรณ์  จันทร์แจ่ม หรือ ประธาน อสม. ม.1"
+                    placeholder="เช่น กองสาธารณสุขและสิ่งแวดล้อม หรือ นางสาวปฐมาภรณ์  จันทร์แจ่ม"
                   />
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 2: DETAILS & 13 COLUMNS */}
+          {/* STEP 2: ACTIVITIES & BUDGET (13 COLUMNS WITH MULTIPLE ACTIVITIES) */}
           {activeStep === 2 && (
-            <div className="space-y-4 animate-in fade-in-50 duration-150">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  กิจกรรมที่จะดำเนินการ (คอลัมน์ที่ 2) <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={4}
-                  value={activities}
-                  onChange={(e) => setActivities(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="1. อบรมให้ความรู้เรื่อง...\n2. จัดกิจกรรมตรวจคัดกรอง...\n3. ติดตามและประเมินผล..."
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  วัตถุประสงค์ (คอลัมน์ที่ 3) <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  value={objectives}
-                  onChange={(e) => setObjectives(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="1. เพื่อให้กลุ่มเป้าหมายมีความรู้ความเข้าใจ...\n2. เพื่อส่งเสริมให้เกิดพฤติกรรมสุขภาพที่ดี..."
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    กลุ่มเป้าหมาย (คอลัมน์ที่ 4)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={targetGroup}
-                    onChange={(e) => setTargetGroup(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="เช่น ประชาชนกลุ่มเสี่ยงโรคเรื้อรัง ม.1-7 จำนวน 120 คน"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    จำนวนกลุ่มเป้าหมาย (คน)
-                  </label>
-                  <input
-                    type="number"
-                    value={targetParticipants}
-                    onChange={(e) => setTargetParticipants(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold"
-                    placeholder="120"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  ตัวชี้วัดความสำเร็จ (KPI) (คอลัมน์ที่ 5)
-                </label>
-                <textarea
-                  rows={3}
-                  value={kpi}
-                  onChange={(e) => setKpi(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                  placeholder="1. ร้อยละ 80 ของกลุ่มเป้าหมายมีความรู้เพิ่มขึ้น\n2. ร้อยละ 90 เข้าร่วมกิจกรรมจนเสร็จสิ้น"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    พื้นที่ดำเนินการ (คอลัมน์ที่ 6)
-                  </label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="เช่น ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    ระยะเวลาดำเนินการ (คอลัมน์ที่ 7)
-                  </label>
-                  <input
-                    type="text"
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="เช่น ต.ค. 2569 - ก.ย. 2570 หรือ มี.ค. - เม.ย. 2570"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: BUDGET CALCULATOR */}
-          {activeStep === 3 && (
-            <div className="space-y-5 animate-in fade-in-50 duration-150">
-              {/* Quick Preset Buttons */}
-              <div className="bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 block flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  เพิ่มรายการด่วนตามอัตรามาตรฐาน สปสช.:
+            <div className="space-y-6 animate-in fade-in-50 duration-150">
+              <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl p-3.5 text-xs text-blue-900 dark:text-blue-200">
+                <span>
+                  💡 <strong>รองรับหลายกิจกรรม:</strong> โครงการนี้มีทั้งหมด{' '}
+                  <strong>{activityGroups.length}</strong> กิจกรรมหลัก (เช่น กิจกรรมอบรมให้ความรู้ + กิจกรรมฝึกปฏิบัติว่ายน้ำ)
                 </span>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleAddBudgetLine(
-                        'ค่าตอบแทนวิทยากร (6 ชม. x 600 บ.)',
-                        'ชั่วโมง',
-                        settings.standardRates?.speakerHourly || 600,
-                        6
-                      )
-                    }
-                    className="px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:border-emerald-500 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
-                  >
-                    + วิทยากร (600 บ./ชม.)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleAddBudgetLine(
-                        'ค่าอาหารกลางวันผู้เข้าร่วมอบรม',
-                        'มื้อ',
-                        settings.standardRates?.lunchPerMeal || 75,
-                        50
-                      )
-                    }
-                    className="px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:border-emerald-500 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
-                  >
-                    + อาหารกลางวัน (75 บ./มื้อ)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleAddBudgetLine(
-                        'ค่าอาหารว่างและเครื่องดื่ม',
-                        'ชุด',
-                        settings.standardRates?.snackPerMeal || 25,
-                        50
-                      )
-                    }
-                    className="px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:border-emerald-500 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
-                  >
-                    + อาหารว่าง (25 บ./ชุด)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleAddBudgetLine(
-                        'ค่าป้ายไวนิลโครงการ ขนาด 1.2 x 2.5 เมตร',
-                        'ป้าย',
-                        settings.standardRates?.vinylPerBanner || 450,
-                        1
-                      )
-                    }
-                    className="px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:border-emerald-500 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
-                  >
-                    + ป้ายไวนิล (450 บ.)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleAddBudgetLine(
-                        'ค่าผ้าอ้อมผู้ใหญ่ สปสช.',
-                        'ชิ้น',
-                        settings.standardRates?.adultDiaperPerPiece || 9.5,
-                        500
-                      )
-                    }
-                    className="px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:border-emerald-500 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
-                  >
-                    + ผ้าอ้อมผู้ใหญ่ (9.50 บ.)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddBudgetLine('', 'รายการ', 0, 1)}
-                    className="px-3 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm font-medium flex items-center gap-1 transition-colors"
-                  >
-                    <Plus className="w-3 h-3" /> เพิ่มแถวใหม่
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleAddActivityGroup}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap"
+                >
+                  <Plus className="w-3.5 h-3.5" /> เพิ่มกิจกรรมที่ {activityGroups.length + 1}
+                </button>
               </div>
 
-              {/* Table of Budget Lines */}
-              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <th className="py-2.5 px-3">หมวด/รายการค่าใช้จ่าย</th>
-                      <th className="py-2.5 px-2 w-20 text-center">จำนวน</th>
-                      <th className="py-2.5 px-2 w-20 text-center">หน่วย</th>
-                      <th className="py-2.5 px-2 w-28 text-right">ราคา/หน่วย</th>
-                      <th className="py-2.5 px-3 w-32 text-right">รวมเงิน (บาท)</th>
-                      <th className="py-2.5 px-2 w-10 text-center">ลบ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {budgetLines.map((line) => (
-                      <tr key={line.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={line.name}
-                            onChange={(e) => handleUpdateBudgetLine(line.id, 'name', e.target.value)}
-                            placeholder="เช่น 1.1) ค่าตอบแทนวิทยากร"
-                            className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-1 focus:ring-emerald-500"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            value={line.quantity}
-                            onChange={(e) =>
-                              handleUpdateBudgetLine(line.id, 'quantity', e.target.value)
-                            }
-                            className="w-full px-1.5 py-1 text-center rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-1 focus:ring-emerald-500"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={line.unit}
-                            onChange={(e) => handleUpdateBudgetLine(line.id, 'unit', e.target.value)}
-                            className="w-full px-1.5 py-1 text-center rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-1 focus:ring-emerald-500"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            step="any"
-                            value={line.unitPrice}
-                            onChange={(e) =>
-                              handleUpdateBudgetLine(line.id, 'unitPrice', e.target.value)
-                            }
-                            className="w-full px-2 py-1 text-right rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold focus:ring-1 focus:ring-emerald-500"
-                          />
-                        </td>
-                        <td className="p-2 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                          {(line.total || 0).toLocaleString()}
-                        </td>
-                        <td className="p-2 text-center">
+              {/* Render each activity group card */}
+              {activityGroups.map((group, gIdx) => {
+                const groupSubtotal = (group.budgetLines || []).reduce(
+                  (s, l) => s + (l.total || 0),
+                  0
+                );
+
+                return (
+                  <div
+                    key={group.id || gIdx}
+                    className="border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-5 bg-slate-50/60 dark:bg-slate-800/30 space-y-4 shadow-sm relative"
+                  >
+                    {/* Activity Header Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                        <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
+                          {gIdx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={group.activityName}
+                          onChange={(e) =>
+                            handleUpdateActivityGroup(group.id, 'activityName', e.target.value)
+                          }
+                          placeholder={`เช่น ${gIdx + 1}. กิจกรรมอบรมให้ความรู้`}
+                          className="font-bold text-sm px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-1"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-3 py-1 rounded-lg">
+                          งบกิจกรรมนี้: {groupSubtotal.toLocaleString()} บาท
+                        </span>
+                        {activityGroups.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => handleRemoveBudgetLine(line.id)}
-                            className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                            onClick={() => handleRemoveActivityGroup(group.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                            title="ลบกิจกรรมนี้"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Columns 2 to 7 Form */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                          กิจกรรม (คอลัมน์ที่ 2) <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={group.activities}
+                          onChange={(e) =>
+                            handleUpdateActivityGroup(group.id, 'activities', e.target.value)
+                          }
+                          placeholder="เช่น - อบรมให้ความรู้เรื่องการช่วยเหลือผู้จมน้ำและการปฐมพยาบาลเบื้องต้น จำนวน 1 วัน"
+                          className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                          วัตถุประสงค์ (คอลัมน์ที่ 3) <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={group.objectives}
+                          onChange={(e) =>
+                            handleUpdateActivityGroup(group.id, 'objectives', e.target.value)
+                          }
+                          placeholder="เช่น 1. เพื่อให้เด็กมีความรู้พื้นฐานในการช่วยเหลือผู้จมน้ำและการปฐมพยาบาล"
+                          className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                          กลุ่มเป้าหมาย (คอลัมน์ที่ 4)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={group.targetGroup}
+                          onChange={(e) =>
+                            handleUpdateActivityGroup(group.id, 'targetGroup', e.target.value)
+                          }
+                          placeholder="เช่น 1. เด็กและเยาวชน อายุ 6-15 ปี จำนวน 30 คน\n2. วิทยากร 1 คน\nรวม 37 คน"
+                          className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                          ตัวชี้วัด (KPI) (คอลัมน์ที่ 5)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={group.kpi}
+                          onChange={(e) =>
+                            handleUpdateActivityGroup(group.id, 'kpi', e.target.value)
+                          }
+                          placeholder="เช่น 1. ร้อยละ 80 ของผู้เข้ารับการอบรมมีความรู้พื้นฐานเพิ่มขึ้น"
+                          className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                          พื้นที่ดำเนินการ (คอลัมน์ที่ 6)
+                        </label>
+                        <input
+                          type="text"
+                          value={group.location}
+                          onChange={(e) =>
+                            handleUpdateActivityGroup(group.id, 'location', e.target.value)
+                          }
+                          placeholder="เช่น ห้องประชุมศาลหลักเมืองท่า หรือ สระว่ายน้ำเทศบาลเมืองกันตัง"
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                          ระยะเวลาดำเนินการ (คอลัมน์ที่ 7)
+                        </label>
+                        <input
+                          type="text"
+                          value={group.duration}
+                          onChange={(e) =>
+                            handleUpdateActivityGroup(group.id, 'duration', e.target.value)
+                          }
+                          placeholder="เช่น มี.ค. - เม.ย. 69"
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Budget Table for this Activity Group */}
+                    <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Coins className="w-3.5 h-3.5 text-emerald-600" />
+                          รายการค่าใช้จ่ายในกิจกรรมนี้ ({group.budgetLines?.length || 0} รายการ)
+                        </span>
+
+                        {/* Quick Presets */}
+                        <div className="flex flex-wrap gap-1.5 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าตอบแทนวิทยากร`,
+                                'ชั่วโมง',
+                                settings.standardRates?.speakerHourly || 600,
+                                5
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-emerald-500"
+                          >
+                            + วิทยากร (600 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าอาหารกลางวัน`,
+                                'ชุด',
+                                settings.standardRates?.lunchPerMeal || 75,
+                                37
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-emerald-500"
+                          >
+                            + อาหารกลางวัน (75 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าอาหารว่างและเครื่องดื่ม`,
+                                'ชุด',
+                                settings.standardRates?.snackPerMeal || 25,
+                                74
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-emerald-500"
+                          >
+                            + อาหารว่าง (25 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าป้ายไวนิลขนาด 1.2*2.5 เมตร`,
+                                'ป้าย',
+                                settings.standardRates?.vinylPerBanner || 450,
+                                1
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-emerald-500"
+                          >
+                            + ไวนิล (450 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) รายการใหม่`,
+                                'ชุด',
+                                0,
+                                1
+                              )
+                            }
+                            className="px-2.5 py-0.5 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> เพิ่มแถว
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Line Items Table */}
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-900">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                              <th className="py-2 px-3">รายการค่าใช้จ่าย</th>
+                              <th className="py-2 px-2 w-20 text-center">จำนวน</th>
+                              <th className="py-2 px-2 w-20 text-center">หน่วย</th>
+                              <th className="py-2 px-2 w-28 text-right">ราคา/หน่วย</th>
+                              <th className="py-2 px-3 w-28 text-right">รวมเงิน (บาท)</th>
+                              <th className="py-2 px-2 w-10 text-center">ลบ</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {(group.budgetLines || []).map((line) => (
+                              <tr key={line.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                                <td className="p-1.5">
+                                  <input
+                                    type="text"
+                                    value={line.name}
+                                    onChange={(e) =>
+                                      handleUpdateBudgetLineInGroup(
+                                        group.id,
+                                        line.id,
+                                        'name',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 text-xs"
+                                  />
+                                </td>
+                                <td className="p-1.5">
+                                  <input
+                                    type="number"
+                                    value={line.quantity}
+                                    onChange={(e) =>
+                                      handleUpdateBudgetLineInGroup(
+                                        group.id,
+                                        line.id,
+                                        'quantity',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full px-1 py-1 text-center rounded border border-slate-200 dark:border-slate-700 text-xs"
+                                  />
+                                </td>
+                                <td className="p-1.5">
+                                  <input
+                                    type="text"
+                                    value={line.unit}
+                                    onChange={(e) =>
+                                      handleUpdateBudgetLineInGroup(
+                                        group.id,
+                                        line.id,
+                                        'unit',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full px-1 py-1 text-center rounded border border-slate-200 dark:border-slate-700 text-xs"
+                                  />
+                                </td>
+                                <td className="p-1.5">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={line.unitPrice}
+                                    onChange={(e) =>
+                                      handleUpdateBudgetLineInGroup(
+                                        group.id,
+                                        line.id,
+                                        'unitPrice',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full px-2 py-1 text-right rounded border border-slate-200 dark:border-slate-700 text-xs font-semibold"
+                                  />
+                                </td>
+                                <td className="p-1.5 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                                  {(line.total || 0).toLocaleString()}
+                                </td>
+                                <td className="p-1.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveBudgetLineFromGroup(group.id, line.id)}
+                                    className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Add Activity Button */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleAddActivityGroup}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold inline-flex items-center gap-2 shadow transition-transform hover:scale-105"
+                >
+                  <Plus className="w-4 h-4 text-emerald-400" />
+                  เพิ่มกิจกรรมที่ {activityGroups.length + 1} ในโครงการนี้
+                </button>
               </div>
 
-              {/* Budget Total Summary Card */}
-              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center justify-between">
+              {/* Grand Total Summary Banner */}
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-5 shadow-lg flex items-center justify-between">
                 <div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    รวมงบประมาณทั้งสิ้นที่ขอรับการสนับสนุน:
+                  <span className="text-xs text-white/80 font-medium">
+                    รวมงบประมาณทั้งสิ้นของโครงการ (ทุกกิจกรรมรวมกัน):
                   </span>
-                  <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300">
-                    {calculatedBudgetTotal.toLocaleString()}{' '}
-                    <span className="text-sm font-normal text-slate-600 dark:text-slate-400">
-                      บาท
-                    </span>
+                  <div className="text-3xl font-black tracking-tight">
+                    {grandTotal.toLocaleString()}{' '}
+                    <span className="text-base font-normal text-white/80">บาท</span>
                   </div>
                 </div>
-                <div className="text-right text-xs text-slate-500">
-                  จำนวนรายการค่าใช้จ่าย: {budgetLines.length} รายการ
+                <div className="text-right text-xs text-white/80">
+                  <div>จำนวนกิจกรรมทั้งหมด: {activityGroups.length} กิจกรรม</div>
+                  <div>
+                    จำนวนรายการค่าใช้จ่ายรวม:{' '}
+                    {activityGroups.reduce((s, g) => s + (g.budgetLines?.length || 0), 0)} รายการ
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 4: SIGNERS */}
-          {activeStep === 4 && (
+          {/* STEP 3: SIGNERS */}
+          {activeStep === 3 && (
             <div className="space-y-5 animate-in fade-in-50 duration-150">
               <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl p-4 text-xs text-blue-800 dark:text-blue-300">
                 ✍️ <strong>ผู้ลงนาม 3 ระดับ:</strong> ข้อมูลนี้จะปรากฏในส่วนท้ายของแบบฟอร์ม 13
                 คอลัมน์ (สามารถปรับเปลี่ยนเฉพาะโครงการนี้ได้)
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* 1. ผู้เสนอ */}
                 <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
                   <div className="flex items-center gap-2">
@@ -978,13 +1170,13 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                 ย้อนกลับ
               </button>
             )}
-            {activeStep < 4 && (
+            {activeStep < 3 && (
               <button
                 type="button"
                 onClick={() => setActiveStep((prev) => (prev + 1) as any)}
                 className="px-4 py-2 text-xs font-medium text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 rounded-xl transition-colors"
               >
-                ถัดไป: {activeStep === 1 ? 'เนื้อหาโครงการ' : activeStep === 2 ? 'ตารางงบประมาณ' : 'ผู้ลงนาม'}
+                ถัดไป: {activeStep === 1 ? 'กิจกรรม & ตารางงบประมาณ' : 'ผู้ลงนาม 3 ระดับ'}
               </button>
             )}
           </div>
@@ -1003,7 +1195,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
               className="px-6 py-2.5 text-xs font-medium text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-md flex items-center gap-2 transition-all hover:scale-[1.02]"
             >
               <Save className="w-4 h-4" />
-              บันทึกแบบเสนอโครงการ
+              บันทึกแบบเสนอโครงการ ({grandTotal.toLocaleString()} บ.)
             </button>
           </div>
         </div>
@@ -1028,31 +1220,34 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
               <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 my-3">
                 {existingProjects
                   .filter((p) => p.fiscalYear === '2569')
-                  .map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => handleApplyTemplate(p)}
-                      className="py-3 px-3 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors flex items-center justify-between"
-                    >
-                      <div className="pr-4">
-                        <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                          {p.orderNumber ? `${p.orderNumber}. ` : ''}
-                          {p.projectName.split('\n')[0]}
+                  .map((p) => {
+                    const actsCount = p.activityGroups?.length || 1;
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => handleApplyTemplate(p)}
+                        className="py-3 px-3 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors flex items-center justify-between"
+                      >
+                        <div className="pr-4">
+                          <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                            {p.orderNumber ? `${p.orderNumber}. ` : ''}
+                            {p.projectName.split('\n')[0]}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            {p.proposingOrg} • ประเภท {p.categoryNumber || 1} • {actsCount} กิจกรรม
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          {p.proposingOrg} • ประเภท {p.categoryNumber || 1}
+                        <div className="text-right">
+                          <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            {p.budgetRequested.toLocaleString()} บาท
+                          </div>
+                          <span className="text-[10px] text-emerald-700 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                            คลิกเพื่อใช้แม่แบบนี้
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                          {p.budgetRequested.toLocaleString()} บาท
-                        </div>
-                        <span className="text-[10px] text-emerald-700 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
-                          คลิกเพื่อใช้แม่แบบนี้
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
 
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 text-right">
