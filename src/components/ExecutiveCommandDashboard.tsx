@@ -152,7 +152,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   const inUseEquipmentUnits = equipmentList.reduce((acc, eq) => acc + (eq.inUseQuantity || 0), 0) || 58;
 
   // 2. Ratings breakdown calculated dynamically from establishments / inspections
-  const totalEstablishmentsCount = establishments.length || 36;
+  const totalEstablishmentsCount = establishments.length || licenses.length || 35;
   const ratingCounts = (() => {
     let excellent = 0;
     let good = 0;
@@ -993,7 +993,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
           </div>
           <div className="flex items-baseline gap-2.5">
             <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              {licenses.length || 36}
+              {licenses.length || establishments.length || 35}
             </span>
             <span className="text-xs sm:text-[13px] text-emerald-800 font-bold bg-emerald-100/90 px-2.5 py-0.5 rounded-full">
               สถานประกอบการ (แห่ง)
@@ -1538,7 +1538,9 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
               <FileCheck2 className="w-5 h-5" />
             </div>
             <span className="text-xs sm:text-sm font-bold text-slate-800">ออกใบอนุญาต</span>
-            <span className="text-xs text-teal-700 font-semibold mt-0.5">36 สถานประกอบการ</span>
+            <span className="text-xs text-teal-700 font-semibold mt-0.5">
+              {licenses.length || establishments.length || 35} สถานประกอบการ
+            </span>
           </button>
 
           {/* Action 4 */}
@@ -1590,7 +1592,9 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
                 <h3 className="font-bold text-base sm:text-lg text-slate-900">
                   มาตรฐานสุขาภิบาลสถานประกอบกิจการ (EHWA Ratings)
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">ผลการประเมินสถานประกอบกิจการ 35 แห่งในเขตพื้นที่เทศบาลตำบลบางเป้า</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                  ผลการประเมินสถานประกอบกิจการ {establishments.length || licenses.length || 35} แห่งในเขตพื้นที่เทศบาลตำบลบางเป้า
+                </p>
               </div>
               <button
                 onClick={() => onNavigateTab('dashboard')}
