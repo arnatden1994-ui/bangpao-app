@@ -27,7 +27,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  const { gasUrl, settings = {}, payload = {} } = body || {};
+  const { action, gasUrl, settings = {}, payload = {} } = body || {};
+
+  // Action: Verify LINE Bot Info & Connection
+  if (action === 'verifyLineBot') {
+    const testToken =
+      settings.lineChannelAccessToken ||
+      process.env.LINE_CHANNEL_ACCESS_TOKEN ||
+      'wwggUYjz56cObGq7V7VhS1Yt6KvK1tsTqMjBiGcTev2laNR+un/w80ePcJqQguYc2D5EfKLPeGuTAqTXG3/HVrRpdI2H5sLbnDm02NTQtX+slSxnfiberfN8dUkQVLGmHiAYeINw/xpB7io7fxtWmQdB04t89/1O/w1cDnyilFU=';
+    const testTarget = settings.lineTargetId || '';
+
+    if (!testToken) {
+      return res.status(200).json({
+        ok: false,
+        validToken: false,
+        message: 'ยังไม่ได้ระบุ LINE Channel Access Token',
+      });
+    }
+
+    try {
+      const infoResp = await fetch('https://api.line.me/v2/bot/info', {
+        headers: { Authorization: `Bearer ${testToken}` },
+      });
+
+      if (!infoResp.ok) {
+        const errText = await infoResp.text();
+        return res.status(200).json({
+          ok: false,
+          validToken: false,
+          message: `LINE API (${infoResp.status}): Token ไม่ถูกต้อง (${errText.slice(0, 100)})`,
+        });
+      }
+
+      const botInfo = await infoResp.json();
+
+      let targetStatus: 'success' | 'failed' | 'skipped' = 'skipped';
+      let targetMessage = 'ยังไม่ได้ระบุ Group ID หรือ User ID';
+
+      if (testTarget) {
+        const pushResp = await fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${testToken}`,
+          },
+          body: JSON.stringify({
+            to: testTarget,
+            messages: [
+              {
+                type: 'text',
+                text: `✅ [กองสาธารณสุข ทต.บางเป้า]\nระบบเชื่อมต่อกับบอท ${botInfo.displayName} (${botInfo.basicId}) สำเร็จ!\nเวลา: ${new Date().toLocaleString('th-TH')}`,
+              },
+            ],
+          }),
+        });
+
+        if (pushResp.ok) {
+          targetStatus = 'success';
+          targetMessage = `ส่งข้อความทดสอบไปยัง ${testTarget} สำเร็จแล้ว (มีข้อความเข้า)`;
+        } else {
+          const pushErr = await pushResp.text();
+          targetStatus = 'failed';
+          targetMessage = `LINE API (${pushResp.status}): รหัส "${testTarget}" ไม่ถูกต้อง หรือยังไม่ได้เชิญบอทเข้ากลุ่ม (${pushErr.slice(0, 120)})`;
+        }
+      }
+
+      return res.status(200).json({
+        ok: true,
+        validToken: true,
+        botInfo,
+        targetStatus,
+        targetMessage,
+      });
+    } catch (e: any) {
+      return res.status(200).json({
+        ok: false,
+        validToken: false,
+        message: e?.message || String(e),
+      });
+    }
+  }
 
   let sentLine = false;
   let sentEmail = false;
