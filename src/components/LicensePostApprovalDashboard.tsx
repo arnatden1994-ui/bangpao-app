@@ -208,7 +208,7 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
               <span>🛡️ แดชบอร์ดบันทึกติดตามผลการอนุมัติใบอนุญาต (Post-Approval)</span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              ระบบติดตามสถานประกอบการ 36 แห่ง • เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง • Cloud Firestore เชื่อมต่อสด
+              ระบบติดตามสถานประกอบการ {licenses.length} แห่ง • เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง • Cloud Firestore เชื่อมต่อสด
             </p>
           </div>
         </div>
@@ -219,10 +219,10 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
             onClick={() => setShowSeedConfirmModal(true)}
             disabled={isSeeding}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-sm transition-all active:scale-98 cursor-pointer disabled:opacity-50"
-            title="นำเข้าข้อมูลใบอนุญาตเริ่มต้น 36 รายการลงสู่ Cloud Firestore"
+            title={`นำเข้าข้อมูลใบอนุญาตจริง ${licenses.length} รายการลงสู่ Cloud Firestore`}
           >
             <Database className={`w-3.5 h-3.5 ${isSeeding ? 'animate-spin' : ''}`} />
-            <span>{isSeeding ? 'กำลังนำเข้า Firestore...' : '🚀 นำเข้าข้อมูลเริ่มต้น 36 รายการ (Seed Firestore)'}</span>
+            <span>{isSeeding ? 'กำลังนำเข้า Firestore...' : `🚀 นำเข้าข้อมูลจริง ${licenses.length} รายการ (Seed Firestore)`}</span>
           </button>
 
           {onNewInspection && (
@@ -576,7 +576,7 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
               </div>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              ระบบจะนำเข้าข้อมูลสถานประกอบการและใบอนุญาตเริ่มต้นทั้ง 36 แห่งของเทศบาลตำบลบางเป้า เพื่อเป็นฐานข้อมูลหลักบน Cloud Firestore
+              ระบบจะนำเข้าข้อมูลสถานประกอบการและใบอนุญาตจริงของเทศบาลตำบลบางเป้า เพื่อเป็นฐานข้อมูลหลักบน Cloud Firestore
             </p>
             <div className="flex justify-end gap-2.5 pt-2">
               <button

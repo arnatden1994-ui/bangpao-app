@@ -113,7 +113,7 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
               {showConfirmSeed ? (
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2">
                   <p className="text-xs font-bold text-amber-900">
-                    ยืนยันอัปโหลดข้อมูลตั้งต้นทุกระบบ (ใบอนุญาต 36 ร้านค้า, อุปกรณ์การแพทย์, คำร้อง, กปท.) ขึ้นสู่ Firebase Firestore หรือไม่?
+                    ยืนยันอัปโหลดข้อมูลตั้งต้นทุกระบบ (ใบอนุญาต 35 ร้านค้า, อุปกรณ์การแพทย์, คำร้อง, กปท.) ขึ้นสู่ Firebase Firestore หรือไม่?
                   </p>
                   <div className="flex justify-end gap-2">
                     <button

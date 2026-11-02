@@ -785,7 +785,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                   <span>เอกสารที่ได้รับผลกระทบทันที:</span>
                 </div>
                 <ul className="list-disc list-inside space-y-0.5 text-[10px] text-amber-900/80">
-                  <li>ใบอนุญาต อภ.2 (36 ร้านค้ากิจการอันตราย)</li>
+                  <li>ใบอนุญาต อภ.2 (35 ร้านค้ากิจการอันตราย)</li>
                   <li>รายงานตรวจประเมินสุขลักษณะ 25 ข้อ เสนอผู้บริหาร</li>
                   <li>แบบคำร้องดูดส้วมและบันทึกข้อความเสนอผู้บริหาร A4</li>
                   <li>สัญญายืม-คืนอุปกรณ์ทางการแพทย์</li>
@@ -1304,7 +1304,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                 <span>การเชื่อมต่อฐานข้อมูล Google Sheets & Apps Script Web App</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                ซิงค์ข้อมูลสถานประกอบการ 36 แห่ง, ผลตรวจ 25 ข้อ, โครงการ สปสช. และคำร้องขึ้นคลาวด์แบบเรียลไทม์
+                ซิงค์ข้อมูลสถานประกอบการ 35 แห่ง, ผลตรวจ 25 ข้อ, โครงการ สปสช. และคำร้องขึ้นคลาวด์แบบเรียลไทม์
               </p>
             </div>
 
@@ -1444,7 +1444,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
                 <span>โซนจัดการข้อมูลตัวอย่าง (Reset Demo Dataset)</span>
               </div>
               <p className="text-[11px] text-rose-700 mt-0.5">
-                รีเซ็ตข้อมูลทุกระบบกลับเป็นค่าเริ่มต้นตามต้นฉบับ 36 ร้านค้า และข้อมูลตั้งต้นของ ทต.บางเป้า
+                รีเซ็ตข้อมูลทุกระบบกลับเป็นค่าเริ่มต้นตามต้นฉบับ 35 ร้านค้า และข้อมูลตั้งต้นของ ทต.บางเป้า
               </p>
             </div>
 
@@ -1453,7 +1453,7 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
               onClick={() => setShowResetConfirmModal(true)}
               className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
             >
-              รีเซ็ตข้อมูลตัวอย่าง 36 รายการ
+              รีเซ็ตข้อมูลจริง 35 รายการ
             </button>
           </div>
         </div>
@@ -1478,11 +1478,11 @@ export const SettingsModuleView: React.FC<SettingsModuleViewProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">ยืนยันรีเซ็ตข้อมูลตัวอย่าง</h3>
-                <p className="text-xs text-slate-500">คืนค่าเริ่มต้นตามต้นฉบับ 36 ร้านค้า</p>
+                <p className="text-xs text-slate-500">คืนค่าเริ่มต้นตามต้นฉบับ 35 ร้านค้า</p>
               </div>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              คุณต้องการรีเซ็ตข้อมูลตัวอย่างทั้งหมดกลับเป็นค่าเริ่มต้นตามต้นฉบับ (36 สถานประกอบการ, คำร้อง, กายอุปกรณ์ และผู้ป่วย) หรือไม่?
+              คุณต้องการรีเซ็ตข้อมูลตัวอย่างทั้งหมดกลับเป็นค่าเริ่มต้นตามต้นฉบับ (35 สถานประกอบการ, คำร้อง, กายอุปกรณ์ และผู้ป่วย) หรือไม่?
             </p>
             <div className="flex justify-end gap-2.5 pt-2">
               <button

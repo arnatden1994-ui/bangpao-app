@@ -532,7 +532,10 @@ export default function App() {
   // Real-time synchronization from Cloud Firestore for all 5 core systems
   useEffect(() => {
     const unsubLicenses = subscribeCollection<LicenseRecord>(COLLECTIONS.LICENSES, (items) => {
-      if (items && items.length > 0) setLicenses(items);
+      if (items && items.length > 0) {
+        const cleaned = items.filter((x) => x.businessName !== 'ร้าน ก.ไก่' && x.id !== 'LIC-36');
+        setLicenses(cleaned);
+      }
     });
     const unsubEstablishments = subscribeCollection<Establishment>(COLLECTIONS.ESTABLISHMENTS, (items) => {
       if (items && items.length > 0) setEstablishments(items);

@@ -108,7 +108,7 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
-            <span>📊 แดชบอร์ดติดตามผลอนุมัติ (36 ร้านค้า)</span>
+            <span>📊 แดชบอร์ดติดตามผลอนุมัติ ({licenses.length} ร้านค้า)</span>
           </button>
           <button
             onClick={() => handleNewInspection()}

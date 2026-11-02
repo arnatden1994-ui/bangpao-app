@@ -339,14 +339,17 @@ export async function seedAllDataToFirestore(
 export async function seedLicensesToFirestore(): Promise<{ success: boolean; message: string; count: number }> {
   try {
     const batch = writeBatch(db);
+    // Remove obsolete LIC-36 if it exists in Firestore
+    batch.delete(doc(db, COLLECTIONS.LICENSES, 'LIC-36'));
+
     INITIAL_LICENSE_RECORDS.forEach((lic) => {
       const ref = doc(db, COLLECTIONS.LICENSES, lic.id);
-      batch.set(ref, lic, { merge: true });
+      batch.set(ref, lic);
     });
     await batch.commit();
     return {
       success: true,
-      message: `นำเข้าข้อมูลใบอนุญาต ${INITIAL_LICENSE_RECORDS.length} รายการลง Cloud Firestore สำเร็จ!`,
+      message: `นำเข้าข้อมูลใบอนุญาต ${INITIAL_LICENSE_RECORDS.length} รายการจริงลง Cloud Firestore สำเร็จ!`,
       count: INITIAL_LICENSE_RECORDS.length,
     };
   } catch (error: any) {

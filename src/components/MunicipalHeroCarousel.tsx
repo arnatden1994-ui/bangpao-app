@@ -114,7 +114,7 @@ export const MunicipalHeroCarousel: React.FC<MunicipalHeroCarouselProps> = ({
         id: 'official-2',
         badge: '🍽️ สุขาภิบาลอาหาร & สิ่งแวดล้อม (EHWA)',
         badgeColor: 'bg-gradient-to-r from-amber-500 to-orange-600 text-white',
-        title: 'ยกระดับมาตรฐานสถานประกอบกิจการ 36 แห่งทั่วตำบลบางเป้า',
+        title: 'ยกระดับมาตรฐานสถานประกอบกิจการ 35 แห่งทั่วตำบลบางเป้า',
         subtitle: 'ตรวจประเมินสุขลักษณะ 25 ข้อ พ.ร.บ.การสาธารณสุข พ.ศ. 2535',
         description:
           'คุ้มครองผู้บริโภคและนักท่องเที่ยว ตรวจสุขาภิบาลตลาดสด ร้านอาหาร และกิจการที่เป็นอันตรายต่อสุขภาพอย่างต่อเนื่อง',

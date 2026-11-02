@@ -75,7 +75,7 @@ export const OriginalGasAppView: React.FC<OriginalGasAppViewProps> = ({
               <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                 {activeView === 'form'
                   ? '📝 ฟอร์มตรวจประเมินสุขลักษณะสถานประกอบการ'
-                  : '📊 แดชบอร์ดติดตามผลอนุมัติใบอนุญาต (36 ร้านค้า)'}
+                  : '📊 แดชบอร์ดติดตามผลอนุมัติใบอนุญาต (35 ร้านค้า)'}
               </h2>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                 🟢 Google Apps Script ต้นฉบับ 100%
@@ -180,7 +180,7 @@ export const OriginalGasAppView: React.FC<OriginalGasAppViewProps> = ({
             <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
             <p className="mt-3 text-xs font-bold text-slate-700">กำลังเชื่อมต่อ Google Apps Script เดิม 100%...</p>
             <p className="text-[11px] text-slate-500 mt-1">
-              {activeView === 'form' ? 'กำลังเปิดหน้าฟอร์มตรวจประเมินสุขลักษณะ' : 'กำลังเปิดหน้าแดชบอร์ดใบอนุญาต (36 ร้านค้า)'}
+              {activeView === 'form' ? 'กำลังเปิดหน้าฟอร์มตรวจประเมินสุขลักษณะ' : 'กำลังเปิดหน้าแดชบอร์ดใบอนุญาต (35 ร้านค้า)'}
             </p>
           </div>
         )}

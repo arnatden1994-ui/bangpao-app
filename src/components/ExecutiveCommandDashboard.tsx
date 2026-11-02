@@ -1590,7 +1590,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
                 <h3 className="font-bold text-base sm:text-lg text-slate-900">
                   มาตรฐานสุขาภิบาลสถานประกอบกิจการ (EHWA Ratings)
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">ผลการประเมินสถานประกอบกิจการ 36 แห่งในเขตพื้นที่เทศบาลตำบลบางเป้า</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">ผลการประเมินสถานประกอบกิจการ 35 แห่งในเขตพื้นที่เทศบาลตำบลบางเป้า</p>
               </div>
               <button
                 onClick={() => onNavigateTab('dashboard')}
