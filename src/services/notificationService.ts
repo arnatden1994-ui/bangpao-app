@@ -335,7 +335,17 @@ export function saveNotificationLog(item: NotificationLogItem): NotificationLogI
       }
       return log;
     });
-    localStorage.setItem(STORAGE_KEY_NOTIFY_LOGS, JSON.stringify(updated));
+    try {
+      localStorage.setItem(STORAGE_KEY_NOTIFY_LOGS, JSON.stringify(updated));
+    } catch {
+      // In case of quota error, strip all attachments and keep only 10 logs
+      const slimmed = updated.slice(0, 10).map((l) => ({ ...l, attachments: [] }));
+      try {
+        localStorage.setItem(STORAGE_KEY_NOTIFY_LOGS, JSON.stringify(slimmed));
+      } catch (_) {
+        // Suppress if still full
+      }
+    }
     return updated;
   } catch (err) {
     console.error('Failed to save notification log:', err);
