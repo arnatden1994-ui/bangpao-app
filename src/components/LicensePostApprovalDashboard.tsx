@@ -14,6 +14,7 @@ import {
   PlusCircle,
   Database,
   Check,
+  ChevronDown,
 } from 'lucide-react';
 import { LicenseRecord } from '../types/index.ts';
 import { seedLicensesToFirestore } from '../services/firebaseService.ts';
@@ -27,6 +28,7 @@ interface LicensePostApprovalDashboardProps {
   onIssueLicense: (license: LicenseRecord) => void;
   onRenewLicense: (license: LicenseRecord) => void;
   onNewInspection?: () => void;
+  onUpdateLicense?: (license: LicenseRecord) => Promise<void> | void;
 }
 
 export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboardProps> = ({
@@ -38,6 +40,7 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
   onIssueLicense,
   onRenewLicense,
   onNewInspection,
+  onUpdateLicense,
 }) => {
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [search, setSearch] = useState('');
@@ -72,6 +75,104 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
       setIsSeeding(false);
       setTimeout(() => setSeedFeedback(null), 6000);
     }
+  };
+
+  // Quick sequential license number helper
+  const generateNextLicenseNumber = (allLicenses: LicenseRecord[], targetYear: string = '2569'): string => {
+    let maxSeq = 0;
+    for (const lic of allLicenses) {
+      if (!lic.licenseNumber || lic.licenseNumber.includes('รอออกเลข')) continue;
+      const match = lic.licenseNumber.match(/(\d+)\s*\/\s*(\d+)/);
+      if (match) {
+        const seq = parseInt(match[1], 10);
+        const yr = match[2];
+        if (yr === targetYear && !isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;
+    const seqStr = nextSeq < 10 ? `0${nextSeq}` : `${nextSeq}`;
+    return `เลขที่ ${seqStr}/${targetYear}`;
+  };
+
+  // Handle Quick Approve
+  const handleQuickApprove = async (item: LicenseRecord) => {
+    if (!onUpdateLicense) return;
+    const confirmApprove = window.confirm(
+      `ยืนยันอนุมัติใบอนุญาตของ "${item.businessName}" ใช่หรือไม่?\n\nระบบจะออกเลขที่ใบอนุญาตให้อัตโนมัติ ปรับสถานะเป็น "ปกติ" และเริ่มนับอายุ 365 วัน`
+    );
+    if (!confirmApprove) return;
+
+    const targetYear = item.licenseYear || '2569';
+    const nextNum = generateNextLicenseNumber(licenses, targetYear);
+    const today = new Date();
+    const nextYear = new Date();
+    nextYear.setFullYear(today.getFullYear() + 1);
+    nextYear.setDate(today.getDate() - 1);
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const thaiYear = today.getFullYear() + 543;
+    const nextThaiYear = nextYear.getFullYear() + 543;
+    const startStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${thaiYear}`;
+    const endStr = `${pad(nextYear.getDate())}/${pad(nextYear.getMonth() + 1)}/${nextThaiYear}`;
+
+    const updated: LicenseRecord = {
+      ...item,
+      status: 'normal',
+      licenseNumber: item.licenseNumber.includes('รอออกเลข') || !item.licenseNumber ? nextNum : item.licenseNumber,
+      approvalDate: startStr,
+      expireDate: endStr,
+      remainingDays: 365,
+      daysRemaining: 365,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await onUpdateLicense(updated);
+  };
+
+  // Handle Inline Status Change directly from table dropdown
+  const handleInlineStatusChange = async (item: LicenseRecord, newStatus: LicenseRecord['status']) => {
+    if (!onUpdateLicense) return;
+    const isNowNormal = newStatus === 'normal';
+    const wasPending = item.status === 'pending';
+
+    let newNumber = item.licenseNumber;
+    let newApprovalDate = item.approvalDate;
+    let newExpireDate = item.expireDate;
+    let newDays = item.remainingDays;
+
+    if (isNowNormal && (wasPending || item.licenseNumber.includes('รอออกเลข'))) {
+      const targetYear = item.licenseYear || '2569';
+      newNumber = generateNextLicenseNumber(licenses, targetYear);
+      const today = new Date();
+      const nextYear = new Date();
+      nextYear.setFullYear(today.getFullYear() + 1);
+      nextYear.setDate(today.getDate() - 1);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const thaiYear = today.getFullYear() + 543;
+      const nextThaiYear = nextYear.getFullYear() + 543;
+      newApprovalDate = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${thaiYear}`;
+      newExpireDate = `${pad(nextYear.getDate())}/${pad(nextYear.getMonth() + 1)}/${nextThaiYear}`;
+      newDays = 365;
+    } else if (newStatus === 'expired') {
+      newDays = 0;
+    } else if (newStatus === 'normal' && (newDays === 0 || !newDays)) {
+      newDays = 365;
+    }
+
+    const updated: LicenseRecord = {
+      ...item,
+      status: newStatus,
+      licenseNumber: newNumber,
+      approvalDate: newApprovalDate,
+      expireDate: newExpireDate,
+      remainingDays: newDays,
+      daysRemaining: newDays,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await onUpdateLicense(updated);
   };
 
   // Filtered List
@@ -366,34 +467,45 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
 
                   {/* สถานะ */}
                   <td className="py-3.5 px-4">
-                    {item.status === 'normal' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        ปกติ (เหลือ {item.remainingDays} วัน)
-                      </span>
-                    )}
-                    {item.status === 'expiring' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                        ใกล้หมดอายุ (เหลือ {item.remainingDays} วัน)
-                      </span>
-                    )}
-                    {item.status === 'expired' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                        หมดอายุคำขอ
-                      </span>
-                    )}
-                    {item.status === 'pending' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                        ⏳ รออนุมัติ
-                      </span>
-                    )}
+                    <div className="relative inline-flex items-center">
+                      <select
+                        value={item.status || 'pending'}
+                        onChange={(e) => handleInlineStatusChange(item, e.target.value as LicenseRecord['status'])}
+                        className={`text-xs font-bold pl-2.5 pr-6 py-1 rounded-full border cursor-pointer appearance-none focus:outline-none focus:ring-2 shadow-2xs transition-all ${
+                          item.status === 'normal'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 focus:ring-emerald-400/30'
+                            : item.status === 'expiring'
+                            ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 focus:ring-amber-400/30'
+                            : item.status === 'expired'
+                            ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100 focus:ring-rose-400/30'
+                            : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100 focus:ring-indigo-400/30'
+                        }`}
+                        title="คลิกเพื่อเปลี่ยนสถานะใบอนุญาตและบันทึกทันที"
+                      >
+                        <option value="normal">✅ ปกติ {item.remainingDays ? `(เหลือ ${item.remainingDays} วัน)` : '(365 วัน)'}</option>
+                        <option value="pending">⏳ รออนุมัติ</option>
+                        <option value="expiring">⚠️ ใกล้หมดอายุ</option>
+                        <option value="expired">❌ หมดอายุคำขอ</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 opacity-70" />
+                    </div>
                   </td>
 
                   {/* เมนูจัดการ */}
                   <td className="py-3.5 px-4 text-center">
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5">
+                      {/* ปุ่มอนุมัติด่วน (ถ้าสถานะเป็น 'pending' รออนุมัติ) */}
+                      {item.status === 'pending' && (
+                        <button
+                          onClick={() => handleQuickApprove(item)}
+                          className="px-2.5 py-1 rounded text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 animate-pulse"
+                          title="อนุมัติและออกเลขที่ใบอนุญาตอัตโนมัติ (เริ่มนับ 365 วัน)"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>อนุมัติ</span>
+                        </button>
+                      )}
+
                       {/* 1. ปุ่มแก้ไข (เปิด modal แก้ไขข้อมูลใบอนุญาตและบันทึกอัปเดตลง Firestore ทันที) */}
                       <button
                         onClick={() => {

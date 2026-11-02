@@ -22,6 +22,7 @@ interface HazardousModuleViewProps {
   onPrintInspectionReport: (license: LicenseRecord) => void;
   onIssueLicense: (license: LicenseRecord) => void;
   onRenewLicense: (license: LicenseRecord) => void;
+  onUpdateLicense?: (license: LicenseRecord) => Promise<void> | void;
   onSaveOfficialInspection: (formState: OfficialInspectionFormState, newLicense?: LicenseRecord) => void;
   onAddNewBusiness: () => void;
   onInspectBusiness: (b: HazardousBusiness) => void;
@@ -47,6 +48,7 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
   onPrintInspectionReport,
   onIssueLicense,
   onRenewLicense,
+  onUpdateLicense,
   onSaveOfficialInspection,
   onAddNewBusiness,
   onInspectBusiness,
@@ -145,6 +147,7 @@ export const HazardousModuleView: React.FC<HazardousModuleViewProps> = ({
           onIssueLicense={onIssueLicense}
           onRenewLicense={onRenewLicense}
           onNewInspection={handleNewInspection}
+          onUpdateLicense={onUpdateLicense}
         />
       )}
 

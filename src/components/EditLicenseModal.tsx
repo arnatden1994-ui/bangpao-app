@@ -146,6 +146,7 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
   const [bookNo, setBookNo] = useState(license.licenseBookNo || '-');
   const [licenseNo, setLicenseNo] = useState(license.licenseNumber.split('/')[0] || '11');
   const [docYear, setDocYear] = useState(license.licenseYear || '2569');
+  const [licenseStatus, setLicenseStatus] = useState<'normal' | 'pending' | 'expiring' | 'expired'>(license.status || 'normal');
 
   // 2. เจ้าของกิจการ
   const [ownerName, setOwnerName] = useState(license.ownerName || '');
@@ -215,6 +216,7 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
       setBookNo(license.licenseBookNo || '-');
       setLicenseNo(license.licenseNumber ? license.licenseNumber.split('/')[0].replace('เลขที่', '').trim() : '11');
       setDocYear(license.licenseYear || '2569');
+      setLicenseStatus(license.status || 'normal');
 
       setOwnerName(license.ownerName || '');
       setNationality(license.nationality || 'ไทย');
@@ -291,6 +293,9 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
 
     return {
       ...license,
+      status: licenseStatus,
+      remainingDays: licenseStatus === 'normal' ? (license.remainingDays || 365) : licenseStatus === 'expiring' ? 20 : 0,
+      daysRemaining: licenseStatus === 'normal' ? (license.daysRemaining || 365) : licenseStatus === 'expiring' ? 20 : 0,
       licenseBookNo: bookNo,
       licenseNumber: `${licenseNo}/${docYear}`,
       licenseYear: docYear,
@@ -452,7 +457,7 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
               <span className="w-2 h-2 rounded-full bg-teal-600"></span>
               1. ข้อมูลควบคุมใบอนุญาต
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-slate-600">เล่มที่</label>
                 <input
@@ -482,6 +487,19 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
                   className="w-full p-2.5 rounded-lg text-xs font-bold border border-slate-200 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 bg-white"
                   placeholder="2569"
                 />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-600">สถานะใบอนุญาต</label>
+                <select
+                  value={licenseStatus}
+                  onChange={(e) => setLicenseStatus(e.target.value as any)}
+                  className="w-full p-2.5 rounded-lg text-xs font-bold border border-slate-200 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 bg-white cursor-pointer"
+                >
+                  <option value="normal">✅ ปกติ (ใช้งานได้)</option>
+                  <option value="pending">⏳ รออนุมัติ</option>
+                  <option value="expiring">⚠️ ใกล้หมดอายุ</option>
+                  <option value="expired">❌ หมดอายุ</option>
+                </select>
               </div>
             </div>
           </div>

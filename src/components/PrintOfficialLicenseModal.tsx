@@ -284,21 +284,37 @@ function populateFromLicense(license: LicenseRecord, signers: SignerSettings): L
   const expireDate = license.expireDate || '';
   const receiptDate = license.receiptDate || approvalDate || '';
 
-  const sDate = formatThaiDateParts(approvalDate);
-  const eDate = formatThaiDateParts(expireDate);
-  const rDate = formatThaiDateParts(receiptDate);
+  const isPendingDate = !approvalDate || approvalDate === '-' || license.status === 'pending';
+  const today = new Date();
+  const nextYear = new Date();
+  nextYear.setFullYear(today.getFullYear() + 1);
+  nextYear.setDate(today.getDate() - 1);
+  const thaiMonthsList = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+  ];
+  const curDay = String(today.getDate());
+  const curMonth = thaiMonthsList[today.getMonth()];
+  const curYear = String(today.getFullYear() + 543);
+  const expDay = String(nextYear.getDate());
+  const expMonth = thaiMonthsList[nextYear.getMonth()];
+  const expYear = String(nextYear.getFullYear() + 543);
 
-  const receiptDay = rDate.d || '';
-  const receiptMonth = rDate.m || 'กุมภาพันธ์';
-  const receiptYear = rDate.y || '2568';
+  const sDate = isPendingDate ? { d: curDay, m: curMonth, y: curYear } : formatThaiDateParts(approvalDate);
+  const eDate = isPendingDate ? { d: expDay, m: expMonth, y: expYear } : formatThaiDateParts(expireDate);
+  const rDate = isPendingDate ? { d: curDay, m: curMonth, y: curYear } : formatThaiDateParts(receiptDate);
 
-  const issueDay = sDate.d || '';
-  const issueMonth = sDate.m || 'กุมภาพันธ์';
-  const issueYear = sDate.y || '2568';
+  const receiptDay = rDate.d || curDay;
+  const receiptMonth = rDate.m || curMonth;
+  const receiptYear = rDate.y || curYear;
 
-  const expireDay = eDate.d || '';
-  const expireMonth = eDate.m || 'กุมภาพันธ์';
-  const expireYear = eDate.y || '2569';
+  const issueDay = sDate.d || curDay;
+  const issueMonth = sDate.m || curMonth;
+  const issueYear = sDate.y || curYear;
+
+  const expireDay = eDate.d || expDay;
+  const expireMonth = eDate.m || expMonth;
+  const expireYear = eDate.y || expYear;
 
   const cond1 = cleanBoilerplateCondition(license.condition31);
   const cond2 = cleanBoilerplateCondition(license.condition32);
@@ -556,10 +572,20 @@ export const PrintOfficialLicenseModal: React.FC<PrintOfficialLicenseModalProps>
     }
     setIsSaving(true);
     try {
+      const finalDocNo = (formData.docNo && formData.docNo !== 'รอออกเลข' && formData.docNo !== '-')
+        ? formData.docNo.trim()
+        : (license.licenseNumber.includes('/') && !license.licenseNumber.includes('รอออกเลข')
+            ? license.licenseNumber.replace('เลขที่', '').split('/')[0].trim()
+            : '01');
+
+      const isPendingOrWaiting = license.status === 'pending' || !license.status;
       const updated: LicenseRecord = {
         ...license,
+        status: isPendingOrWaiting ? 'normal' : license.status,
+        remainingDays: isPendingOrWaiting ? 365 : (license.remainingDays || 365),
+        daysRemaining: isPendingOrWaiting ? 365 : (license.daysRemaining || 365),
         licenseBookNo: formData.bookNo,
-        licenseNumber: `เลขที่ ${formData.docNo}/${formData.docYear}`,
+        licenseNumber: `เลขที่ ${finalDocNo}/${formData.docYear}`,
         licenseYear: formData.docYear,
         ownerName: formData.applicantName,
         nationality: formData.nationality,
@@ -595,7 +621,7 @@ export const PrintOfficialLicenseModal: React.FC<PrintOfficialLicenseModalProps>
       };
 
       await onSaveLicense(updated);
-      showToast('บันทึกข้อมูลใบอนุญาตลงระบบเรียบร้อยแล้ว!');
+      showToast(isPendingOrWaiting ? '✅ ออกใบอนุญาตสำเร็จและเปลี่ยนสถานะเป็น "ปกติ" เรียบร้อยแล้ว!' : 'บันทึกข้อมูลใบอนุญาตลงระบบเรียบร้อยแล้ว!');
     } catch (e) {
       console.error(e);
       showToast('เกิดข้อผิดพลาดในการบันทึกข้อมูล');

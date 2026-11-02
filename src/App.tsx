@@ -1296,6 +1296,7 @@ unsubLicenses();
                 onPrintInspectionReport={handlePrintInspectionReport}
                 onIssueLicense={handleIssueLicense}
                 onRenewLicense={handleRenewLicense}
+                onUpdateLicense={handleSaveLicenseOnly}
                 onSaveOfficialInspection={handleSaveOfficialInspection}
                 onAddNewBusiness={() => setNewHazardousModalOpen(true)}
                 onInspectBusiness={(b) => {

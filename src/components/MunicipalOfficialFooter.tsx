@@ -230,7 +230,7 @@ export const MunicipalOfficialFooter: React.FC<MunicipalOfficialFooterProps> = (
 
               <div className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>admin@bangpao.go.th, saraban@bangpao.go.th</span>
+                <span>bangpaohealthy@gmail.com</span>
               </div>
 
               <div className="flex items-start gap-2.5 pt-1 text-[11px] text-slate-400">
