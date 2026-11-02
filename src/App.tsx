@@ -533,7 +533,7 @@ export default function App() {
   useEffect(() => {
     const unsubLicenses = subscribeCollection<LicenseRecord>(COLLECTIONS.LICENSES, (items) => {
       if (items && items.length > 0) {
-        const cleaned = items.filter((x) => x.businessName !== 'ร้าน ก.ไก่' && x.id !== 'LIC-36');
+        const cleaned = items.filter((x) => x.businessName !== 'ร้าน ก.ไก่');
         setLicenses(cleaned);
       }
     });

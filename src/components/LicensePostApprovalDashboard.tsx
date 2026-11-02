@@ -190,10 +190,9 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
 
       return matchSearch && matchYear && matchStatus;
     }).sort((a: any, b: any) => {
-      const tA = new Date(a.updatedAt || a.createdAt || a.issueDate || 0).getTime() || 0;
-      const tB = new Date(b.updatedAt || b.createdAt || b.issueDate || 0).getTime() || 0;
-      if (tB !== tA) return tB - tA;
-      return 0;
+      const numA = parseInt(String(a.id || '').replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(String(b.id || '').replace(/\D/g, ''), 10) || 0;
+      return numA - numB;
     });
   }, [licenses, search, selectedYear, statusFilter]);
 
@@ -272,7 +271,7 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
         >
           <div className={`text-xs font-bold ${statusFilter === 'all' ? 'text-slate-300' : 'text-slate-500'}`}>ทั้งหมด</div>
           <div className={`text-2xl sm:text-3xl font-black mt-1 ${statusFilter === 'all' ? 'text-white' : 'text-slate-900'}`}>{totalCount}</div>
-          <div className={`text-[10px] mt-0.5 font-medium ${statusFilter === 'all' ? 'text-slate-400' : 'text-slate-400'}`}>36 สถานประกอบการ</div>
+          <div className={`text-[10px] mt-0.5 font-medium ${statusFilter === 'all' ? 'text-slate-400' : 'text-slate-400'}`}>{totalCount} สถานประกอบการ</div>
         </div>
 
         {/* 2. ปกติ */}
