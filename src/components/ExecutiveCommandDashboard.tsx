@@ -48,6 +48,7 @@ import { GoogleCalendarModal } from './GoogleCalendarModal.tsx';
 import { CitizenPortalShareModal } from './CitizenPortalShareModal.tsx';
 import { ActivityAnnouncementModal } from './ActivityAnnouncementModal.tsx';
 import { AttachmentViewerModal } from './AttachmentViewerModal.tsx';
+import { MunicipalHeroCarousel } from './MunicipalHeroCarousel.tsx';
 import {
   MunicipalCalendarPanel,
   CalendarEventItem,
@@ -198,6 +199,8 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
   const [viewerAttachment, setViewerAttachment] = useState<CalendarAttachment | null>(null);
   const [viewerLinkedEvent, setViewerLinkedEvent] = useState<CalendarEventItem | null>(null);
+  const [activityCategoryFilter, setActivityCategoryFilter] = useState<string>('all');
+  const [activitySearchQuery, setActivitySearchQuery] = useState<string>('');
 
   // Shared Calendar Events State
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>(() => {
@@ -864,6 +867,32 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
       </div>
 
       {/* ======================================================== */}
+      {/* 🏛️ MUNICIPAL HERO ACTIVITY & PR CAROUSEL (สไตล์เว็บเทศบาล bangpao.go.th) */}
+      {/* ======================================================== */}
+      <MunicipalHeroCarousel
+        events={calendarEvents}
+        onOpenCreateActivity={() => {
+          setActivityEditingEvent(null);
+          setActivityPresetDate(undefined);
+          setIsActivityModalOpen(true);
+        }}
+        onOpenAttachment={(att, ev) => {
+          setViewerAttachment(att);
+          setViewerLinkedEvent(ev || null);
+          setIsViewerModalOpen(true);
+        }}
+        onOpenActivityDetails={(ev) => {
+          setActivityEditingEvent(ev);
+          setIsActivityModalOpen(true);
+        }}
+        onScrollToCalendar={() => {
+          const el = document.getElementById('calendar-panel-section');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          else setIsCalendarModalOpen(true);
+        }}
+      />
+
+      {/* ======================================================== */}
       {/* CITIZEN PORTAL SHARE & ACCESS BANNER (เด่นชัด แดชบอร์ดหลัก) */}
       {/* ======================================================== */}
       <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 border-2 border-emerald-400/50 p-4 sm:p-5.5 text-white shadow-2xl">
@@ -1134,27 +1163,43 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
       {/* SECTION: ประชาสัมพันธ์กิจกรรม & คลังเอกสารหนังสือราชการล่าสุด (อัปโหลด & เปิดดูไฟล์) */}
       {/* ========================================================================= */}
       {(() => {
-        const activityEvents = calendarEvents.filter(
+        const allActivities = calendarEvents.filter(
           (e) => e.category === 'activity' || (e.attachments && e.attachments.length > 0)
         );
+
+        const filteredActivities = allActivities.filter((act) => {
+          if (activityCategoryFilter !== 'all') {
+            if (act.docType !== activityCategoryFilter) return false;
+          }
+          if (activitySearchQuery.trim()) {
+            const q = activitySearchQuery.trim().toLowerCase();
+            const matchTitle = (act.title || '').toLowerCase().includes(q);
+            const matchAgency = (act.fromAgency || '').toLowerCase().includes(q);
+            const matchDocNo = (act.docNo || '').toLowerCase().includes(q);
+            const matchLoc = (act.location || '').toLowerCase().includes(q);
+            const matchDesc = (act.details || '').toLowerCase().includes(q);
+            if (!matchTitle && !matchAgency && !matchDocNo && !matchLoc && !matchDesc) return false;
+          }
+          return true;
+        });
 
         return (
           <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center font-bold">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 text-white flex items-center justify-center font-bold shadow-md shadow-violet-500/20">
                     <Megaphone className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="font-extrabold text-base sm:text-lg text-slate-900 flex items-center gap-2">
                       <span>ศูนย์ประชาสัมพันธ์กิจกรรม & คลังหนังสือราชการ (อบรม / ประชุม / ร่วมงาน)</span>
-                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-violet-100 text-violet-800">
-                        {activityEvents.length} รายการ
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-violet-100 text-violet-800 border border-violet-200">
+                        {filteredActivities.length} รายการ
                       </span>
                     </h3>
                     <p className="text-xs text-slate-500">
-                      บันทึกกิจกรรม ประชาสัมพันธ์กำหนดการ แนบไฟล์หนังสือเชิญ A4/PDF และคลิกเปิดดูเอกสารตัวจริงได้ทันที
+                      สอดคล้องกับหน้าเว็บหลักเทศบาล bangpao.go.th • บันทึกกิจกรรม ประชาสัมพันธ์กำหนดการ แนบไฟล์หนังสือเชิญ A4/PDF และคลิกเปิดดูได้ทันที
                     </p>
                   </div>
                 </div>
@@ -1168,7 +1213,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
                     setActivityPresetDate(undefined);
                     setIsActivityModalOpen(true);
                   }}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all hover:scale-105 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-emerald-600 hover:from-violet-700 hover:to-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-violet-950/20 transition-all hover:scale-105 cursor-pointer ring-2 ring-violet-300/60"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ บันทึกกิจกรรม / แนบหนังสือเชิญ</span>
@@ -1176,42 +1221,169 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
               </div>
             </div>
 
+            {/* Filter Bar: Category Pills & Search Input */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-1">
+              {/* Category Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                {[
+                  { id: 'all', label: 'ทั้งหมด', emoji: '✨', count: allActivities.length },
+                  {
+                    id: 'invitation_training',
+                    label: 'อบรม/สัมมนา',
+                    emoji: '🎓',
+                    count: allActivities.filter((a) => a.docType === 'invitation_training').length,
+                  },
+                  {
+                    id: 'invitation_meeting',
+                    label: 'ประชุม',
+                    emoji: '🗂️',
+                    count: allActivities.filter((a) => a.docType === 'invitation_meeting').length,
+                  },
+                  {
+                    id: 'invitation_event',
+                    label: 'ร่วมงาน/พิธี',
+                    emoji: '🎉',
+                    count: allActivities.filter((a) => a.docType === 'invitation_event').length,
+                  },
+                  {
+                    id: 'announcement',
+                    label: 'ประชาสัมพันธ์',
+                    emoji: '📢',
+                    count: allActivities.filter((a) => a.docType === 'announcement').length,
+                  },
+                  {
+                    id: 'official_order',
+                    label: 'คำสั่ง/ระเบียบ',
+                    emoji: '📜',
+                    count: allActivities.filter((a) => a.docType === 'official_order').length,
+                  },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setActivityCategoryFilter(cat.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                      activityCategoryFilter === cat.id
+                        ? 'bg-violet-700 text-white shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <span>{cat.emoji}</span>
+                    <span>{cat.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        activityCategoryFilter === cat.id ? 'bg-violet-900 text-violet-200' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {cat.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative min-w-[220px] sm:min-w-[260px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={activitySearchQuery}
+                  onChange={(e) => setActivitySearchQuery(e.target.value)}
+                  placeholder="ค้นหาชื่อกิจกรรม, เลขที่หนังสือ..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-100 transition-all font-medium"
+                />
+                {activitySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setActivitySearchQuery('')}
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-600 absolute right-2 top-1/2 -translate-y-1/2"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* List or Grid of Recent Activities */}
-            {activityEvents.length === 0 ? (
+            {filteredActivities.length === 0 ? (
               <div className="p-8 rounded-2xl bg-gradient-to-br from-violet-50/50 to-fuchsia-50/30 border border-dashed border-violet-200 text-center space-y-2.5">
                 <div className="w-12 h-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mx-auto">
                   <Megaphone className="w-6 h-6" />
                 </div>
-                <h4 className="font-bold text-slate-800 text-sm">ยังไม่มีรายการประชาสัมพันธ์หรือหนังสือเชิญ</h4>
+                <h4 className="font-bold text-slate-800 text-sm">
+                  {activitySearchQuery || activityCategoryFilter !== 'all'
+                    ? 'ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา'
+                    : 'ยังไม่มีรายการประชาสัมพันธ์หรือหนังสือเชิญ'}
+                </h4>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
                   คลิกปุ่มด้านบนเพื่อบันทึกหนังสือเชิญอบรม, หนังสือเชิญประชุม หรือกิจกรรมสาธารณสุข พร้อมอัปโหลดไฟล์หนังสือราชการ A4/PDF
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivityEditingEvent(null);
-                    setActivityPresetDate(undefined);
-                    setIsActivityModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs cursor-pointer shadow-xs"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>เริ่มบันทึกกิจกรรมแรก</span>
-                </button>
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  {(activitySearchQuery || activityCategoryFilter !== 'all') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActivitySearchQuery('');
+                        setActivityCategoryFilter('all');
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer"
+                    >
+                      ล้างตัวกรอง
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivityEditingEvent(null);
+                      setActivityPresetDate(undefined);
+                      setIsActivityModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>เริ่มบันทึกกิจกรรมใหม่</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-                {activityEvents.slice(0, 6).map((act) => {
+                {filteredActivities.map((act) => {
                   const docMeta = act.docType ? ACTIVITY_DOC_TYPES[act.docType] : null;
                   const isDone = act.status === 'completed';
                   const attCount = act.attachments?.length || 0;
+                  const imageAtt = act.attachments?.find(
+                    (a) => a.fileType?.startsWith('image/') || a.fileUrl?.startsWith('data:image/')
+                  );
 
                   return (
                     <div
                       key={act.id}
-                      className="p-4 rounded-2xl border border-slate-200/90 hover:border-violet-400 bg-white hover:shadow-md transition-all space-y-2.5 flex flex-col justify-between"
+                      className="p-4 rounded-2xl border border-slate-200/90 hover:border-violet-400 bg-white hover:shadow-md transition-all space-y-2.5 flex flex-col justify-between group/card"
                     >
                       <div className="space-y-2">
+                        {/* Optional Image Thumbnail Preview */}
+                        {imageAtt?.fileUrl && (
+                          <div
+                            onClick={() => {
+                              setViewerAttachment(imageAtt);
+                              setViewerLinkedEvent(act);
+                              setIsViewerModalOpen(true);
+                            }}
+                            className="relative h-32 rounded-xl overflow-hidden cursor-pointer group/img border border-slate-200 shadow-2xs"
+                          >
+                            <img
+                              src={imageAtt.fileUrl}
+                              alt={act.title}
+                              className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-slate-950/20 group-hover/img:bg-slate-950/40 transition-colors flex items-center justify-center opacity-0 group-hover/img:opacity-100">
+                              <span className="px-2.5 py-1 rounded-lg bg-white/90 text-slate-900 font-bold text-xs flex items-center gap-1 shadow-md">
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>ดูภาพใหญ่</span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Header: DocType Tag + Status */}
                         <div className="flex items-center justify-between gap-2">
                           <span

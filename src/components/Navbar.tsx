@@ -94,9 +94,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             {(!sidebarOpen) && (
               <div className="w-10 h-10 rounded-full bg-white p-0.5 items-center justify-center shrink-0 shadow-xs ring-2 ring-emerald-500/40 hidden xl:flex overflow-hidden">
                 <img
-                  src="/images-Photoroom.png"
+                  src="/municipal/bangpao_official_logo.png"
                   alt="ตราเทศบาลตำบลบางเป้า"
                   className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/images-Photoroom.png';
+                  }}
                 />
               </div>
             )}

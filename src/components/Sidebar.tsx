@@ -288,9 +288,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex items-center gap-3 overflow-hidden min-w-0">
                 <div className="w-12 h-12 rounded-full bg-white p-0.5 shrink-0 shadow-sm ring-2 ring-emerald-500/40 flex items-center justify-center overflow-hidden">
                   <img
-                    src="/images-Photoroom.png"
+                    src="/municipal/bangpao_official_logo.png"
                     alt="ตราเทศบาลตำบลบางเป้า"
                     className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = '/images-Photoroom.png';
+                    }}
                   />
                 </div>
                 <div className="flex flex-col min-w-0">
@@ -326,9 +329,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               aria-label="ขยายแถบเมนู"
             >
               <img
-                src="/images-Photoroom.png"
+                src="/municipal/bangpao_official_logo.png"
                 alt="ตราเทศบาลตำบลบางเป้า"
                 className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/images-Photoroom.png';
+                }}
               />
               <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xs group-hover:bg-emerald-700 transition-colors">
                 <ChevronRight className="w-3 h-3" />

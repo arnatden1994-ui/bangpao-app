@@ -124,6 +124,7 @@ import {
 import { FirebaseSyncModal } from './components/FirebaseSyncModal.tsx';
 import { CitizenPortalShareModal } from './components/CitizenPortalShareModal.tsx';
 import { FieldJobActionView } from './components/FieldJobActionView.tsx';
+import { MunicipalOfficialFooter } from './components/MunicipalOfficialFooter.tsx';
 import {
   buildPetitionNotificationPayload,
   buildEquipmentLoanNotificationPayload,
@@ -1752,25 +1753,11 @@ unsubLicenses();
             )}
           </main>
 
-          {/* Footer */}
-          <footer className="bg-white border-t border-slate-200 py-3.5 px-4 text-center text-xs text-slate-500 print:hidden mt-auto">
-            <div className="max-w-[1920px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-              <div>
-                ระบบงานสารสนเทศสาธารณสุขและจัดการเมืองอัจฉริยะ • เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง
-              </div>
-              <div className="flex items-center gap-3 text-slate-400">
-                <span>เจ้าหน้าที่: <strong className="text-slate-700">{currentUser.fullName}</strong> ({currentUser.roleTitle || currentUser.role})</span>
-                <span>•</span>
-                <button onClick={() => setAuthModalOpen(true)} className="text-emerald-700 hover:underline cursor-pointer">
-                  สลับผู้ใช้
-                </button>
-                <span>•</span>
-                <button onClick={() => setSheetsModalOpen(true)} className="text-emerald-700 hover:underline cursor-pointer">
-                  Google Sheets Sync
-                </button>
-              </div>
-            </div>
-          </footer>
+          {/* Official Municipal Footer */}
+          <MunicipalOfficialFooter
+            onNavigateTab={(t) => handleSidebarNavigate(t)}
+            onOpenCitizenPortal={() => setCitizenShareModalOpen(true)}
+          />
         </div>
       </div>
 
