@@ -130,6 +130,7 @@ import {
   dispatchNotification,
   getStoredNotificationSettings,
   saveStoredNotificationSettings,
+  safeMergeNotificationSettings,
 } from './services/notificationService.ts';
 import {
   subscribeCollection,
@@ -498,23 +499,28 @@ export default function App() {
   useEffect(() => {
     loadNotificationSettingsFromFirestore().then((remoteSettings) => {
       const local = getStoredNotificationSettings();
-      if (remoteSettings && (remoteSettings.lineTargetId || remoteSettings.lineChannelAccessToken || remoteSettings.emailGasWebAppUrl)) {
-        // Remote exists on Cloud, merge and persist locally on this browser/device
-        const merged = { ...local, ...remoteSettings };
+      if (remoteSettings) {
+        // Safe merge ensures remote empty token NEVER overwrites local token
+        const merged = safeMergeNotificationSettings(local, remoteSettings);
         saveStoredNotificationSettings(merged);
-      } else {
-        // Remote is empty on Cloud, but this device already configured local settings (e.g. main PC)
-        if (local.lineTargetId || local.lineChannelAccessToken || local.emailGasWebAppUrl) {
-          saveNotificationSettingsToFirestore(local).catch(() => {});
+        // If local has token or GAS URL that Firestore lacks, push up to Cloud so all devices sync
+        if (
+          (merged.lineChannelAccessToken && !remoteSettings.lineChannelAccessToken) ||
+          (merged.emailGasWebAppUrl && !remoteSettings.emailGasWebAppUrl)
+        ) {
+          saveNotificationSettingsToFirestore(merged).catch(() => {});
         }
+      } else if (local.lineTargetId || local.lineChannelAccessToken || local.emailGasWebAppUrl) {
+        saveNotificationSettingsToFirestore(local).catch(() => {});
       }
     }).catch(() => {});
 
     // Real-time listener for notification settings updates from any device
     const unsubNotify = subscribeNotificationSettings((updated) => {
-      if (updated && (updated.lineTargetId || updated.lineChannelAccessToken || updated.emailGasWebAppUrl)) {
+      if (updated) {
         const local = getStoredNotificationSettings();
-        saveStoredNotificationSettings({ ...local, ...updated });
+        const merged = safeMergeNotificationSettings(local, updated);
+        saveStoredNotificationSettings(merged);
       }
     });
 

@@ -149,10 +149,43 @@ export async function loadSignerSettingsFromFirestore(): Promise<SignerSettings>
 
 /**
  * Save Notification Settings to Firestore (LINE & Email & Webhook)
+ * Safety: A non-empty LINE token is strictly protected.
+ * If incoming token is empty, we check dedicated localStorage first;
+ * If still empty, we delete the key so `{ merge: true }` NEVER overwrites an existing valid token in Firestore!
  */
 export async function saveNotificationSettingsToFirestore(settings: NotificationSettings): Promise<void> {
   const docRef = doc(db, COLLECTIONS.SETTINGS, 'notifications');
-  await setDoc(docRef, settings, { merge: true });
+  const toSave: Record<string, any> = { ...settings };
+
+  const token = (settings.lineChannelAccessToken || '').trim();
+  if (token) {
+    toSave.lineChannelAccessToken = token;
+  } else {
+    // Check if we have a valid token stored locally in dedicated slot
+    const localToken =
+      typeof window !== 'undefined' && window.localStorage
+        ? window.localStorage.getItem('bangpao_line_channel_access_token_v1') ||
+          window.localStorage.getItem('bangpao_line_channel_access_token_backup_v1') ||
+          ''
+        : '';
+    if (localToken.trim()) {
+      toSave.lineChannelAccessToken = localToken.trim();
+    } else {
+      // DO NOT overwrite existing token on Firestore with empty string!
+      delete toSave.lineChannelAccessToken;
+    }
+  }
+
+  await setDoc(docRef, toSave, { merge: true });
+}
+
+/**
+ * Explicitly clear LINE Channel Access Token in Firestore.
+ * Only invoked when user explicitly confirms clearing the token.
+ */
+export async function clearLineTokenInFirestore(): Promise<void> {
+  const docRef = doc(db, COLLECTIONS.SETTINGS, 'notifications');
+  await setDoc(docRef, { lineChannelAccessToken: '' }, { merge: true });
 }
 
 /**

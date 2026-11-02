@@ -140,8 +140,10 @@ export interface CalendarScheduleItem {
   }[];
 }
 
-const STORAGE_KEY_NOTIFY_SETTINGS = 'bangpao_notification_settings_v1';
-const STORAGE_KEY_NOTIFY_LOGS = 'bangpao_notification_logs_v1';
+export const STORAGE_KEY_NOTIFY_SETTINGS = 'bangpao_notification_settings_v1';
+export const STORAGE_KEY_NOTIFY_LOGS = 'bangpao_notification_logs_v1';
+export const STORAGE_KEY_LINE_TOKEN = 'bangpao_line_channel_access_token_v1';
+export const STORAGE_KEY_LINE_TOKEN_BACKUP = 'bangpao_line_channel_access_token_backup_v1';
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   lineEnabled: true,
@@ -168,19 +170,142 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   dailyMorningSummaryTime: '08:00',
 };
 
+/**
+ * Retrieve the persisted LINE Channel Access Token across multi-tier storage.
+ * Immune to general settings JSON wipe or partial state clears.
+ */
+export function getStoredLineToken(): string {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return '';
+    const primary = localStorage.getItem(STORAGE_KEY_LINE_TOKEN);
+    if (primary && primary.trim()) return primary.trim();
+
+    const backup = localStorage.getItem(STORAGE_KEY_LINE_TOKEN_BACKUP);
+    if (backup && backup.trim()) return backup.trim();
+
+    if (window.sessionStorage) {
+      const session = sessionStorage.getItem(STORAGE_KEY_LINE_TOKEN);
+      if (session && session.trim()) return session.trim();
+    }
+
+    const legacy = localStorage.getItem('line_channel_access_token');
+    if (legacy && legacy.trim()) return legacy.trim();
+
+    const raw = localStorage.getItem(STORAGE_KEY_NOTIFY_SETTINGS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.lineChannelAccessToken && parsed.lineChannelAccessToken.trim()) {
+        const token = parsed.lineChannelAccessToken.trim();
+        // Self-heal dedicated storage slots
+        localStorage.setItem(STORAGE_KEY_LINE_TOKEN, token);
+        localStorage.setItem(STORAGE_KEY_LINE_TOKEN_BACKUP, token);
+        return token;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+/**
+ * Persist the LINE Channel Access Token immediately across all storage tiers.
+ */
+export function saveStoredLineToken(token: string): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const cleaned = (token || '').trim();
+    if (cleaned) {
+      localStorage.setItem(STORAGE_KEY_LINE_TOKEN, cleaned);
+      localStorage.setItem(STORAGE_KEY_LINE_TOKEN_BACKUP, cleaned);
+      if (window.sessionStorage) {
+        sessionStorage.setItem(STORAGE_KEY_LINE_TOKEN, cleaned);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to save line token to localStorage:', err);
+  }
+}
+
+/**
+ * Explicitly clear the stored LINE Channel Access Token across all storage tiers.
+ * Only invoked when user explicitly clicks "ลบ/ล้างค่า Token" with confirmation.
+ */
+export function clearStoredLineToken(): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    localStorage.removeItem(STORAGE_KEY_LINE_TOKEN);
+    localStorage.removeItem(STORAGE_KEY_LINE_TOKEN_BACKUP);
+    if (window.sessionStorage) {
+      sessionStorage.removeItem(STORAGE_KEY_LINE_TOKEN);
+    }
+    localStorage.removeItem('line_channel_access_token');
+
+    const raw = localStorage.getItem(STORAGE_KEY_NOTIFY_SETTINGS);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        parsed.lineChannelAccessToken = '';
+        localStorage.setItem(STORAGE_KEY_NOTIFY_SETTINGS, JSON.stringify(parsed));
+      } catch {
+        // ignore
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to clear stored line token:', err);
+  }
+}
+
+/**
+ * Safe Merge for NotificationSettings.
+ * CRITICAL RULE: A non-empty LINE Token is NEVER overwritten by an empty string or undefined!
+ */
+export function safeMergeNotificationSettings(
+  existing?: Partial<NotificationSettings> | null,
+  incoming?: Partial<NotificationSettings> | null
+): NotificationSettings {
+  const storedDedicatedToken = getStoredLineToken();
+  const existingToken = (existing?.lineChannelAccessToken || '').trim();
+  const incomingToken = (incoming?.lineChannelAccessToken || '').trim();
+
+  // Priority: non-empty incoming > non-empty existing > dedicated storage
+  const effectiveToken = incomingToken || existingToken || storedDedicatedToken;
+
+  const merged: NotificationSettings = {
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+    ...(existing || {}),
+    ...(incoming || {}),
+    lineChannelAccessToken: effectiveToken,
+  };
+
+  if (effectiveToken) {
+    saveStoredLineToken(effectiveToken);
+  }
+
+  return merged;
+}
+
 export function getStoredNotificationSettings(): NotificationSettings {
   try {
+    if (typeof window === 'undefined' || !window.localStorage) return DEFAULT_NOTIFICATION_SETTINGS;
     const raw = localStorage.getItem(STORAGE_KEY_NOTIFY_SETTINGS);
-    if (!raw) return DEFAULT_NOTIFICATION_SETTINGS;
-    return { ...DEFAULT_NOTIFICATION_SETTINGS, ...JSON.parse(raw) };
+    const parsed = raw ? JSON.parse(raw) : {};
+    return safeMergeNotificationSettings(DEFAULT_NOTIFICATION_SETTINGS, parsed);
   } catch {
-    return DEFAULT_NOTIFICATION_SETTINGS;
+    const token = getStoredLineToken();
+    return { ...DEFAULT_NOTIFICATION_SETTINGS, lineChannelAccessToken: token };
   }
 }
 
 export function saveStoredNotificationSettings(settings: NotificationSettings): void {
   try {
-    localStorage.setItem(STORAGE_KEY_NOTIFY_SETTINGS, JSON.stringify(settings));
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const current = getStoredNotificationSettings();
+    const safe = safeMergeNotificationSettings(current, settings);
+    localStorage.setItem(STORAGE_KEY_NOTIFY_SETTINGS, JSON.stringify(safe));
+    if (safe.lineChannelAccessToken) {
+      saveStoredLineToken(safe.lineChannelAccessToken);
+    }
   } catch (err) {
     console.error('Failed to save notification settings:', err);
   }
