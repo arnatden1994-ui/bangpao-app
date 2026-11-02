@@ -157,10 +157,10 @@ const createPetitionPinIcon = (
 
   const color =
     type === 'resolved'
-      ? '#059669' // Emerald
+      ? '#10b981' // Bright Emerald Green (เสร็จสิ้น)
       : type === 'sewage'
-      ? '#ea580c' // Orange
-      : '#0d9488'; // Teal
+      ? '#ea580c' // Vivid Orange (สูบสิ่งปฏิกูล)
+      : '#2563eb'; // Royal Blue (เหตุรำคาญ / คำร้องทั่วไป)
 
   const emoji =
     type === 'resolved'
@@ -445,8 +445,8 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
 
             marker.bindPopup(`
               <div style="font-family:'Prompt',sans-serif;padding:6px;font-size:12px;max-width:240px;">
-                <div style="font-weight:bold;color:${isSewage ? '#ea580c' : '#0d9488'};font-size:13px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:4px;">
-                  ${isSewage ? '🚛 คำร้องสูบสิ่งปฏิกูล' : '📋 ' + p.title}
+                <div style="font-weight:bold;color:${isDone ? '#059669' : isSewage ? '#ea580c' : '#2563eb'};font-size:13px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:4px;">
+                  ${isDone ? '✅ [เสร็จสิ้น] ' : ''}${isSewage ? '🚛 คำร้องสูบสิ่งปฏิกูล' : '📋 ' + p.title}
                 </div>
                 <div style="font-size:11px;color:#334155;margin-bottom:2px;"><strong>รหัส:</strong> ${p.trackingCode}</div>
                 <div style="font-size:11px;color:#334155;margin-bottom:2px;"><strong>ผู้ยื่น:</strong> ${p.citizenName} (${p.phone})</div>
@@ -1101,13 +1101,13 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
           <div className="text-[10px] text-orange-600 mt-0.5">รถสูบส้วมเทศบาล</div>
         </div>
 
-        <div className="bg-teal-50/70 p-3.5 sm:p-4 rounded-2xl border border-teal-200 shadow-2xs">
-          <div className="text-[11px] sm:text-xs font-bold text-teal-700 flex items-center gap-1">
+        <div className="bg-blue-50/70 p-3.5 sm:p-4 rounded-2xl border border-blue-200 shadow-2xs">
+          <div className="text-[11px] sm:text-xs font-bold text-blue-700 flex items-center gap-1">
             <MessageSquareWarning className="w-3.5 h-3.5" />
             <span>เหตุรำคาญ / ทั่วไป</span>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-teal-800 mt-0.5">{generalCount} เรื่อง</div>
-          <div className="text-[10px] text-teal-600 mt-0.5">กลิ่น, เสียง, ขยะ, ยุง</div>
+          <div className="text-xl sm:text-2xl font-black text-blue-800 mt-0.5">{generalCount} เรื่อง</div>
+          <div className="text-[10px] text-blue-600 mt-0.5">กลิ่น, เสียง, ขยะ, ยุง</div>
         </div>
       </div>
 
@@ -1245,19 +1245,26 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
               </div>
 
               {/* Map Footer Legend */}
-              <div className="p-2.5 bg-slate-50 border-t border-slate-200 text-[11px] flex flex-wrap items-center justify-between gap-2 shrink-0">
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center gap-1 font-semibold text-slate-700">
-                    <span className="w-3 h-3 rounded-full bg-orange-500 inline-block" /> สูบสิ่งปฏิกูล
+              <div className="p-2.5 bg-slate-50 border-t border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 bg-orange-50 px-2.5 py-1 rounded-xl border border-orange-200 shadow-2xs">
+                    <span className="w-3.5 h-3.5 rounded-full bg-orange-500 inline-block shadow-xs" />
+                    <span>🚛 สูบสิ่งปฏิกูล</span>
                   </span>
-                  <span className="flex items-center gap-1 font-semibold text-slate-700">
-                    <span className="w-3 h-3 rounded-full bg-teal-600 inline-block" /> เหตุรำคาญ/คำร้องทั่วไป
+                  <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200 shadow-2xs">
+                    <span className="w-3.5 h-3.5 rounded-full bg-blue-600 inline-block shadow-xs" />
+                    <span>📋 เหตุรำคาญ / คำร้องทั่วไป</span>
                   </span>
-                  <span className="flex items-center gap-1 font-semibold text-slate-700">
-                    <span className="w-3 h-3 rounded-full bg-emerald-600 inline-block" /> เสร็จสิ้น
+                  <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200 shadow-2xs">
+                    <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 inline-block shadow-xs" />
+                    <span>✅ เสร็จสิ้น</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200 shadow-2xs">
+                    <span className="w-3.5 h-3.5 rounded-full bg-slate-900 inline-block shadow-xs" />
+                    <span>🏛️ สำนักงาน ทต.บางเป้า</span>
                   </span>
                 </div>
-                <span className="text-slate-400">คลิกที่หมุดเพื่อดูข้อมูลและสั่งพิมพ์</span>
+                <span className="text-slate-400 text-[11px]">คลิกที่หมุดเพื่อดูข้อมูลและสั่งพิมพ์</span>
               </div>
             </div>
 
@@ -1333,8 +1340,8 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
                             <span
                               className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
                                 isSewage
-                                  ? 'bg-orange-100 text-orange-800'
-                                  : 'bg-teal-100 text-teal-800'
+                                  ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
                               }`}
                             >
                               {isSewage ? '🚛 สูบส้วม' : '📋 คำร้องทั่วไป'}
@@ -1683,8 +1690,8 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
               onClick={() => setRegTableCategoryFilter('general')}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 regTableCategoryFilter === 'general'
-                  ? 'bg-teal-800 text-white'
-                  : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200'
               }`}
             >
               <FileText className="w-3 h-3" />
@@ -1757,8 +1764,8 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
                                   <span>สูบสิ่งปฏิกูล (ดูดส้วม)</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-200">
-                                  <FileText className="w-3 h-3 text-teal-700" />
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
+                                  <FileText className="w-3 h-3 text-blue-600" />
                                   <span>{PETITION_CATEGORY_LABELS[p.category] || 'คำร้องทั่วไป'}</span>
                                 </span>
                               )}
