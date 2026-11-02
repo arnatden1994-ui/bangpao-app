@@ -6,7 +6,7 @@ import {
   Table,
   FileSpreadsheet,
 } from 'lucide-react';
-import { NhsoProject, NhsoFundSettings, NHSO_FUND_CATEGORIES, NhsoActivityGroup } from '../types/index.ts';
+import { NhsoProject, NhsoFundSettings, NHSO_FUND_CATEGORIES, NhsoActivityGroup, NhsoBudgetLine } from '../types/index.ts';
 
 interface PrintNhsoProjectModalProps {
   isOpen: boolean;
@@ -31,7 +31,7 @@ const escapeHtml = (str?: string) => {
 const getOfficialCategoryHeader = (categoryNum: number, rawTitle?: string) => {
   const officialTitles: Record<number, string> = {
     1: 'ประเภทที่ 1 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข',
-    2: 'ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน หรือหน่วยงานอื่น',
+    2: 'ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์格หรือกลุ่มประชาชน หรือหน่วยงานอื่น',
     3: 'ประเภทที่ 3 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของศูนย์พัฒนาเด็กเล็ก ศูนย์พัฒนาคุณภาพชีวิตผู้สูงอายุ หรือศูนย์บริการคนพิการ',
     4: 'ประเภทที่ 4 สนับสนุนการบริหารหรือพัฒนากองทุนหลักประกันสุขภาพ และการพัฒนาระบบบริหารจัดการกองทุน',
     5: 'ประเภทที่ 5 สนับสนุนและส่งเสริมกรณีเกิดโรคระบาดหรือภัยพิบัติในพื้นที่',
@@ -48,6 +48,17 @@ const getOfficialCategoryHeader = (categoryNum: number, rawTitle?: string) => {
   }
   return `ประเภทที่ ${categoryNum}`;
 };
+
+interface FlattenedRow {
+  id: string;
+  type: 'activity_header' | 'budget_line' | 'empty_line';
+  groupIndex: number;
+  group: NhsoActivityGroup;
+  lineIndex?: number;
+  line?: NhsoBudgetLine;
+  isFirstRowOfGroup: boolean;
+  isFirstRowOfProject: boolean;
+}
 
 export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
   isOpen,
@@ -114,12 +125,57 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
     };
   });
 
-  // Calculate total table rows for rowSpan
-  let totalProjectRows = 0;
-  activityGroups.forEach((g) => {
-    const linesCount = g.budgetLines.length > 0 ? g.budgetLines.length : 1;
-    totalProjectRows += (g.showHeaderRow ? 1 : 0) + linesCount;
+  // Flatten all table rows to calculate exact pagination (Matching Image 2 official 2-page template)
+  const flattenedRows: FlattenedRow[] = [];
+  activityGroups.forEach((group, gIdx) => {
+    const lines = group.budgetLines;
+    if (group.showHeaderRow) {
+      flattenedRows.push({
+        id: `gh_${group.id || gIdx}`,
+        type: 'activity_header',
+        groupIndex: gIdx,
+        group,
+        isFirstRowOfGroup: true,
+        isFirstRowOfProject: flattenedRows.length === 0,
+      });
+    }
+
+    if (lines.length > 0) {
+      lines.forEach((line, lIdx) => {
+        flattenedRows.push({
+          id: `line_${group.id || gIdx}_${line.id || lIdx}`,
+          type: 'budget_line',
+          groupIndex: gIdx,
+          group,
+          lineIndex: lIdx,
+          line,
+          isFirstRowOfGroup: !group.showHeaderRow && lIdx === 0,
+          isFirstRowOfProject: flattenedRows.length === 0,
+        });
+      });
+    } else if (!group.showHeaderRow) {
+      flattenedRows.push({
+        id: `empty_${group.id || gIdx}`,
+        type: 'empty_line',
+        groupIndex: gIdx,
+        group,
+        isFirstRowOfGroup: true,
+        isFirstRowOfProject: flattenedRows.length === 0,
+      });
+    }
   });
+
+  // Pagination split: Page 1 holds up to 9 rows (when multi-page, no signatures on page 1).
+  // Single-page project (<= 6 rows) holds all rows + Total row + Signatures on 1 page.
+  const pages: FlattenedRow[][] = [];
+  if (flattenedRows.length <= 6) {
+    pages.push(flattenedRows);
+  } else {
+    // Multi-page layout (Matches Swimming Project in Image 2: Page 1 has 9 rows, Page 2 has remaining rows + Total + Signatures)
+    const page1Limit = Math.min(9, flattenedRows.length - 1);
+    pages.push(flattenedRows.slice(0, page1Limit));
+    pages.push(flattenedRows.slice(page1Limit));
+  }
 
   const categoryNum = currentProject?.categoryNumber || 1;
   const categoryTitle = getOfficialCategoryHeader(categoryNum, currentProject?.categoryName);
@@ -155,22 +211,22 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
         <table style="border-collapse:collapse; width:100%; font-size:14.5pt; font-family:'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
           <thead>
             <tr style="text-align:center; font-weight:bold; font-size:15pt; background-color:${isExcel ? '#e2e8f0' : '#ffffff'};">
-              <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:12%; vertical-align:middle;">แผนงาน/โครงการ</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:11%; vertical-align:middle;">แผนงาน/โครงการ</th>
               <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:13%; vertical-align:middle;">กิจกรรม</th>
               <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:13%; vertical-align:middle;">วัตถุประสงค์</th>
               <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:11%; vertical-align:middle;">กลุ่มเป้าหมาย</th>
               <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:10%; vertical-align:middle;">ตัวชี้วัด (KPI)</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:7%; vertical-align:middle;">พื้นที่ดำเนินการ</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:8%; vertical-align:middle;">พื้นที่ดำเนินการ</th>
               <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:6%; vertical-align:middle;">ระยะเวลา<br/>ดำเนินการ</th>
               <th colspan="5" style="border:1pt solid #000; padding:4px; width:20%; vertical-align:middle;">งบประมาณ</th>
               <th rowspan="2" style="border:1pt solid #000; padding:5px 3px; width:8%; vertical-align:middle;">ผู้รับผิดชอบ</th>
             </tr>
             <tr style="text-align:center; font-weight:bold; font-size:14pt; background-color:${isExcel ? '#e2e8f0' : '#ffffff'};">
-              <th style="border:1pt solid #000; padding:3px 2px; width:9%;">รายการค่าใช้จ่าย</th>
+              <th style="border:1pt solid #000; padding:3px 2px; width:8.5%;">รายการค่าใช้จ่าย</th>
               <th style="border:1pt solid #000; padding:3px 2px; width:2.5%;">จำนวน</th>
               <th style="border:1pt solid #000; padding:3px 2px; width:2.5%;">หน่วย</th>
-              <th style="border:1pt solid #000; padding:3px 2px; width:3%;">ราคาต่อหน่วย</th>
-              <th style="border:1pt solid #000; padding:3px 2px; width:3%;">รวมเงิน (บาท)</th>
+              <th style="border:1pt solid #000; padding:3px 2px; width:3.25%;">ราคา<br/>ต่อหน่วย</th>
+              <th style="border:1pt solid #000; padding:3px 2px; width:3.25%;">รวมเงิน<br/>(บาท)</th>
             </tr>
           </thead>
           <tbody>
@@ -184,7 +240,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                 // First row of this group
                 rowsHtml += '<tr style="vertical-align:top;">';
                 if (gIdx === 0) {
-                  rowsHtml += `<td rowspan="${totalProjectRows}" style="border:1pt solid #000; padding:4px; font-weight:bold; vertical-align:top;">${escapeHtml(currentProject.projectName)}</td>`;
+                  rowsHtml += `<td rowspan="${flattenedRows.length}" style="border:1pt solid #000; padding:4px; font-weight:bold; vertical-align:top;">${escapeHtml(currentProject.projectName)}</td>`;
                 }
                 rowsHtml += `<td rowspan="${groupRowsCount}" style="border:1pt solid #000; padding:4px; vertical-align:top;">${escapeHtml(group.activities || '-')}</td>`;
                 rowsHtml += `<td rowspan="${groupRowsCount}" style="border:1pt solid #000; padding:4px; vertical-align:top;">${escapeHtml(group.objectives || '-')}</td>`;
@@ -206,7 +262,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                 }
 
                 if (gIdx === 0) {
-                  rowsHtml += `<td rowspan="${totalProjectRows}" style="border:1pt solid #000; padding:4px; text-align:center; vertical-align:top;">${escapeHtml(currentProject.responsiblePerson || currentProject.proposingOrg)}</td>`;
+                  rowsHtml += `<td rowspan="${flattenedRows.length}" style="border:1pt solid #000; padding:4px; text-align:center; vertical-align:top;">${escapeHtml(currentProject.responsiblePerson || currentProject.proposingOrg)}</td>`;
                 }
                 rowsHtml += '</tr>';
 
@@ -463,9 +519,9 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto font-sarabun">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto font-sarabun nhso-modal-overlay">
       {/* Container */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-[1280px] max-h-[96vh] flex flex-col overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-[1280px] max-h-[96vh] flex flex-col overflow-hidden nhso-modal-card">
         {/* Top Control Bar (Hidden when printing) */}
         <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-900 text-white print:hidden font-sans">
           <div className="flex items-center gap-3">
@@ -559,292 +615,288 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
           </div>
         </div>
 
-        {/* Printable Canvas */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-200 dark:bg-slate-950/80 print:p-0 print:bg-white print:overflow-visible">
+        {/* Printable Canvas Wrapper (Fully unconstrained under @media print for multi-page pagination) */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-200 dark:bg-slate-950/80 nhso-modal-scroll">
           <div
-            className="nhso-print-canvas bg-white text-black p-8 mx-auto shadow-2xl rounded-none border border-slate-400 print:shadow-none print:border-none print:p-1 print:m-0 w-full max-w-[1140px] min-h-[750px]"
+            className="nhso-print-canvas bg-white text-black p-6 sm:p-8 mx-auto shadow-2xl rounded-none border border-slate-400 w-full max-w-[1140px]"
             style={{ fontFamily: "'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif" }}
           >
             {/* ============================================================== */}
-            {/* MODE 1: SINGLE PROJECT PROPOSAL (EXACT REPLICA) */}
+            {/* MODE 1: SINGLE PROJECT PROPOSAL (PAGINATED - EXACT REPLICA) */}
             {/* ============================================================== */}
             {printMode === 'single' && currentProject && (
-              <div className="space-y-2 text-black">
-                {/* Top Header Layout: Category Title on Left, Logo Box on Right */}
-                <div className="flex items-start justify-between pb-1">
-                  {/* Left: Category Title (16pt bold) */}
-                  <div className="max-w-[76%] pt-1">
-                    <h2
-                      className="font-bold text-black leading-snug"
-                      style={{ fontSize: '16pt' }}
+              <div className="space-y-6">
+                {pages.map((pageRows, pageIdx) => {
+                  const isLastPage = pageIdx === pages.length - 1;
+                  // Group rows by groupIndex on this specific page
+                  const groupIndicesOnPage = Array.from(new Set(pageRows.map((r) => r.groupIndex)));
+
+                  return (
+                    <div
+                      key={`page_${pageIdx}`}
+                      className="nhso-page space-y-2 text-black bg-white"
+                      style={{ minHeight: pages.length > 1 ? '700px' : 'auto' }}
                     >
-                      {categoryTitle}
-                    </h2>
-                  </div>
+                      {/* Top Header Layout: Category Title on Left, Logo Box on Right */}
+                      <div className="flex items-start justify-between pb-1">
+                        {/* Left: Category Title (16pt bold) */}
+                        <div className="max-w-[76%] pt-1">
+                          <h2
+                            className="font-bold text-black leading-snug"
+                            style={{ fontSize: '16pt' }}
+                          >
+                            {categoryTitle}
+                          </h2>
+                        </div>
 
-                  {/* Right: Page number & NHSO Master Logo Box */}
-                  <div className="flex flex-col items-end">
-                    <span
-                      className="font-bold text-black pr-1 mb-1 leading-none"
-                      style={{ fontSize: '16pt' }}
-                    >
-                      {currentProject.orderNumber || 1}
-                    </span>
-                    {/* Official NHSO Master Logo Box */}
-                    <div className="border border-black p-1 bg-white flex items-center justify-center rounded-none shadow-none w-44 h-12">
-                      <img
-                        src="/Logo_NHSO_MASTER_Thai_2.jpg"
-                        alt="สปสช. สำนักงานหลักประกันสุขภาพแห่งชาติ"
-                        className="max-h-full max-w-full object-contain"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/nhso_logo.jpg';
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                        {/* Right: Page number & NHSO Master Logo Box */}
+                        <div className="flex flex-col items-end">
+                          <span
+                            className="font-bold text-black pr-1 mb-1 leading-none"
+                            style={{ fontSize: '16pt' }}
+                          >
+                            {currentProject.orderNumber || 1}
+                          </span>
+                          {/* Official NHSO Master Logo Box */}
+                          <div className="border border-black p-1 bg-white flex items-center justify-center rounded-none shadow-none w-44 h-12">
+                            <img
+                              src="/Logo_NHSO_MASTER_Thai_2.jpg"
+                              alt="สปสช. สำนักงานหลักประกันสุขภาพแห่งชาติ"
+                              className="max-h-full max-w-full object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = '/nhso_logo.jpg';
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
 
-                {/* 13-Column Table Grid (TH Sarabun PSK 16pt / 15pt exact official proportions) */}
-                <div className="w-full">
-                  <table
-                    className="w-full border-collapse border border-black leading-tight"
-                    style={{ fontSize: '15pt', lineHeight: 1.15 }}
-                  >
-                    <thead>
-                      <tr className="text-center font-bold text-black bg-white" style={{ fontSize: '15pt' }}>
-                        <th rowSpan={2} className="border border-black p-1 w-[12%] align-middle font-bold">
-                          แผนงาน/โครงการ
-                        </th>
-                        <th rowSpan={2} className="border border-black p-1 w-[13%] align-middle font-bold">
-                          กิจกรรม
-                        </th>
-                        <th rowSpan={2} className="border border-black p-1 w-[13%] align-middle font-bold">
-                          วัตถุประสงค์
-                        </th>
-                        <th rowSpan={2} className="border border-black p-1 w-[11%] align-middle font-bold">
-                          กลุ่มเป้าหมาย
-                        </th>
-                        <th rowSpan={2} className="border border-black p-1 w-[10%] align-middle font-bold">
-                          ตัวชี้วัด (KPI)
-                        </th>
-                        <th rowSpan={2} className="border border-black p-1 w-[7%] align-middle font-bold">
-                          พื้นที่ดำเนินการ
-                        </th>
-                        <th rowSpan={2} className="border border-black p-1 w-[6%] align-middle font-bold">
-                          ระยะเวลา<br />ดำเนินการ
-                        </th>
-                        <th colSpan={5} className="border border-black p-1 w-[20%] align-middle font-bold">
-                          งบประมาณ
-                        </th>
-                        <th rowSpan={2} className="border border-black p-1 w-[8%] align-middle font-bold">
-                          ผู้รับผิดชอบ
-                        </th>
-                      </tr>
-                      <tr className="text-center font-bold text-black bg-white" style={{ fontSize: '14pt' }}>
-                        <th className="border border-black p-0.5 w-[9%]">รายการค่าใช้จ่าย</th>
-                        <th className="border border-black p-0.5 w-[2.5%]">จำนวน</th>
-                        <th className="border border-black p-0.5 w-[2.5%]">หน่วย</th>
-                        <th className="border border-black p-0.5 w-[3%]">ราคาต่อหน่วย</th>
-                        <th className="border border-black p-0.5 w-[3%]">รวมเงิน (บาท)</th>
-                      </tr>
-                    </thead>
-                    <tbody style={{ fontSize: '14.5pt' }}>
-                      {activityGroups.map((group, gIdx) => {
-                        const hasHeaderRow = group.showHeaderRow;
-                        const lines = group.budgetLines;
-                        const groupRowsCount = (hasHeaderRow ? 1 : 0) + (lines.length > 0 ? lines.length : 1);
-
-                        return (
-                          <React.Fragment key={group.id || gIdx}>
-                            {/* First row of this activity group */}
-                            <tr className="align-top">
-                              {/* Project Name (Only on very first row of the table, spans all groups) */}
-                              {gIdx === 0 && (
-                                <td
-                                  rowSpan={totalProjectRows}
-                                  className="border border-black p-1 font-bold text-black whitespace-pre-line align-top"
-                                >
-                                  {currentProject.projectName}
-                                </td>
-                              )}
-
-                              {/* Activity Description */}
-                              <td
-                                rowSpan={groupRowsCount}
-                                className="border border-black p-1 whitespace-pre-line text-black align-top"
-                              >
-                                {group.activities || '-'}
-                              </td>
-
-                              {/* Objectives */}
-                              <td
-                                rowSpan={groupRowsCount}
-                                className="border border-black p-1 whitespace-pre-line text-black align-top"
-                              >
-                                {group.objectives || '-'}
-                              </td>
-
-                              {/* Target Group */}
-                              <td
-                                rowSpan={groupRowsCount}
-                                className="border border-black p-1 whitespace-pre-line text-black align-top"
-                              >
-                                {group.targetGroup || '-'}
-                              </td>
-
-                              {/* KPI */}
-                              <td
-                                rowSpan={groupRowsCount}
-                                className="border border-black p-1 whitespace-pre-line text-black align-top"
-                              >
-                                {group.kpi || '-'}
-                              </td>
-
-                              {/* Location */}
-                              <td
-                                rowSpan={groupRowsCount}
-                                className="border border-black p-1 text-center whitespace-pre-line text-black align-top"
-                              >
-                                {group.location || '-'}
-                              </td>
-
-                              {/* Duration */}
-                              <td
-                                rowSpan={groupRowsCount}
-                                className="border border-black p-1 text-center whitespace-pre-line text-black align-top"
-                              >
-                                {group.duration || '-'}
-                              </td>
-
-                              {/* Budget Header or First Line */}
-                              {hasHeaderRow ? (
-                                <td
-                                  className="border border-black p-1 font-bold text-black bg-slate-50"
-                                  colSpan={5}
-                                >
-                                  {group.activityName}
-                                </td>
-                              ) : lines.length > 0 ? (
-                                <>
-                                  <td className="border border-black p-1 text-black">{lines[0].name}</td>
-                                  <td className="border border-black p-1 text-center text-black">
-                                    {lines[0].quantity}
-                                  </td>
-                                  <td className="border border-black p-1 text-center text-black">
-                                    {lines[0].unit}
-                                  </td>
-                                  <td className="border border-black p-1 text-right text-black">
-                                    {lines[0].unitPrice?.toLocaleString()}
-                                  </td>
-                                  <td className="border border-black p-1 text-right font-medium text-black">
-                                    {(lines[0].total || 0).toLocaleString()}
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  <td className="border border-black p-1" colSpan={4}>
-                                    -
-                                  </td>
-                                  <td className="border border-black p-1 text-right">0</td>
-                                </>
-                              )}
-
-                              {/* Responsible Person (Only on very first row, spans all groups) */}
-                              {gIdx === 0 && (
-                                <td
-                                  rowSpan={totalProjectRows}
-                                  className="border border-black p-1 text-center font-medium text-black whitespace-pre-line align-top"
-                                >
-                                  {currentProject.responsiblePerson || currentProject.proposingOrg}
-                                </td>
-                              )}
+                      {/* 13-Column Table Grid (TH Sarabun PSK 16pt / 15pt exact official proportions) */}
+                      <div className="w-full">
+                        <table
+                          className="w-full border-collapse border border-black leading-tight"
+                          style={{ fontSize: '15pt', lineHeight: 1.15 }}
+                        >
+                          <thead>
+                            <tr className="text-center font-bold text-black bg-white" style={{ fontSize: '15pt' }}>
+                              <th rowSpan={2} className="border border-black p-1 w-[11%] align-middle font-bold">
+                                แผนงาน/โครงการ
+                              </th>
+                              <th rowSpan={2} className="border border-black p-1 w-[13%] align-middle font-bold">
+                                กิจกรรม
+                              </th>
+                              <th rowSpan={2} className="border border-black p-1 w-[13%] align-middle font-bold">
+                                วัตถุประสงค์
+                              </th>
+                              <th rowSpan={2} className="border border-black p-1 w-[11%] align-middle font-bold">
+                                กลุ่มเป้าหมาย
+                              </th>
+                              <th rowSpan={2} className="border border-black p-1 w-[10%] align-middle font-bold">
+                                <span className="whitespace-nowrap">ตัวชี้วัด (KPI)</span>
+                              </th>
+                              <th rowSpan={2} className="border border-black p-1 w-[8%] align-middle font-bold">
+                                <span className="whitespace-nowrap">พื้นที่ดำเนินการ</span>
+                              </th>
+                              <th rowSpan={2} className="border border-black p-1 w-[6%] align-middle font-bold">
+                                ระยะเวลา<br />ดำเนินการ
+                              </th>
+                              <th colSpan={5} className="border border-black p-1 w-[20%] align-middle font-bold">
+                                งบประมาณ
+                              </th>
+                              <th rowSpan={2} className="border border-black p-1 w-[8%] align-middle font-bold">
+                                ผู้รับผิดชอบ
+                              </th>
                             </tr>
+                            <tr className="text-center font-bold text-black bg-white" style={{ fontSize: '14pt' }}>
+                              <th className="border border-black p-0.5 w-[8.5%]">รายการค่าใช้จ่าย</th>
+                              <th className="border border-black p-0.5 w-[2.5%]">จำนวน</th>
+                              <th className="border border-black p-0.5 w-[2.5%]">หน่วย</th>
+                              <th className="border border-black p-0.5 w-[3.25%] leading-tight">
+                                ราคา<br /><span className="whitespace-nowrap">ต่อหน่วย</span>
+                              </th>
+                              <th className="border border-black p-0.5 w-[3.25%] leading-tight">
+                                รวมเงิน<br /><span className="whitespace-nowrap">(บาท)</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody style={{ fontSize: '14.5pt' }}>
+                            {groupIndicesOnPage.map((gIdx) => {
+                              const groupRows = pageRows.filter((r) => r.groupIndex === gIdx);
+                              const group = activityGroups[gIdx];
 
-                            {/* Remaining budget lines for this activity */}
-                            {lines.map((line, lIdx) => {
-                              // If there was no header row, index 0 was already rendered on the row above
-                              if (!hasHeaderRow && lIdx === 0) return null;
-                              return (
-                                <tr key={line.id || lIdx} className="align-top">
-                                  <td className="border border-black p-1 text-black">{line.name}</td>
-                                  <td className="border border-black p-1 text-center text-black">
-                                    {line.quantity}
-                                  </td>
-                                  <td className="border border-black p-1 text-center text-black">
-                                    {line.unit}
-                                  </td>
-                                  <td className="border border-black p-1 text-right text-black">
-                                    {line.unitPrice?.toLocaleString()}
-                                  </td>
-                                  <td className="border border-black p-1 text-right font-medium text-black">
-                                    {(line.total || 0).toLocaleString()}
-                                  </td>
-                                </tr>
-                              );
+                              return groupRows.map((rowItem, rIdx) => {
+                                const isFirstInGroupOnThisPage = rIdx === 0;
+                                const isFirstInProjectOnThisPage = pageRows.indexOf(rowItem) === 0;
+
+                                return (
+                                  <tr key={rowItem.id} className="align-top">
+                                    {/* Column 1: แผนงาน/โครงการ */}
+                                    {isFirstInProjectOnThisPage && (
+                                      <td
+                                        rowSpan={pageRows.length}
+                                        className="border border-black p-1 font-bold text-black whitespace-pre-line align-top"
+                                      >
+                                        {pageIdx === 0 ? currentProject.projectName : ''}
+                                      </td>
+                                    )}
+
+                                    {/* Columns 2-7: กิจกรรม, วัตถุประสงค์, กลุ่มเป้าหมาย, KPI, พื้นที่, ระยะเวลา */}
+                                    {isFirstInGroupOnThisPage && (
+                                      <>
+                                        <td
+                                          rowSpan={groupRows.length}
+                                          className="border border-black p-1 whitespace-pre-line text-black align-top"
+                                        >
+                                          {pageIdx === 0 || rowItem.isFirstRowOfGroup ? group.activities || '-' : ''}
+                                        </td>
+                                        <td
+                                          rowSpan={groupRows.length}
+                                          className="border border-black p-1 whitespace-pre-line text-black align-top"
+                                        >
+                                          {pageIdx === 0 || rowItem.isFirstRowOfGroup ? group.objectives || '-' : ''}
+                                        </td>
+                                        <td
+                                          rowSpan={groupRows.length}
+                                          className="border border-black p-1 whitespace-pre-line text-black align-top"
+                                        >
+                                          {pageIdx === 0 || rowItem.isFirstRowOfGroup ? group.targetGroup || '-' : ''}
+                                        </td>
+                                        <td
+                                          rowSpan={groupRows.length}
+                                          className="border border-black p-1 whitespace-pre-line text-black align-top"
+                                        >
+                                          {pageIdx === 0 || rowItem.isFirstRowOfGroup ? group.kpi || '-' : ''}
+                                        </td>
+                                        <td
+                                          rowSpan={groupRows.length}
+                                          className="border border-black p-1 text-center whitespace-pre-line text-black align-top"
+                                        >
+                                          {pageIdx === 0 || rowItem.isFirstRowOfGroup ? group.location || '-' : ''}
+                                        </td>
+                                        <td
+                                          rowSpan={groupRows.length}
+                                          className="border border-black p-1 text-center whitespace-pre-line text-black align-top"
+                                        >
+                                          {pageIdx === 0 || rowItem.isFirstRowOfGroup ? group.duration || '-' : ''}
+                                        </td>
+                                      </>
+                                    )}
+
+                                    {/* Columns 8-12: งบประมาณ */}
+                                    {rowItem.type === 'activity_header' ? (
+                                      <td
+                                        className="border border-black p-1 font-bold text-black bg-slate-50"
+                                        colSpan={5}
+                                      >
+                                        {rowItem.group.activityName}
+                                      </td>
+                                    ) : rowItem.line ? (
+                                      <>
+                                        <td className="border border-black p-1 text-black">{rowItem.line.name}</td>
+                                        <td className="border border-black p-1 text-center text-black">
+                                          {rowItem.line.quantity}
+                                        </td>
+                                        <td className="border border-black p-1 text-center text-black">
+                                          {rowItem.line.unit}
+                                        </td>
+                                        <td className="border border-black p-1 text-right text-black">
+                                          {rowItem.line.unitPrice?.toLocaleString()}
+                                        </td>
+                                        <td className="border border-black p-1 text-right font-medium text-black">
+                                          {(rowItem.line.total || 0).toLocaleString()}
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <td className="border border-black p-1" colSpan={4}>
+                                          -
+                                        </td>
+                                        <td className="border border-black p-1 text-right">0</td>
+                                      </>
+                                    )}
+
+                                    {/* Column 13: ผู้รับผิดชอบ */}
+                                    {isFirstInProjectOnThisPage && (
+                                      <td
+                                        rowSpan={pageRows.length}
+                                        className="border border-black p-1 text-center font-medium text-black whitespace-pre-line align-top"
+                                      >
+                                        {pageIdx === 0
+                                          ? currentProject.responsiblePerson || currentProject.proposingOrg
+                                          : ''}
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              });
                             })}
-                          </React.Fragment>
-                        );
-                      })}
 
-                      {/* Total Row (Directly below data with NO empty rows - 16pt bold) */}
-                      <tr className="font-bold text-black bg-white" style={{ fontSize: '15.5pt' }}>
-                        <td colSpan={7} className="border border-black p-1.5 text-center"></td>
-                        <td colSpan={4} className="border border-black p-1.5 text-center font-bold">
-                          รวมเป็นเงินทั้งสิ้น (บาท)
-                        </td>
-                        <td className="border border-black p-1.5 text-right font-bold" style={{ fontSize: '16pt' }}>
-                          {currentProject.budgetRequested.toLocaleString()}
-                        </td>
-                        <td className="border border-black p-1.5"></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                            {/* Total Row (Only rendered on the final page, directly under last item) */}
+                            {isLastPage && (
+                              <tr className="font-bold text-black bg-white" style={{ fontSize: '15.5pt' }}>
+                                <td colSpan={7} className="border border-black p-1.5 text-center"></td>
+                                <td colSpan={4} className="border border-black p-1.5 text-center font-bold">
+                                  รวมเป็นเงินทั้งสิ้น (บาท)
+                                </td>
+                                <td className="border border-black p-1.5 text-right font-bold" style={{ fontSize: '16pt' }}>
+                                  {currentProject.budgetRequested.toLocaleString()}
+                                </td>
+                                <td className="border border-black p-1.5"></td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
 
-                {/* 3-Signer Signature Block Matching Official Layout (TH Sarabun 16pt) */}
-                <div
-                  className="pt-8 pb-3 grid grid-cols-3 gap-6 text-center text-black"
-                  style={{ fontSize: '16pt', lineHeight: 1.25 }}
-                >
-                  {/* Proposer */}
-                  <div className="space-y-1">
-                    <div>
-                      ผู้เสนอ ................................................
-                    </div>
-                    <div className="font-bold">
-                      ({currentProject.signers?.proposerName || '................................................'})
-                    </div>
-                    <div style={{ fontSize: '15pt' }} className="text-slate-800">
-                      {currentProject.signers?.proposerTitle || 'ผู้เสนอโครงการ'}
-                    </div>
-                  </div>
+                      {/* 3-Signer Signature Block (Only rendered on the final page) */}
+                      {isLastPage && (
+                        <div
+                          className="pt-8 pb-3 grid grid-cols-3 gap-6 text-center text-black nhso-signature-block"
+                          style={{ fontSize: '16pt', lineHeight: 1.25 }}
+                        >
+                          {/* Proposer */}
+                          <div className="space-y-1">
+                            <div>
+                              ผู้เสนอ ................................................
+                            </div>
+                            <div className="font-bold">
+                              ({currentProject.signers?.proposerName || '................................................'})
+                            </div>
+                            <div style={{ fontSize: '15pt' }} className="text-slate-800">
+                              {currentProject.signers?.proposerTitle || 'ผู้เสนอโครงการ'}
+                            </div>
+                          </div>
 
-                  {/* Endorser */}
-                  <div className="space-y-1">
-                    <div>
-                      ผู้เห็นชอบ ................................................
-                    </div>
-                    <div className="font-bold">
-                      ({currentProject.signers?.endorserName || settings.defaultEndorserName})
-                    </div>
-                    <div style={{ fontSize: '15pt' }} className="text-slate-800">
-                      {currentProject.signers?.endorserTitle || settings.defaultEndorserTitle}
-                    </div>
-                  </div>
+                          {/* Endorser */}
+                          <div className="space-y-1">
+                            <div>
+                              ผู้เห็นชอบ ................................................
+                            </div>
+                            <div className="font-bold">
+                              ({currentProject.signers?.endorserName || settings.defaultEndorserName})
+                            </div>
+                            <div style={{ fontSize: '15pt' }} className="text-slate-800">
+                              {currentProject.signers?.endorserTitle || settings.defaultEndorserTitle}
+                            </div>
+                          </div>
 
-                  {/* Approver */}
-                  <div className="space-y-1">
-                    <div>
-                      ผู้อนุมัติ ................................................
+                          {/* Approver */}
+                          <div className="space-y-1">
+                            <div>
+                              ผู้อนุมัติ ................................................
+                            </div>
+                            <div className="font-bold">
+                              ({currentProject.signers?.approverName || settings.defaultApproverName})
+                            </div>
+                            <div style={{ fontSize: '15pt' }} className="text-slate-800">
+                              {currentProject.signers?.approverTitle || settings.defaultApproverTitle}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="font-bold">
-                      ({currentProject.signers?.approverName || settings.defaultApproverName})
-                    </div>
-                    <div style={{ fontSize: '15pt' }} className="text-slate-800">
-                      {currentProject.signers?.approverTitle || settings.defaultApproverTitle}
-                    </div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
             )}
 
@@ -852,7 +904,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             {/* MODE 2: SUMMARY OVERVIEW TABLE (SHEET 1 REPLICA) */}
             {/* ============================================================== */}
             {printMode === 'summary' && (
-              <div className="space-y-3 text-black">
+              <div className="space-y-3 text-black nhso-page">
                 {/* Header */}
                 <div className="text-center pb-2 border-b-2 border-black space-y-1">
                   <div className="flex items-center justify-center gap-3 mb-1">
@@ -1009,14 +1061,39 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
         @media print {
           @page {
             size: landscape;
-            margin: 5mm 8mm;
+            margin: 6mm 8mm;
           }
-          body, html {
-            font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
+
+          html, body {
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
             background: #ffffff !important;
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
+            font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
+
+          /* Unconstrain all modal containers so browser can paginate across multiple sheets */
+          .nhso-modal-overlay,
+          .nhso-modal-card,
+          .nhso-modal-scroll {
+            position: static !important;
+            display: block !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+          }
+
           .nhso-print-canvas {
             border: none !important;
             box-shadow: none !important;
@@ -1024,10 +1101,29 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             margin: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
+            min-height: 0 !important;
+            height: auto !important;
             font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
           }
-          .nhso-print-canvas * {
-            font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
+
+          .nhso-page {
+            page-break-after: always !important;
+            break-after: page !important;
+            padding: 0 !important;
+            margin: 0 0 10mm 0 !important;
+            width: 100% !important;
+            min-height: 0 !important;
+          }
+
+          .nhso-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+            margin-bottom: 0 !important;
+          }
+
+          .nhso-signature-block {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
