@@ -38,6 +38,8 @@ import {
   getStoredHazardous,
   getStoredPetitions,
   getStoredNhso,
+  getStoredNhsoFundProjects,
+  saveStoredNhsoFundProjects,
   getStoredLtc,
   getStoredEquipment,
   getStoredEquipmentUnits,
@@ -251,7 +253,7 @@ export default function App() {
     getStoredPetitions()
   );
   const [nhsoProjects, setNhsoProjects] = useState<NhsoProject[]>(() =>
-    getStoredNhso()
+    getStoredNhsoFundProjects()
   );
   const [ltcPatients, setLtcPatients] = useState<LtcPatient[]>(() =>
     getStoredLtc()
@@ -456,6 +458,7 @@ export default function App() {
 
   useEffect(() => {
     saveStoredNhso(nhsoProjects);
+    saveStoredNhsoFundProjects(nhsoProjects);
   }, [nhsoProjects]);
 
   useEffect(() => {
@@ -565,6 +568,9 @@ export default function App() {
     const unsubNhso = subscribeCollection<NhsoProject>(COLLECTIONS.NHSO, (items) => {
       if (items && items.length > 0) setNhsoProjects(items);
     });
+    const unsubNhsoFund = subscribeCollection<NhsoProject>(COLLECTIONS.NHSO_FUND, (items) => {
+      if (items && items.length > 0) setNhsoProjects(items);
+    });
     const unsubLtc = subscribeCollection<LtcPatient>(COLLECTIONS.LTC, (items) => {
       if (items && items.length > 0) setLtcPatients(items);
     });
@@ -581,6 +587,7 @@ unsubLicenses();
       unsubEquipment();
       unsubLoans();
       unsubNhso();
+      unsubNhsoFund();
       unsubLtc();
       unsubUsers();
     };
@@ -1054,7 +1061,7 @@ unsubLicenses();
     setInspections(INITIAL_INSPECTIONS);
     setHazardousBusinesses(INITIAL_HAZARDOUS_BUSINESSES);
     setPetitions(INITIAL_PETITIONS);
-    setNhsoProjects(INITIAL_NHSO_PROJECTS);
+    setNhsoProjects(INITIAL_NHSO_FUND_PROJECTS);
     setLtcPatients(INITIAL_LTC_PATIENTS);
     setEquipmentList(INITIAL_MEDICAL_EQUIPMENT);
     setEquipmentUnits(INITIAL_EQUIPMENT_UNITS);

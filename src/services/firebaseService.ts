@@ -1,3 +1,5 @@
+import { INITIAL_NHSO_FUND_PROJECTS, DEFAULT_NHSO_FUND_SETTINGS } from '../data/initialNhsoFundProjects.ts';
+import { NhsoFundSettings } from '../types/index.ts';
 import {
   collection,
   doc,
@@ -52,6 +54,8 @@ export const COLLECTIONS = {
   USERS: 'users',
   CALENDAR_EVENTS: 'calendar_events',
   LTC_QUEUES: 'ltc_delivery_queues',
+  NHSO_FUND: 'nhso_fund_projects',
+  NHSO_FUND_SETTINGS: 'nhso_fund_settings',
 } as const;
 
 /**
@@ -283,6 +287,13 @@ export async function seedAllDataToFirestore(
     });
 
     // 6. NHSO Projects
+    INITIAL_NHSO_FUND_PROJECTS.forEach((fundProj) => {
+      const ref = doc(db, COLLECTIONS.NHSO_FUND, fundProj.id);
+      batch.set(ref, fundProj, { merge: true });
+    });
+    const fundSettingsRef = doc(db, COLLECTIONS.NHSO_FUND_SETTINGS, 'current_settings');
+    batch.set(fundSettingsRef, DEFAULT_NHSO_FUND_SETTINGS, { merge: true });
+
     INITIAL_NHSO_PROJECTS.forEach((nhso) => {
       const ref = doc(db, COLLECTIONS.NHSO, nhso.id);
       batch.set(ref, nhso, { merge: true });
@@ -393,3 +404,33 @@ export async function fetchLtcQueuesFromFirestore(): Promise<any[]> {
 
 
 
+
+export async function saveNhsoFundProjectToFirestore(project: any): Promise<void> {
+  if (!db) return;
+  try {
+    const ref = doc(db, COLLECTIONS.NHSO_FUND, project.id);
+    await setDoc(ref, project, { merge: true });
+  } catch (e) {
+    console.error('Failed to save NHSO Fund Project to Firestore', e);
+  }
+}
+
+export async function deleteNhsoFundProjectFromFirestore(projectId: string): Promise<void> {
+  if (!db) return;
+  try {
+    const ref = doc(db, COLLECTIONS.NHSO_FUND, projectId);
+    await deleteDoc(ref);
+  } catch (e) {
+    console.error('Failed to delete NHSO Fund Project from Firestore', e);
+  }
+}
+
+export async function saveNhsoFundSettingsToFirestore(settings: NhsoFundSettings): Promise<void> {
+  if (!db) return;
+  try {
+    const ref = doc(db, COLLECTIONS.NHSO_FUND_SETTINGS, 'current_settings');
+    await setDoc(ref, settings, { merge: true });
+  } catch (e) {
+    console.error('Failed to save NHSO Fund Settings to Firestore', e);
+  }
+}

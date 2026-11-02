@@ -1,3 +1,5 @@
+import { INITIAL_NHSO_FUND_PROJECTS, DEFAULT_NHSO_FUND_SETTINGS } from '../data/initialNhsoFundProjects.ts';
+import { NhsoFundSettings } from '../types/index.ts';
 import {
   Establishment,
   GoogleSheetsConfig,
@@ -36,6 +38,8 @@ const STORAGE_KEYS = {
   LOANS: 'ph_equipment_loans_v3',
   LICENSES: 'ph_license_records_v1',
   CONFIG: 'hygiene_sheets_config_v1',
+  NHSO_FUND_PROJECTS: 'bangpao_nhso_fund_projects_v2',
+  NHSO_FUND_SETTINGS: 'bangpao_nhso_fund_settings_v2',
 };
 
 // A Web App URL is deliberately not hard-coded.  Each deployment has its own
@@ -869,3 +873,48 @@ function key(value) { return text(value).trim().toLowerCase(); }
 function workbook() { return SpreadsheetApp.openById(SPREADSHEET_ID); }
 function json(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
 `;
+
+// NHSO Fund Projects (Module 5)
+export function getStoredNhsoFundProjects(): NhsoProject[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.NHSO_FUND_PROJECTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to read nhso fund projects from storage', e);
+  }
+  localStorage.setItem(STORAGE_KEYS.NHSO_FUND_PROJECTS, JSON.stringify(INITIAL_NHSO_FUND_PROJECTS));
+  return INITIAL_NHSO_FUND_PROJECTS;
+}
+
+export function saveStoredNhsoFundProjects(items: NhsoProject[]) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.NHSO_FUND_PROJECTS, JSON.stringify(items));
+  } catch (e) {
+    console.error('Failed to save nhso fund projects', e);
+  }
+}
+
+export function getStoredNhsoFundSettings(): NhsoFundSettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.NHSO_FUND_SETTINGS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.fiscalYear) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to read nhso fund settings from storage', e);
+  }
+  localStorage.setItem(STORAGE_KEYS.NHSO_FUND_SETTINGS, JSON.stringify(DEFAULT_NHSO_FUND_SETTINGS));
+  return DEFAULT_NHSO_FUND_SETTINGS;
+}
+
+export function saveStoredNhsoFundSettings(settings: NhsoFundSettings) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.NHSO_FUND_SETTINGS, JSON.stringify(settings));
+  } catch (e) {
+    console.error('Failed to save nhso fund settings', e);
+  }
+}

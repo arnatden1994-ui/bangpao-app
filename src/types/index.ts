@@ -358,23 +358,169 @@ export interface PublicPetition {
 }
 
 // 3. ระบบโครงการกองทุนหลักประกันสุขภาพระดับท้องถิ่น (NHSO Fund Projects)
+export type NhsoFundCategoryClause =
+  | 'ข้อ 10 (1)'
+  | 'ข้อ 10 (2)'
+  | 'ข้อ 10 (3)'
+  | 'ข้อ 10 (4)'
+  | 'ข้อ 10 (5)'
+  | 'ข้อ 10 (6)'
+  | 'ข้อ 10 (7)'
+  | 'ข้อ 10 (8)';
+
+export interface NhsoFundCategoryInfo {
+  number: number;
+  clause: NhsoFundCategoryClause;
+  title: string;
+  shortTitle: string;
+  description: string;
+  badgeColor: string;
+}
+
+export const NHSO_FUND_CATEGORIES: NhsoFundCategoryInfo[] = [
+  {
+    number: 1,
+    clause: 'ข้อ 10 (1)',
+    shortTitle: 'บริการสาธารณสุขของหน่วยบริการ/สถานบริการ',
+    title: '1. สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข [ข้อ 10 (1)]',
+    description: 'สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
+  },
+  {
+    number: 2,
+    clause: 'ข้อ 10 (2)',
+    shortTitle: 'สร้างเสริมสุขภาพ/ป้องกันโรคโดยองค์กร/ชุมชน',
+    title: '2. สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]',
+    description: 'สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน',
+    badgeColor: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800',
+  },
+  {
+    number: 3,
+    clause: 'ข้อ 10 (3)',
+    shortTitle: 'ศูนย์พัฒนาเด็กเล็ก/ผู้สูงอายุ/คนพิการ',
+    title: '3. สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของศูนย์ฯ หรือหน่วยงานที่รับผิดชอบศูนย์ฯ (เด็กเล็ก/ผู้สูงอายุ/คนพิการ) [ข้อ 10 (3)]',
+    description: 'สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของศูนย์ฯ หรือหน่วยงานที่รับผิดชอบศูนย์ฯ (เด็กเล็ก/ผู้สูงอายุ/คนพิการ)',
+    badgeColor: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800',
+  },
+  {
+    number: 4,
+    clause: 'ข้อ 10 (4)',
+    shortTitle: 'การบริหาร/พัฒนากองทุนฯ',
+    title: '4. สนับสนุนการบริหารหรือพัฒนากองทุนฯ [ข้อ 10 (4)]',
+    description: 'สนับสนุนการบริหารหรือพัฒนากองทุนฯ ให้มีประสิทธิภาพ',
+    badgeColor: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
+  },
+  {
+    number: 5,
+    clause: 'ข้อ 10 (5)',
+    shortTitle: 'กรณีโรคระบาดหรือภัยพิบัติ',
+    title: '5. สนับสนุนและส่งเสริมกิจกรรมกรณีเกิดโรคระบาดหรือภัยพิบัติ [ข้อ 10 (5)]',
+    description: 'สนับสนุนและส่งเสริมกิจกรรมกรณีเกิดโรคระบาดหรือภัยพิบัติในพื้นที่',
+    badgeColor: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800',
+  },
+  {
+    number: 6,
+    clause: 'ข้อ 10 (6)',
+    shortTitle: 'ค่าตอบแทนผู้ช่วยเหลือดูแลผู้มีภาวะพึ่งพิง (CG)',
+    title: '6. สนับสนุนเป็นค่าจ้างค่าตอบแทนหรือค่าป่วยการของผู้ช่วยเหลือดูแลผู้ที่มีภาวะพึ่งพิง [ข้อ 10 (6)]',
+    description: 'สนับสนุนเป็นค่าจ้างค่าตอบแทนหรือค่าป่วยการของผู้ช่วยเหลือดูแลผู้ที่มีภาวะพึ่งพิงในชุมชน',
+    badgeColor: 'bg-pink-100 text-pink-800 border-pink-300 dark:bg-pink-950 dark:text-pink-300 dark:border-pink-800',
+  },
+  {
+    number: 7,
+    clause: 'ข้อ 10 (7)',
+    shortTitle: 'บริการสาธารณสุขตามมติคณะกรรมการฯ (ผ้าอ้อมฯลฯ)',
+    title: '7. สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขตามมติคณะกรรมการหลักประกันสุขภาพแห่งชาติ [ข้อ 10 (7)]',
+    description: 'สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขตามมติคณะกรรมการหลักประกันสุขภาพแห่งชาติ เช่น ผ้าอ้อมผู้ใหญ่ แผ่นรองซับ',
+    badgeColor: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800',
+  },
+  {
+    number: 8,
+    clause: 'ข้อ 10 (8)',
+    shortTitle: 'บริการพาหนะรับส่งผู้ทุพพลภาพ',
+    title: '8. สนับสนุนและส่งเสริมการจัดบริการพาหนะรับส่งผู้ทุพพลภาพเพื่อเข้ารับบริการสาธารณสุข [ข้อ 10 (8)]',
+    description: 'สนับสนุนและส่งเสริมการจัดบริการพาหนะรับส่งผู้ทุพพลภาพเพื่อเข้ารับบริการสาธารณสุข',
+    badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800',
+  },
+];
+
+export interface NhsoFundBudgetLine {
+  id: string;
+  activityCategory?: string; // เช่น 1. กิจกรรมอบรมให้ความรู้
+  name: string; // รายการค่าใช้จ่าย เช่น 1.1) ค่าตอบแทนวิทยากร
+  quantity: number;
+  unit: string; // ชั่วโมง, มื้อ, ชุด, ผืน, ป้าย, ชิ้น, คน
+  unitPrice: number;
+  total: number;
+  note?: string; // เช่น (50 คน x 3 ชิ้น x 95 วัน x 9.50 บาท)
+}
+
+export interface NhsoFundSigners {
+  proposerName: string; // ผู้เสนอ
+  proposerTitle: string; // ตำแหน่งผู้เสนอ
+  endorserName: string; // ผู้เห็นชอบ เช่น นายโชคชัย รอดรักษา
+  endorserTitle: string; // ตำแหน่งผู้เห็นชอบ เช่น เลขานุการกองทุนฯ ทต.บางเป้า
+  approverName: string; // ผู้อนุมัติ เช่น นายละดม เชื้อช่วย
+  approverTitle: string; // ตำแหน่งผู้อนุมัติ เช่น ประธานกองทุนฯ ทต.บางเป้า
+}
+
+export interface NhsoFundSettings {
+  fiscalYear: string;
+  totalFundBudget: number; // กรอบงบประมาณรวมของกองทุน เช่น 600000
+  defaultEndorserName: string;
+  defaultEndorserTitle: string;
+  defaultApproverName: string;
+  defaultApproverTitle: string;
+  standardRates: {
+    speakerHourly: number; // 600
+    lunchPerMeal: number; // 75
+    snackPerMeal: number; // 25
+    vinylPerBanner: number; // 450
+    adultDiaperPerPiece: number; // 9.50
+  };
+  orgProposerDefaults?: Record<string, { name: string; title: string }>;
+  updatedAt?: string;
+}
+
 export interface NhsoProject {
   id: string;
+  orderNumber?: number;
   projectCode: string;
   projectName: string;
   proposingOrg: string; // เช่น ชมรม อสม., ชมรมผู้สูงอายุ, รพ.สต., กองสาธารณสุข
-  category: 'health_promotion' | 'disease_prevention' | 'rehabilitation' | 'elderly_care' | 'dental';
+  category?: 'health_promotion' | 'disease_prevention' | 'rehabilitation' | 'elderly_care' | 'dental';
+  categoryNumber?: number; // 1 - 8
+  categoryName?: string; // ข้อ 10 (1) - (8)
   budgetRequested: number;
   budgetApproved: number;
-  status: 'submitted' | 'under_review' | 'approved' | 'in_progress' | 'completed' | 'rejected';
+  status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'approved_reduced' | 'in_progress' | 'completed' | 'rejected';
   fiscalYear: string;
-  startDate: string;
-  endDate: string;
-  targetParticipants: number;
+  roundNumber?: number;
+  startDate?: string;
+  endDate?: string;
+  targetParticipants?: number;
   responsiblePerson: string;
-  phone: string;
+  phone?: string;
   outcomesSummary?: string;
+
+  // 13 Columns detail & Management
+  activities?: string;
+  objectives?: string;
+  targetGroup?: string;
+  kpi?: string;
+  location?: string;
+  duration?: string;
+  budgetLines?: NhsoFundBudgetLine[];
+  signers?: NhsoFundSigners;
+  committeeDecision?: 'approve' | 'reject' | 'revision' | 'pending';
+  committeeComment?: string;
+  approvedDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
+
+export type NhsoFundProject = NhsoProject;
+
 
 export interface LtcRoundItem {
   itemId: string;
