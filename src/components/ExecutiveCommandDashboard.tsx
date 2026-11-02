@@ -43,6 +43,7 @@ import {
   Megaphone,
   FileText,
   Plus,
+  Search,
 } from 'lucide-react';
 import { GoogleCalendarModal } from './GoogleCalendarModal.tsx';
 import { CitizenPortalShareModal } from './CitizenPortalShareModal.tsx';
