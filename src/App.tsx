@@ -209,6 +209,10 @@ const sanitizeAllLocalStorageNames = () => {
   }
 };
 sanitizeAllLocalStorageNames();
+try {
+  // Clear legacy bloated duplicate key to prevent QuotaExceededError
+  localStorage.removeItem('ph_nhso_projects_v2');
+} catch (_) {}
 
 export default function App() {
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
@@ -457,7 +461,6 @@ export default function App() {
   }, [petitions]);
 
   useEffect(() => {
-    saveStoredNhso(nhsoProjects);
     saveStoredNhsoFundProjects(nhsoProjects);
   }, [nhsoProjects]);
 

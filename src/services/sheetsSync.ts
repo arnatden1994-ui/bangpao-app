@@ -42,6 +42,25 @@ const STORAGE_KEYS = {
   NHSO_FUND_SETTINGS: 'bangpao_nhso_fund_settings_v2',
 };
 
+export function safeSetItem(key: string, value: string): boolean {
+  try {
+    safeSetItem(key, value);
+    return true;
+  } catch (e: any) {
+    console.warn(`LocalStorage write skipped or quota exceeded for key "${key}":`, e?.message || e);
+    try {
+      // Clear legacy large duplicate keys to free up quota
+      localStorage.removeItem('ph_nhso_projects_v2');
+      localStorage.removeItem('hygiene_inspections_v1');
+      localStorage.removeItem('ph_hazardous_businesses_v1');
+      safeSetItem(key, value);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 // A Web App URL is deliberately not hard-coded.  Each deployment has its own
 // permission boundary and must belong to the spreadsheet used by this system.
 export const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbylXgoGf29KGky_izyoeq3Gx3nyJwFyPJM7u5ZSRyXGAXNndM1PCu6gy4SMhCssCJY/exec';
@@ -65,7 +84,7 @@ export function getStoredConfig(): GoogleSheetsConfig {
         changed = true;
       }
       if (changed) {
-        localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cfg));
+        safeSetItem(STORAGE_KEYS.CONFIG, JSON.stringify(cfg));
       }
       return cfg;
     }
@@ -84,7 +103,7 @@ export function getStoredConfig(): GoogleSheetsConfig {
 }
 
 export function saveStoredConfig(config: GoogleSheetsConfig) {
-  localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
+  safeSetItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
 }
 
 // Establishments
@@ -98,12 +117,12 @@ export function getStoredEstablishments(): Establishment[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.ESTABLISHMENTS, JSON.stringify(INITIAL_ESTABLISHMENTS));
+  safeSetItem(STORAGE_KEYS.ESTABLISHMENTS, JSON.stringify(INITIAL_ESTABLISHMENTS));
   return INITIAL_ESTABLISHMENTS;
 }
 
 export function saveStoredEstablishments(items: Establishment[]) {
-  localStorage.setItem(STORAGE_KEYS.ESTABLISHMENTS, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.ESTABLISHMENTS, JSON.stringify(items));
 }
 
 // Inspections
@@ -117,12 +136,12 @@ export function getStoredInspections(): InspectionRecord[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(INITIAL_INSPECTIONS));
+  safeSetItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(INITIAL_INSPECTIONS));
   return INITIAL_INSPECTIONS;
 }
 
 export function saveStoredInspections(items: InspectionRecord[]) {
-  localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(items));
 }
 
 // Hazardous Businesses
@@ -136,12 +155,12 @@ export function getStoredHazardous(): HazardousBusiness[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.HAZARDOUS, JSON.stringify(INITIAL_HAZARDOUS_BUSINESSES));
+  safeSetItem(STORAGE_KEYS.HAZARDOUS, JSON.stringify(INITIAL_HAZARDOUS_BUSINESSES));
   return INITIAL_HAZARDOUS_BUSINESSES;
 }
 
 export function saveStoredHazardous(items: HazardousBusiness[]) {
-  localStorage.setItem(STORAGE_KEYS.HAZARDOUS, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.HAZARDOUS, JSON.stringify(items));
 }
 
 // Petitions
@@ -155,12 +174,12 @@ export function getStoredPetitions(): PublicPetition[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.PETITIONS, JSON.stringify(INITIAL_PETITIONS));
+  safeSetItem(STORAGE_KEYS.PETITIONS, JSON.stringify(INITIAL_PETITIONS));
   return INITIAL_PETITIONS;
 }
 
 export function saveStoredPetitions(items: PublicPetition[]) {
-  localStorage.setItem(STORAGE_KEYS.PETITIONS, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.PETITIONS, JSON.stringify(items));
 }
 
 // NHSO
@@ -174,12 +193,16 @@ export function getStoredNhso(): NhsoProject[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.NHSO, JSON.stringify(INITIAL_NHSO_PROJECTS));
+  safeSetItem(STORAGE_KEYS.NHSO, JSON.stringify(INITIAL_NHSO_PROJECTS));
   return INITIAL_NHSO_PROJECTS;
 }
 
 export function saveStoredNhso(items: NhsoProject[]) {
-  localStorage.setItem(STORAGE_KEYS.NHSO, JSON.stringify(items));
+  try {
+    safeSetItem(STORAGE_KEYS.NHSO, JSON.stringify(INITIAL_NHSO_PROJECTS));
+  } catch (e) {
+    console.warn('saveStoredNhso suppressed:', e);
+  }
 }
 
 // LTC
@@ -200,19 +223,19 @@ export function getStoredLtc(): LtcPatient[] {
             createdAt: p.createdAt || matched?.createdAt || p.lastVisitDate || '2026-10-01',
           };
         });
-        localStorage.setItem(STORAGE_KEYS.LTC, JSON.stringify(normalized));
+        safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(normalized));
         return normalized;
       }
     }
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.LTC, JSON.stringify(INITIAL_LTC_PATIENTS));
+  safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(INITIAL_LTC_PATIENTS));
   return INITIAL_LTC_PATIENTS;
 }
 
 export function saveStoredLtc(items: LtcPatient[]) {
-  localStorage.setItem(STORAGE_KEYS.LTC, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(items));
 }
 
 // Accurate Medical Equipment Images Mapping
@@ -271,12 +294,12 @@ export function getStoredEquipment(): MedicalEquipment[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(INITIAL_MEDICAL_EQUIPMENT));
+  safeSetItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(INITIAL_MEDICAL_EQUIPMENT));
   return INITIAL_MEDICAL_EQUIPMENT;
 }
 
 export function saveStoredEquipment(items: MedicalEquipment[]) {
-  localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(items));
 }
 
 // Medical Equipment Individual Units (รายชิ้น/รายทะเบียน)
@@ -322,13 +345,13 @@ export function getStoredEquipmentUnits(): MedicalEquipmentUnit[] {
   } catch (e) {
     console.error('getStoredEquipmentUnits error:', e);
   }
-  localStorage.setItem(STORAGE_KEYS.EQUIPMENT_UNITS, JSON.stringify(INITIAL_EQUIPMENT_UNITS));
+  safeSetItem(STORAGE_KEYS.EQUIPMENT_UNITS, JSON.stringify(INITIAL_EQUIPMENT_UNITS));
   return INITIAL_EQUIPMENT_UNITS;
 }
 
 export function saveStoredEquipmentUnits(units: MedicalEquipmentUnit[]) {
   try {
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT_UNITS, JSON.stringify(units));
+    safeSetItem(STORAGE_KEYS.EQUIPMENT_UNITS, JSON.stringify(units));
   } catch (e) {
     console.error('saveStoredEquipmentUnits error:', e);
   }
@@ -345,12 +368,12 @@ export function getStoredLoans(): EquipmentLoan[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.LOANS, JSON.stringify(INITIAL_EQUIPMENT_LOANS));
+  safeSetItem(STORAGE_KEYS.LOANS, JSON.stringify(INITIAL_EQUIPMENT_LOANS));
   return INITIAL_EQUIPMENT_LOANS;
 }
 
 export function saveStoredLoans(items: EquipmentLoan[]) {
-  localStorage.setItem(STORAGE_KEYS.LOANS, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.LOANS, JSON.stringify(items));
 }
 
 // License Records
@@ -370,12 +393,12 @@ export function getStoredLicenses(): LicenseRecord[] {
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem(STORAGE_KEYS.LICENSES, JSON.stringify(INITIAL_LICENSE_RECORDS));
+  safeSetItem(STORAGE_KEYS.LICENSES, JSON.stringify(INITIAL_LICENSE_RECORDS));
   return INITIAL_LICENSE_RECORDS;
 }
 
 export function saveStoredLicenses(items: LicenseRecord[]) {
-  localStorage.setItem(STORAGE_KEYS.LICENSES, JSON.stringify(items));
+  safeSetItem(STORAGE_KEYS.LICENSES, JSON.stringify(items));
 }
 
 // Test connection to Google Apps Script
@@ -885,13 +908,13 @@ export function getStoredNhsoFundProjects(): NhsoProject[] {
   } catch (e) {
     console.error('Failed to read nhso fund projects from storage', e);
   }
-  localStorage.setItem(STORAGE_KEYS.NHSO_FUND_PROJECTS, JSON.stringify(INITIAL_NHSO_FUND_PROJECTS));
+  safeSetItem(STORAGE_KEYS.NHSO_FUND_PROJECTS, JSON.stringify(INITIAL_NHSO_FUND_PROJECTS));
   return INITIAL_NHSO_FUND_PROJECTS;
 }
 
 export function saveStoredNhsoFundProjects(items: NhsoProject[]) {
   try {
-    localStorage.setItem(STORAGE_KEYS.NHSO_FUND_PROJECTS, JSON.stringify(items));
+    safeSetItem(STORAGE_KEYS.NHSO_FUND_PROJECTS, JSON.stringify(items));
   } catch (e) {
     console.error('Failed to save nhso fund projects', e);
   }
@@ -907,13 +930,13 @@ export function getStoredNhsoFundSettings(): NhsoFundSettings {
   } catch (e) {
     console.error('Failed to read nhso fund settings from storage', e);
   }
-  localStorage.setItem(STORAGE_KEYS.NHSO_FUND_SETTINGS, JSON.stringify(DEFAULT_NHSO_FUND_SETTINGS));
+  safeSetItem(STORAGE_KEYS.NHSO_FUND_SETTINGS, JSON.stringify(DEFAULT_NHSO_FUND_SETTINGS));
   return DEFAULT_NHSO_FUND_SETTINGS;
 }
 
 export function saveStoredNhsoFundSettings(settings: NhsoFundSettings) {
   try {
-    localStorage.setItem(STORAGE_KEYS.NHSO_FUND_SETTINGS, JSON.stringify(settings));
+    safeSetItem(STORAGE_KEYS.NHSO_FUND_SETTINGS, JSON.stringify(settings));
   } catch (e) {
     console.error('Failed to save nhso fund settings', e);
   }
