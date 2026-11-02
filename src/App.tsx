@@ -1737,10 +1737,16 @@ unsubLicenses();
             )}
           </main>
 
-          {/* Official Municipal Footer */}
+          {/* Official Municipal Footer with Cloud Tools Strip */}
           <MunicipalOfficialFooter
             onNavigateTab={(t) => handleSidebarNavigate(t)}
             onOpenCitizenPortal={() => setCitizenShareModalOpen(true)}
+            config={config}
+            isSyncing={isSyncing}
+            onQuickSync={handleQuickSync}
+            onOpenSheetsModal={() => setSheetsModalOpen(true)}
+            onOpenFirebaseModal={() => setFirebaseModalOpen(true)}
+            onOpenSignerSettings={() => setSignerSettingsModalOpen(true)}
           />
         </div>
 

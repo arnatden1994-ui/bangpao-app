@@ -20,15 +20,10 @@ import {
   Bell,
   Menu,
   X,
-  ExternalLink,
-  Flame,
   LogOut,
-  Share2,
-  RefreshCw,
-  Globe,
+  Sparkles,
 } from 'lucide-react';
 import { GoogleSheetsConfig, MainNavTab, User } from '../types/index.ts';
-import { DEFAULT_GAS_URL } from '../services/sheetsSync.ts';
 
 export interface NavbarProps {
   currentTab: MainNavTab;
@@ -41,18 +36,16 @@ export interface NavbarProps {
     settings?: 'signers' | 'users' | 'approvers' | 'sheets' | 'notifications';
   };
   onNavigate?: (tab: MainNavTab, subTab?: string) => void;
-  config: GoogleSheetsConfig;
+  config?: GoogleSheetsConfig;
   currentUser: User | null;
-  sidebarOpen?: boolean;
   onOpenAuthModal: () => void;
   onLogout: () => void;
-  onOpenSheetsModal: () => void;
+  onOpenSheetsModal?: () => void;
   onOpenFirebaseModal?: () => void;
-  isSyncing: boolean;
-  onQuickSync: () => void;
+  isSyncing?: boolean;
+  onQuickSync?: () => void;
   onOpenSignerSettings?: () => void;
   onOpenCitizenShareModal?: () => void;
-  onToggleSidebar?: () => void;
   badgeCounts?: {
     petitions?: number;
     expiringLicenses?: number;
@@ -75,8 +68,6 @@ interface NavModule {
   fullTitle: string;
   subtitle: string;
   icon: React.ElementType;
-  badge?: string | null;
-  badgeColor?: string;
   subItems: NavSubItem[];
 }
 
@@ -85,17 +76,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentSubTabLabel,
   activeSubTabs,
   onNavigate,
-  config,
   currentUser,
   onOpenAuthModal,
   onLogout,
-  onOpenSheetsModal,
-  onOpenFirebaseModal,
-  isSyncing,
-  onQuickSync,
-  onOpenSignerSettings,
-  onOpenCitizenShareModal,
-  badgeCounts = {},
 }) => {
   const officerName = currentUser?.fullName || 'พันจ่าเอกอานัส เด็นหมาด';
   const officerRole = currentUser?.roleTitle || 'เจ้าพนักงานสาธารณสุขชำนาญงาน (นายตรวจ)';
@@ -137,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     }, 180);
   };
 
-  // 6 Main Categories strictly matching original structure
+  // 6 Main Categories strictly matching original structure (NO BADGE NUMBERS 25, 5, 3)
   const navModules: NavModule[] = [
     {
       id: 'overview',
@@ -146,7 +129,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       fullTitle: 'แดชบอร์ดหลักทุกระบบ',
       subtitle: 'ศูนย์สั่งการสถิติ & ติดตามภาพรวม',
       icon: LayoutDashboard,
-      badge: null,
       subItems: [],
     },
     {
@@ -156,8 +138,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       fullTitle: 'กิจการอันตรายต่อสุขภาพ',
       subtitle: 'ตรวจประเมิน & ออกใบอนุญาต อภ.2',
       icon: Shield,
-      badge: badgeCounts.expiringLicenses && badgeCounts.expiringLicenses > 0 ? `${badgeCounts.expiringLicenses}` : null,
-      badgeColor: 'bg-amber-500 text-white',
       subItems: [
         {
           id: 'dashboard',
@@ -180,8 +160,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       fullTitle: 'ระบบแจกจ่าย สปสช. & LTC',
       subtitle: 'การดูแลระยะยาว & ติดตามพิกัด',
       icon: Package,
-      badge: badgeCounts.ltcPatients && badgeCounts.ltcPatients > 0 ? `${badgeCounts.ltcPatients}` : null,
-      badgeColor: 'bg-rose-500 text-white',
       subItems: [
         {
           id: 'route',
@@ -210,8 +188,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       fullTitle: 'ระบบบริการยืม-คืนอุปกรณ์',
       subtitle: 'อุปกรณ์ทางการแพทย์ & สัญญาขอยืม',
       icon: Stethoscope,
-      badge: badgeCounts.activeLoans && badgeCounts.activeLoans > 0 ? `${badgeCounts.activeLoans}` : null,
-      badgeColor: 'bg-indigo-600 text-white',
       subItems: [
         {
           id: 'route',
@@ -240,8 +216,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       fullTitle: 'ระบบยื่นคำร้อง & บริการประชาชน',
       subtitle: 'เหตุรำคาญ & สูบสิ่งปฏิกูล ทต.บางเป้า',
       icon: MessageSquareWarning,
-      badge: badgeCounts.petitions && badgeCounts.petitions > 0 ? `${badgeCounts.petitions}` : null,
-      badgeColor: 'bg-amber-500 text-white',
       subItems: [
         {
           id: 'dashboard',
@@ -264,7 +238,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       fullTitle: 'โครงการ สปสช. (กองทุน)',
       subtitle: 'เอกสารแนบ 6 & มติคณะกรรมการ กปท.',
       icon: Building2,
-      badge: null,
       subItems: [],
     },
     {
@@ -274,7 +247,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       fullTitle: 'ระบบตั้งค่าผู้ใช้งานทุกระบบ',
       subtitle: 'ผู้ลงนาม, สิทธิ์, ผังอนุมัติ & Cloud',
       icon: Settings,
-      badge: null,
       subItems: [
         {
           id: 'signers',
@@ -339,16 +311,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-50 select-none shadow-md" ref={navContainerRef}>
       {/* ========================================================== */}
-      {/* 1. TOP BRANDING & QUICK UTILITIES BAR (แถบข้อมูลหน่วยงาน & เครื่องมือ) */}
+      {/* 1. TOP BRANDING ROW (แถบข้อมูลหน่วยงานแบบเรียบหรู คลีน 100%) */}
       {/* ========================================================== */}
-      <div className="bg-white/95 backdrop-blur-md border-b border-emerald-100 px-3 sm:px-6 lg:px-8 py-2">
-        <div className="flex items-center justify-between gap-3">
+      <div className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="flex items-center justify-between gap-4">
           {/* Left: Official Municipal Seal & Agency Title */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-3.5 min-w-0">
             {/* Bangpao Official Logo */}
             <div
               onClick={() => handleItemClick('overview')}
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white p-0.5 items-center justify-center shrink-0 shadow-md ring-2 ring-emerald-500/50 flex overflow-hidden cursor-pointer hover:scale-105 transition-transform"
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white p-0.5 items-center justify-center shrink-0 shadow-md ring-2 ring-emerald-500/40 flex overflow-hidden cursor-pointer hover:scale-105 transition-transform"
               title="เทศบาลตำบลบางเป้า อ.กันตัง จ.ตรัง"
             >
               <img
@@ -369,77 +341,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   กองสาธารณสุขและสิ่งแวดล้อม
                 </span>
-                <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300/80 shrink-0">
+                <span className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300/80 shrink-0">
                   เทศบาลตำบลบางเป้า
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 truncate flex items-center gap-1.5 font-medium">
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate flex items-center gap-1.5 font-medium mt-0.5">
                 <span>อำเภอกันตัง จังหวัดตรัง</span>
-                <span className="text-slate-300">•</span>
-                <span className="text-emerald-700 font-semibold hidden sm:inline">ระบบบริหารจัดการและบริการดิจิทัลสาธารณสุข</span>
                 {currentSubTabLabel && (
                   <>
-                    <span className="text-slate-300 hidden lg:inline">•</span>
-                    <span className="text-slate-700 font-bold hidden lg:inline">{currentSubTabLabel}</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-emerald-800 font-bold bg-emerald-50 px-2 py-0.2 rounded border border-emerald-200">
+                      {currentSubTabLabel}
+                    </span>
                   </>
                 )}
               </p>
             </div>
           </div>
 
-          {/* Right: Quick Utility Actions & Profile */}
+          {/* Right: Only Officer Profile & Logout Button (Clean, No Clutter!) */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Citizen Portal Share Button */}
-            {onOpenCitizenShareModal && (
-              <button
-                type="button"
-                onClick={onOpenCitizenShareModal}
-                title="แชร์ลิงก์ศูนย์บริการประชาชนออนไลน์ (Citizen Portal) และ QR Code"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white shadow-xs transition-all cursor-pointer active:scale-95 ring-1 ring-emerald-300/60 shrink-0"
-              >
-                <Share2 className="w-3.5 h-3.5 text-emerald-100 shrink-0" />
-                <span className="hidden sm:inline">แชร์พอร์ทัล</span>
-                <span className="sm:hidden">พอร์ทัล</span>
-              </button>
-            )}
-
-            {/* Google Sheets Sync Badge Button */}
-            <button
-              type="button"
-              onClick={onOpenSheetsModal}
-              title={`สถานะการเชื่อมต่อ Google Sheets: ${config.autoSync ? 'ซิงค์อัตโนมัติ (เปิดใช้งาน)' : 'ซิงค์แบบกดเอง'}`}
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300/80 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Sheets</span>
-              <span className={`w-2 h-2 rounded-full ${config.autoSync ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-            </button>
-
-            {/* Firebase Active Badge */}
-            {onOpenFirebaseModal && (
-              <button
-                type="button"
-                onClick={onOpenFirebaseModal}
-                title="สถานะ Cloud Firestore (Bangpao Public Health)"
-                className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
-              >
-                <Flame className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>Firebase</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              </button>
-            )}
-
-            {/* Sync Refresh Button */}
-            <button
-              type="button"
-              onClick={onQuickSync}
-              disabled={isSyncing}
-              title="รีเฟรชและซิงค์ข้อมูลกับ Google Sheets ทันที"
-              className="p-2 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100/70 rounded-xl transition-colors disabled:opacity-50 cursor-pointer border border-transparent hover:border-emerald-200 shrink-0 active:scale-95"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            </button>
-
             {/* Officer Profile Badge */}
             <div
               onClick={() => {
@@ -447,19 +368,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onOpenAuthModal();
                 }
               }}
-              className={`flex items-center gap-2 p-1 sm:px-2.5 sm:py-1 rounded-xl border border-emerald-200/90 bg-emerald-50/70 transition-all text-left shadow-2xs shrink-0 ${
-                currentUser?.role === 'admin' ? 'hover:bg-emerald-100/80 cursor-pointer' : 'cursor-default'
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all text-left shadow-2xs shrink-0 ${
+                currentUser?.role === 'admin' ? 'cursor-pointer hover:border-emerald-300' : 'cursor-default'
               }`}
               title={currentUser?.role === 'admin' ? 'คลิกเพื่อจัดการผู้ใช้ / สลับสิทธิ์ (เฉพาะแอดมิน)' : 'ผู้ปฏิบัติงานปัจจุบัน'}
             >
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
                 {officerName.slice(0, 1)}
               </div>
-              <div className="hidden 2xl:block text-left">
-                <div className="text-xs font-bold text-slate-900 leading-snug truncate max-w-[120px]">
+              <div className="hidden sm:block text-left">
+                <div className="text-xs font-bold text-slate-800 leading-snug truncate max-w-[130px]">
                   {officerName}
                 </div>
-                <div className="text-[10px] text-emerald-700 font-medium truncate max-w-[120px]">
+                <div className="text-[10px] text-emerald-700 font-semibold truncate max-w-[130px]">
                   {officerRole}
                 </div>
               </div>
@@ -470,7 +391,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onLogout}
               title="ออกจากระบบ"
-              className="flex items-center gap-1 p-2 sm:px-2.5 sm:py-1.5 text-xs font-bold rounded-xl text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-2xs shrink-0 active:scale-95"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-xl text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-2xs shrink-0 active:scale-95"
             >
               <LogOut className="w-3.5 h-3.5 text-rose-600 shrink-0" />
               <span className="hidden sm:inline">ออก</span>
@@ -480,7 +401,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl bg-slate-100 text-slate-800 hover:bg-slate-200 active:scale-95 transition-all cursor-pointer border border-slate-300"
+              className="lg:hidden p-2 rounded-xl bg-slate-100 text-slate-800 hover:bg-slate-200 active:scale-95 transition-all cursor-pointer border border-slate-300 ml-1"
               aria-label="เปิดเมนูนำทาง"
               title="เปิดเมนูนำทาง"
             >
@@ -490,12 +411,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* ========================================================== */}
-      {/* 2. MUNICIPAL HORIZONTAL MEGA-MENU BAR (แถบเมนูหลักแนวนอน สไตล์ bangpao.go.th) */}
-      {/* ========================================================== */}
-      <div className="relative bg-gradient-to-r from-[#0c326f] via-[#0f4c81] to-[#005f73] text-white shadow-lg">
+      {/* ========================================================================= */}
+      {/* 2. MUNICIPAL HORIZONTAL MEGA-MENU BAR (ปรับดีไซน์ใหม่ให้หรูหรา ทันสมัย คลีนตามภาพ 1) */}
+      {/* ========================================================================= */}
+      <div className="relative bg-gradient-to-r from-[#0a2540] via-[#0d3b66] to-[#0a3a40] text-white shadow-lg border-t border-white/10">
         <div className="w-full px-3 sm:px-6 lg:px-8">
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2 h-13 overflow-visible">
+          <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5 h-13 overflow-visible">
             {navModules.map((module) => {
               const active = isTabActive(module.id);
               const hasSub = module.subItems.length > 0;
@@ -518,33 +439,31 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setActiveDropdown(isHovered ? null : module.id);
                       }
                     }}
-                    className={`relative flex items-center gap-1.5 px-3 xl:px-3.5 py-2 rounded-xl text-xs xl:text-[13px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    className={`relative flex items-center gap-2 px-3 xl:px-4 py-2.5 rounded-xl text-xs xl:text-[13.5px] font-bold tracking-tight transition-all duration-200 cursor-pointer whitespace-nowrap ${
                       active
-                        ? 'bg-white/20 text-amber-300 shadow-sm border border-amber-300/40'
+                        ? 'bg-white/20 text-amber-300 shadow-sm border border-amber-300/40 backdrop-blur-md'
                         : isHovered
-                        ? 'bg-white/10 text-white'
-                        : 'text-slate-100 hover:text-white hover:bg-white/10'
+                        ? 'bg-white/12 text-white'
+                        : 'text-slate-200 hover:text-white hover:bg-white/10'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-amber-300' : 'text-slate-200'}`} />
+                    <Icon
+                      className={`w-4 h-4 shrink-0 transition-transform ${
+                        active ? 'text-amber-300' : 'text-slate-300 group-hover:scale-105'
+                      }`}
+                    />
                     <span>{module.title}</span>
 
-                    {/* Badge if any */}
-                    {module.badge && (
-                      <span
-                        className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-                          module.badgeColor || 'bg-amber-400 text-slate-950'
-                        }`}
-                      >
-                        {module.badge}
-                      </span>
+                    {/* Active Bottom Glow Indicator */}
+                    {active && (
+                      <span className="absolute bottom-1 left-3 right-3 h-0.5 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 rounded-full shadow-sm" />
                     )}
 
                     {/* Dropdown Indicator Arrow */}
                     {hasSub && (
                       <ChevronDown
                         className={`w-3.5 h-3.5 transition-transform duration-200 shrink-0 ${
-                          isHovered ? 'rotate-180 text-amber-300' : 'text-slate-300 opacity-70'
+                          isHovered ? 'rotate-180 text-amber-300' : 'text-slate-300/70'
                         }`}
                       />
                     )}
@@ -559,10 +478,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onMouseLeave={handleMouseLeave}
                       className="absolute top-full left-0 z-50 pt-2 animate-in fade-in slide-in-from-top-2 duration-150"
                       style={{
-                        minWidth: module.subItems.length > 2 ? '540px' : '360px',
+                        minWidth: module.subItems.length > 3 ? '580px' : module.subItems.length === 3 ? '520px' : '380px',
                       }}
                     >
-                      <div className="bg-white rounded-2xl rounded-tl-xs shadow-2xl border border-slate-200/90 p-4 sm:p-5 text-slate-800 space-y-3">
+                      <div className="bg-white/98 backdrop-blur-xl rounded-2xl rounded-tl-sm shadow-2xl border border-slate-200/90 p-5 text-slate-800 space-y-3.5 ring-1 ring-black/5">
                         {/* Section Header with arrow title */}
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                           <div className="flex items-center gap-2 text-xs font-black text-[#0d3b66]">
@@ -586,14 +505,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                         >
                           {module.subItems.map((sub) => {
                             const isSubActive = isSubItemActive(module.id, sub.id);
-                            const SubIcon = sub.icon;
 
                             return (
                               <button
                                 key={sub.id}
                                 type="button"
                                 onClick={() => handleItemClick(module.id, sub.id)}
-                                className={`text-left p-3 rounded-xl transition-all cursor-pointer border group/item flex flex-col justify-between ${
+                                className={`text-left p-3.5 rounded-xl transition-all cursor-pointer border group/item flex flex-col justify-between ${
                                   isSubActive
                                     ? 'bg-teal-50 border-teal-400 text-[#0d3b66] shadow-xs'
                                     : 'bg-slate-50/70 hover:bg-emerald-50/80 border-slate-200/80 hover:border-emerald-300 text-slate-700'
@@ -668,11 +586,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="flex items-center gap-2">
                       <Icon className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>{module.title}</span>
-                      {module.badge && (
-                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-rose-500 text-white">
-                          {module.badge}
-                        </span>
-                      )}
                     </div>
                     {hasSub ? (
                       <ChevronDown
