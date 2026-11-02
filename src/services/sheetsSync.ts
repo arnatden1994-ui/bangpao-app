@@ -903,7 +903,14 @@ export function getStoredNhsoFundProjects(): NhsoProject[] {
     const raw = localStorage.getItem(STORAGE_KEYS.NHSO_FUND_PROJECTS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure data is upgraded to multi-activity structure (e.g. project 2 has 2 activities and 41,975 THB)
+        const p2 = parsed.find((p: any) => p.orderNumber === 2 || p.projectName?.includes('เด็กจมน้ำ'));
+        const isUpToDate = p2 && p2.activityGroups && p2.activityGroups.length >= 2 && p2.budgetRequested === 41975;
+        if (isUpToDate) {
+          return parsed;
+        }
+      }
     }
   } catch (e) {
     console.error('Failed to read nhso fund projects from storage', e);

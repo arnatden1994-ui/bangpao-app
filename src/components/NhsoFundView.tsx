@@ -873,6 +873,14 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                           <span>{p.projectCode || `กองทุน-${p.fiscalYear.slice(-2)}`}</span>
                           <span>•</span>
                           <span>ปีงบ {p.fiscalYear}</span>
+                          {p.activityGroups && p.activityGroups.length > 1 && (
+                            <>
+                              <span>•</span>
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 text-[10px]">
+                                📋 {p.activityGroups.length} กิจกรรม
+                              </span>
+                            </>
+                          )}
                           {p.meetingRound && (
                             <>
                               <span>•</span>
