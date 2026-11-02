@@ -482,6 +482,23 @@ export interface NhsoFundSettings {
   updatedAt?: string;
 }
 
+export interface NhsoDisbursementRecord {
+  id: string;
+  disbursementDate: string; // วันที่เบิกจ่าย เช่น 2026-11-15
+  amount: number; // จำนวนเงินที่เบิก (บาท)
+  disbursementRound?: number; // งวดที่
+  documentNumber?: string; // เลขที่ฎีกา / ใบเสร็จ / เช็ค
+  description?: string; // รายละเอียด
+  recordedBy?: string; // เจ้าหน้าที่ผู้บันทึก
+  createdAt: string;
+}
+
+export type NhsoImplementationStatus =
+  | 'not_started' // ยังไม่เริ่มโครงการ
+  | 'in_progress' // อยู่ระหว่างดำเนินกิจกรรม
+  | 'completed_waiting_report' // ดำเนินการแล้ว รอสรุปรายงาน
+  | 'completed_reported'; // ส่งรายงานสรุปและหลักฐานแล้ว
+
 export interface NhsoProject {
   id: string;
   orderNumber?: number;
@@ -502,6 +519,14 @@ export interface NhsoProject {
   responsiblePerson: string;
   phone?: string;
   outcomesSummary?: string;
+  disbursedAmount?: number;
+  disbursementRecords?: NhsoDisbursementRecord[];
+  implementationStatus?: NhsoImplementationStatus;
+  meetingRound?: string;
+  meetingDate?: string;
+  verifiedByOfficer?: string;
+  verifiedDate?: string;
+  officerNotes?: string;
 
   // 13 Columns detail & Management
   activities?: string;

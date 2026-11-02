@@ -27,6 +27,12 @@ import {
   ArrowUpDown,
   Download,
   Share2,
+  DollarSign,
+  Receipt,
+  FileCheck2,
+  CalendarDays,
+  ShieldCheck,
+  CheckSquare,
 } from 'lucide-react';
 import {
   NhsoProject,
@@ -48,6 +54,7 @@ import {
 import { NhsoProjectBuilderModal } from './NhsoProjectBuilderModal.tsx';
 import { NhsoFundSettingsModal } from './NhsoFundSettingsModal.tsx';
 import { PrintNhsoProjectModal } from './PrintNhsoProjectModal.tsx';
+import { NhsoDisbursementModal } from './NhsoDisbursementModal.tsx';
 
 interface NhsoFundViewProps {
   projects?: NhsoProject[];
@@ -86,6 +93,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
+  const [activeWorkflowTab, setActiveWorkflowTab] = useState<'all' | 'under_review' | 'approved' | 'disbursing' | 'completed'>('all');
 
   // Modals state
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -94,12 +102,29 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   const [printMode, setPrintMode] = useState<'single' | 'summary'>('single');
   const [editingProject, setEditingProject] = useState<NhsoProject | null>(null);
   const [printingProject, setPrintingProject] = useState<NhsoProject | null>(null);
+  const [disbursementProject, setDisbursementProject] = useState<NhsoProject | null>(null);
 
-  // Approval Modal state
+  // Quick edit budget state for 2570
+  const [isEditingFundBudget, setIsEditingFundBudget] = useState(false);
+  const [tempFundBudget, setTempFundBudget] = useState<string>(
+    String(fundSettings.totalFundBudget || '')
+  );
+
+  // Enhanced Committee Meeting Resolution Modal
   const [approvalModalProject, setApprovalModalProject] = useState<NhsoProject | null>(null);
-  const [approvalDecision, setApprovalDecision] = useState<'approve' | 'approve_reduced' | 'reject'>('approve');
+  const [approvalDecision, setApprovalDecision] = useState<
+    'approve' | 'approve_reduced' | 'revision' | 'reject' | 'verified'
+  >('approve');
   const [reducedBudgetAmount, setReducedBudgetAmount] = useState<number>(0);
+  const [meetingRound, setMeetingRound] = useState<string>('ครั้งที่ 1/2570');
+  const [meetingDate, setMeetingDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [officerRecorder, setOfficerRecorder] = useState<string>(
+    'พันจ่าเอกอานัส  เด่นหมัด (เจ้าพนักงานสาธารณสุข)'
+  );
   const [committeeComment, setCommitteeComment] = useState<string>('');
+  const [officerNotes, setOfficerNotes] = useState<string>('');
 
   // Sync settings when external changes
   useEffect(() => {
@@ -138,6 +163,18 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     if (externalSaveSettings) externalSaveSettings(newSettings);
   };
 
+  // Quick save fund budget
+  const handleSaveFundBudget = () => {
+    const val = parseFloat(tempFundBudget) || 0;
+    const updated = {
+      ...fundSettings,
+      totalFundBudget: val,
+      updatedAt: new Date().toISOString(),
+    };
+    handleSaveSettings(updated);
+    setIsEditingFundBudget(false);
+  };
+
   // Quick clone from template
   const handleCloneProject = (sourceProj: NhsoProject) => {
     const cloned: NhsoProject = {
@@ -146,10 +183,13 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       fiscalYear: '2570',
       projectCode: `กองทุน-70-00${projects.filter((p) => p.fiscalYear === '2570').length + 1}`,
       projectName: `${sourceProj.projectName.replace('2569', '2570')} (ฉบับร่าง 2570)`,
-      status: 'draft',
+      status: 'submitted',
       committeeDecision: 'pending',
-      committeeComment: 'คัดลอกมาจากแม่แบบปี 2569 รอการปรับปรุงและเสนอขออนุมัติ',
+      committeeComment: 'คัดลอกมาจากแม่แบบปี 2569 เพื่อเสนอในรอบปี 2570',
       budgetApproved: 0,
+      disbursedAmount: 0,
+      disbursementRecords: [],
+      implementationStatus: 'not_started',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -166,6 +206,22 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       if (selectedCategory !== 'all' && (p.categoryNumber || 1) !== selectedCategory) return false;
       // Status match
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+      // Workflow Tab filter
+      if (activeWorkflowTab === 'under_review') {
+        if (p.status !== 'submitted' && p.status !== 'under_review' && p.status !== 'draft')
+          return false;
+      } else if (activeWorkflowTab === 'approved') {
+        if (p.status !== 'approved' && p.status !== 'approved_reduced') return false;
+      } else if (activeWorkflowTab === 'disbursing') {
+        if (
+          (p.status !== 'approved' && p.status !== 'approved_reduced') ||
+          (p.disbursedAmount || 0) >= (p.budgetApproved || p.budgetRequested)
+        )
+          return false;
+      } else if (activeWorkflowTab === 'completed') {
+        if (p.status !== 'completed' && p.implementationStatus !== 'completed_reported')
+          return false;
+      }
       // Org match
       if (selectedOrgFilter !== 'all' && p.proposingOrg !== selectedOrgFilter) return false;
       // Search
@@ -179,22 +235,38 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       }
       return true;
     });
-  }, [projects, selectedYear, selectedCategory, statusFilter, selectedOrgFilter, search]);
+  }, [
+    projects,
+    selectedYear,
+    selectedCategory,
+    statusFilter,
+    selectedOrgFilter,
+    activeWorkflowTab,
+    search,
+  ]);
 
   // Statistics for current selected year
   const yearProjects = useMemo(() => {
     return selectedYear === 'all' ? projects : projects.filter((p) => p.fiscalYear === selectedYear);
   }, [projects, selectedYear]);
 
-  const totalFundBudget = fundSettings.totalFundBudget || 650000;
+  const totalFundBudget = fundSettings.totalFundBudget || 0;
   const totalBudgetRequested = yearProjects.reduce((acc, p) => acc + (p.budgetRequested || 0), 0);
   const totalBudgetApproved = yearProjects.reduce(
-    (acc, p) => acc + (p.status === 'approved' || p.status === 'approved_reduced' ? p.budgetApproved || p.budgetRequested : 0),
+    (acc, p) =>
+      acc +
+      (p.status === 'approved' || p.status === 'approved_reduced'
+        ? p.budgetApproved || p.budgetRequested
+        : 0),
     0
   );
-  const remainingBudget = totalFundBudget - totalBudgetApproved;
+  const totalDisbursedActual = yearProjects.reduce((acc, p) => acc + (p.disbursedAmount || 0), 0);
+  const remainingBudget = totalFundBudget > 0 ? totalFundBudget - totalBudgetApproved : 0;
   const approvedCount = yearProjects.filter(
-    (p) => p.status === 'approved' || p.status === 'approved_reduced' || p.committeeDecision === 'approve'
+    (p) =>
+      p.status === 'approved' ||
+      p.status === 'approved_reduced' ||
+      p.committeeDecision === 'approve'
   ).length;
   const pendingCount = yearProjects.filter(
     (p) => p.status === 'submitted' || p.status === 'under_review' || p.status === 'draft'
@@ -212,34 +284,61 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   // Open Approval Modal
   const openApprovalModal = (p: NhsoProject) => {
     setApprovalModalProject(p);
-    setApprovalDecision(p.status === 'approved_reduced' ? 'approve_reduced' : 'approve');
+    setApprovalDecision(
+      p.status === 'approved_reduced'
+        ? 'approve_reduced'
+        : p.status === 'rejected'
+        ? 'reject'
+        : 'approve'
+    );
     setReducedBudgetAmount(p.budgetApproved || p.budgetRequested);
+    setMeetingRound(p.meetingRound || 'ครั้งที่ 1/2570');
+    setMeetingDate(p.meetingDate || new Date().toISOString().split('T')[0]);
     setCommitteeComment(p.committeeComment || 'เห็นชอบอนุมัติตามที่เสนอ');
+    setOfficerNotes(p.officerNotes || 'เจ้าหน้าที่กองสาธารณสุขฯ ตรวจสอบเอกสารความถูกต้องเรียบร้อยแล้ว');
   };
 
   const handleSaveApproval = () => {
     if (!approvalModalProject) return;
-    const finalBudget =
-      approvalDecision === 'approve_reduced'
-        ? reducedBudgetAmount
-        : approvalDecision === 'approve'
-        ? approvalModalProject.budgetRequested
-        : 0;
 
-    const newStatus =
-      approvalDecision === 'approve'
-        ? 'approved'
-        : approvalDecision === 'approve_reduced'
-        ? 'approved_reduced'
-        : 'rejected';
+    let finalBudget = 0;
+    let newStatus = approvalModalProject.status;
+    let decision: 'approve' | 'reject' | 'pending' | 'revision' = 'pending';
+
+    if (approvalDecision === 'approve') {
+      finalBudget = approvalModalProject.budgetRequested;
+      newStatus = 'approved';
+      decision = 'approve';
+    } else if (approvalDecision === 'approve_reduced') {
+      finalBudget = reducedBudgetAmount;
+      newStatus = 'approved_reduced';
+      decision = 'approve';
+    } else if (approvalDecision === 'reject') {
+      finalBudget = 0;
+      newStatus = 'rejected';
+      decision = 'reject';
+    } else if (approvalDecision === 'revision') {
+      finalBudget = 0;
+      newStatus = 'under_review';
+      decision = 'revision';
+    } else if (approvalDecision === 'verified') {
+      finalBudget = approvalModalProject.budgetRequested;
+      newStatus = 'under_review';
+      decision = 'pending';
+    }
 
     const updated: NhsoProject = {
       ...approvalModalProject,
       budgetApproved: finalBudget,
       status: newStatus as any,
-      committeeDecision: approvalDecision === 'reject' ? 'reject' : 'approve',
+      committeeDecision: decision,
       committeeComment: committeeComment.trim(),
-      approvedDate: new Date().toISOString(),
+      meetingRound: meetingRound.trim(),
+      meetingDate: meetingDate,
+      verifiedByOfficer: officerRecorder.trim(),
+      verifiedDate: new Date().toISOString(),
+      officerNotes: officerNotes.trim(),
+      approvedDate: decision === 'approve' ? new Date().toISOString() : approvalModalProject.approvedDate,
       updatedAt: new Date().toISOString(),
     };
 
@@ -270,7 +369,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-semibold border border-emerald-400/30">
-                  ระบบบริหารงบประมาณ สปสช. กองทุนตำบลบางเป้า
+                  ระบบบริหารและติดตามงบประมาณ สปสช. กองทุนตำบลบางเป้า
                 </span>
                 <span className="text-xs text-white/70">
                   ตามประกาศคณะกรรมการหลักประกันสุขภาพฯ
@@ -280,7 +379,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                 โครงการกองทุนหลักประกันสุขภาพตำบลบางเป้า
               </h1>
               <p className="text-xs lg:text-sm text-emerald-100/80 mt-1 max-w-2xl leading-relaxed">
-                จัดทำและบริหารจัดการโครงการ 13 คอลัมน์ คำนวณงบประมาณอัตโนมัติ สรุปรายงานเสนอคณะกรรมการ และสั่งพิมพ์ A4 แนวนอน
+                จัดทำและตรวจสอบโครงการ 13 คอลัมน์ บันทึกมติที่ประชุมกรรมการ ติดตามการเบิกจ่ายจริง และพิมพ์รายงาน A4 แนวนอน
               </p>
             </div>
           </div>
@@ -382,19 +481,71 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* 1. กรอบงบกองทุน */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        {/* 1. กรอบงบกองทุน (พร้อมช่องแก้ไขโดยตรงสำหรับปี 70 ที่ยังไม่ได้ตั้งงบ) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm relative group">
           <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
             <span>กรอบงบกองทุน {selectedYear !== 'all' ? `ปี ${selectedYear}` : ''}</span>
             <div className="p-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 rounded-lg">
               <Coins className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-xl font-black text-slate-900 dark:text-slate-100">
-            {totalFundBudget.toLocaleString()}{' '}
-            <span className="text-xs font-normal text-slate-500">บาท</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">งบจัดสรรตามแผนงาน</p>
+
+          {isEditingFundBudget ? (
+            <div className="mt-1 space-y-1.5 animate-in fade-in-50 duration-150">
+              <input
+                type="number"
+                value={tempFundBudget}
+                onChange={(e) => setTempFundBudget(e.target.value)}
+                placeholder="ระบุงบประมาณ เช่น 650000"
+                className="w-full px-2 py-1 text-sm font-bold border border-emerald-500 rounded-lg bg-emerald-50/50 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                autoFocus
+              />
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleSaveFundBudget}
+                  className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded"
+                >
+                  บันทึก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingFundBudget(false)}
+                  className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] rounded"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => {
+                setTempFundBudget(String(totalFundBudget || ''));
+                setIsEditingFundBudget(true);
+              }}
+              className="cursor-pointer group-hover:bg-slate-50 dark:group-hover:bg-slate-800/40 rounded-lg p-1 -m-1 transition-colors"
+              title="คลิกเพื่อแก้ไขกรอบงบประมาณ"
+            >
+              <div className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center justify-between">
+                <span>
+                  {totalFundBudget > 0 ? (
+                    <>
+                      {totalFundBudget.toLocaleString()}{' '}
+                      <span className="text-xs font-normal text-slate-500">บาท</span>
+                    </>
+                  ) : (
+                    <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                      ยังไม่ได้ตั้งงบ (คลิกกรอก)
+                    </span>
+                  )}
+                </span>
+                <Edit className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {totalFundBudget > 0 ? 'คลิกที่ตัวเลขเพื่อแก้ไข' : 'คลิกเพื่อระบุวงเงินปี 70'}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 2. ยอดขอรับงบรวม */}
@@ -429,7 +580,26 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
           </p>
         </div>
 
-        {/* 4. งบประมาณคงเหลือ */}
+        {/* 4. ยอดเบิกจ่ายจริงสะสม (Disbursement Tracking) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
+            <span>เบิกจ่ายจริงสะสม</span>
+            <div className="p-1.5 bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 rounded-lg">
+              <Receipt className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-xl font-black text-cyan-600 dark:text-cyan-400">
+            {totalDisbursedActual.toLocaleString()}{' '}
+            <span className="text-xs font-normal text-slate-500">บาท</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {totalBudgetApproved > 0
+              ? `เบิกจ่ายแล้ว ${Math.round((totalDisbursedActual / totalBudgetApproved) * 100)}%`
+              : 'รอการเบิกจ่าย'}
+          </p>
+        </div>
+
+        {/* 5. งบประมาณคงเหลือ */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
             <span>งบประมาณคงเหลือ</span>
@@ -444,30 +614,91 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                 : 'text-red-600 dark:text-red-400'
             }`}
           >
-            {remainingBudget.toLocaleString()}{' '}
-            <span className="text-xs font-normal text-slate-500">บาท</span>
+            {totalFundBudget > 0 ? (
+              <>
+                {remainingBudget.toLocaleString()}{' '}
+                <span className="text-xs font-normal text-slate-500">บาท</span>
+              </>
+            ) : (
+              <span className="text-sm font-semibold text-slate-400">-</span>
+            )}
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
-            {remainingBudget >= 0 ? 'คงเหลือในกรอบ' : '⚠️ เกินกรอบงบประมาณ'}
+            {totalFundBudget === 0
+              ? 'รอตั้งงบประมาณ'
+              : remainingBudget >= 0
+              ? 'คงเหลือในกรอบ'
+              : '⚠️ เกินกรอบงบประมาณ'}
           </p>
         </div>
+      </div>
 
-        {/* 5. สถานะโครงการ */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span>สถานะโครงการ</span>
-            <div className="p-1.5 bg-teal-50 dark:bg-teal-950/50 text-teal-600 rounded-lg">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <span>{yearProjects.length}</span>
-            <span className="text-xs font-semibold text-amber-600 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-full">
-              รอพิจารณา {pendingCount}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">ปีงบ {selectedYear}</p>
-        </div>
+      {/* Workflow Tabs (For Public Health Officers) */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl p-2 gap-2 shadow-sm text-xs font-medium">
+        <button
+          onClick={() => setActiveWorkflowTab('all')}
+          className={`px-3 py-2 rounded-xl transition-all ${
+            activeWorkflowTab === 'all'
+              ? 'bg-emerald-600 text-white font-bold shadow'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          ทั้งหมด ({yearProjects.length})
+        </button>
+
+        <button
+          onClick={() => setActiveWorkflowTab('under_review')}
+          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            activeWorkflowTab === 'under_review'
+              ? 'bg-blue-600 text-white font-bold shadow'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>📥 หน่วยงานเสนอเข้า (รอตรวจ/รอ กก.)</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
+            {pendingCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveWorkflowTab('approved')}
+          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            activeWorkflowTab === 'approved'
+              ? 'bg-emerald-600 text-white font-bold shadow'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          <span>🟢 กก.อนุมัติแล้ว</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
+            {approvedCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveWorkflowTab('disbursing')}
+          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            activeWorkflowTab === 'disbursing'
+              ? 'bg-cyan-600 text-white font-bold shadow'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Receipt className="w-3.5 h-3.5" />
+          <span>💰 ติดตามการเบิกจ่ายจริง</span>
+        </button>
+
+        <button
+          onClick={() => setActiveWorkflowTab('completed')}
+          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            activeWorkflowTab === 'completed'
+              ? 'bg-purple-600 text-white font-bold shadow'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <FileCheck2 className="w-3.5 h-3.5" />
+          <span>✅ ส่งรายงานผลและปิดโครงการ</span>
+        </button>
       </div>
 
       {/* Filter and Categories Bar */}
@@ -564,10 +795,10 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-              รายการโครงการที่ขอรับการสนับสนุนงบประมาณ ({filteredProjects.length} โครงการ)
+              รายการโครงการ ({filteredProjects.length} โครงการ)
             </h3>
             <span className="text-xs text-slate-500">
-              รวมงบประมาณ{' '}
+              รวมงบที่ขอ:{' '}
               <strong className="text-emerald-600">
                 {filteredProjects.reduce((s, p) => s + p.budgetRequested, 0).toLocaleString()}
               </strong>{' '}
@@ -604,12 +835,13 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                 <tr>
                   <th className="py-3 px-3 w-12 text-center">#</th>
                   <th className="py-3 px-3">ชื่อโครงการ / แผนงาน</th>
-                  <th className="py-3 px-3 w-48">ผู้ขอรับงบ / ผู้รับผิดชอบ</th>
-                  <th className="py-3 px-3 w-36">ประเภท</th>
+                  <th className="py-3 px-3 w-44">ผู้ขอรับงบ / ผู้รับผิดชอบ</th>
+                  <th className="py-3 px-3 w-28">ประเภท</th>
                   <th className="py-3 px-3 w-28 text-right">งบที่ขอ (บาท)</th>
-                  <th className="py-3 px-3 w-28 text-right">งบที่อนุมัติ</th>
-                  <th className="py-3 px-3 w-32 text-center">สถานะ / มติ</th>
-                  <th className="py-3 px-3 w-48 text-center">เมนูจัดการ</th>
+                  <th className="py-3 px-3 w-28 text-right">งบอนุมัติ</th>
+                  <th className="py-3 px-3 w-28 text-right">เบิกจ่ายแล้ว</th>
+                  <th className="py-3 px-3 w-32 text-center">มติกรรมการ</th>
+                  <th className="py-3 px-3 w-44 text-center">เมนูจัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -619,6 +851,10 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                     p.status === 'approved' ||
                     p.status === 'approved_reduced' ||
                     p.committeeDecision === 'approve';
+                  const approvedAmount = p.budgetApproved || p.budgetRequested;
+                  const disbursed = p.disbursedAmount || 0;
+                  const percent =
+                    approvedAmount > 0 ? Math.round((disbursed / approvedAmount) * 100) : 0;
 
                   return (
                     <tr
@@ -633,15 +869,27 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                         <div className="font-bold text-slate-900 dark:text-slate-100 line-clamp-2">
                           {p.projectName}
                         </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+                        <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
                           <span>{p.projectCode || `กองทุน-${p.fiscalYear.slice(-2)}`}</span>
                           <span>•</span>
                           <span>ปีงบ {p.fiscalYear}</span>
-                          {p.budgetLines && (
+                          {p.meetingRound && (
                             <>
                               <span>•</span>
-                              <span>{p.budgetLines.length} รายการค่าใช้จ่าย</span>
+                              <span className="text-blue-600 font-medium">
+                                มติ: {p.meetingRound}
+                              </span>
                             </>
+                          )}
+                          {p.implementationStatus === 'completed_reported' && (
+                            <span className="text-emerald-700 bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.2 rounded text-[10px] font-semibold">
+                              ✓ ส่งรายงานแล้ว
+                            </span>
+                          )}
+                          {p.implementationStatus === 'in_progress' && (
+                            <span className="text-blue-700 bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.2 rounded text-[10px] font-semibold">
+                              🔄 กำลังดำเนินกิจกรรม
+                            </span>
                           )}
                         </div>
                       </td>
@@ -673,45 +921,76 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                       <td className="py-3 px-3 text-right font-bold">
                         {isApproved ? (
                           <span className="text-emerald-600 dark:text-emerald-400">
-                            {(p.budgetApproved || p.budgetRequested).toLocaleString()}
+                            {approvedAmount.toLocaleString()}
                           </span>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
                       </td>
 
+                      {/* Disbursed Amount with Progress */}
+                      <td className="py-3 px-3 text-right">
+                        {isApproved ? (
+                          <div>
+                            <div className="font-bold text-cyan-600 dark:text-cyan-400">
+                              {disbursed.toLocaleString()}
+                            </div>
+                            <div className="text-[10px] text-slate-400">{percent}%</div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
+
+                      {/* Committee Resolution / Status */}
                       <td className="py-3 px-3 text-center">
                         {p.status === 'approved' && (
-                          <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1">
+                          <button
+                            onClick={() => openApprovalModal(p)}
+                            className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            title="คลิกเพื่อแก้ไขมติกรรมการ"
+                          >
                             <Check className="w-3 h-3" /> อนุมัติเต็ม
-                          </span>
+                          </button>
                         )}
                         {p.status === 'approved_reduced' && (
-                          <span className="px-2 py-1 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1">
+                          <button
+                            onClick={() => openApprovalModal(p)}
+                            className="px-2 py-1 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            title="คลิกเพื่อแก้ไขมติกรรมการ"
+                          >
                             <Check className="w-3 h-3" /> อนุมัติปรับลด
-                          </span>
+                          </button>
                         )}
                         {p.status === 'rejected' && (
-                          <span className="px-2 py-1 bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1">
+                          <button
+                            onClick={() => openApprovalModal(p)}
+                            className="px-2 py-1 bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 hover:bg-red-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            title="คลิกเพื่อแก้ไขมติกรรมการ"
+                          >
                             <X className="w-3 h-3" /> ไม่อนุมัติ
-                          </span>
+                          </button>
                         )}
                         {(p.status === 'submitted' || p.status === 'under_review') && (
                           <button
                             onClick={() => openApprovalModal(p)}
                             className="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            title="คลิกเพื่อลงมติพิจารณาอนุมัติโครงการ"
+                            title="เจ้าหน้าที่กองสาธาคลิกเพื่อบันทึกมติที่ประชุมกรรมการ"
                           >
-                            <Clock className="w-3 h-3" /> รอพิจารณา (คลิก)
+                            <Clock className="w-3 h-3" /> บันทึกมติ กก.
                           </button>
                         )}
                         {p.status === 'draft' && (
-                          <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full font-medium text-[10px]">
+                          <button
+                            onClick={() => openApprovalModal(p)}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-medium text-[10px]"
+                          >
                             ร่างโครงการ
-                          </span>
+                          </button>
                         )}
                       </td>
 
+                      {/* Action Menu */}
                       <td className="py-3 px-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           {/* Print 13 columns */}
@@ -731,19 +1010,28 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                           <button
                             onClick={() => openApprovalModal(p)}
                             className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="ลงมติพิจารณาอนุมัติโครงการ"
+                            title="บันทึกมติที่ประชุมกรรมการ (โดยเจ้าหน้าที่กองสาธา)"
                           >
-                            <CheckCircle2 className="w-4 h-4" />
+                            <CheckSquare className="w-4 h-4" />
                           </button>
 
-                          {/* Edit */}
+                          {/* Disbursement Tracking */}
+                          <button
+                            onClick={() => setDisbursementProject(p)}
+                            className="p-1.5 text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            title="บันทึกการเบิกจ่าย & ติดตามผลการดำเนินงาน"
+                          >
+                            <Coins className="w-4 h-4" />
+                          </button>
+
+                          {/* Edit / Verify (Public Health Officer) */}
                           <button
                             onClick={() => {
                               setEditingProject(p);
                               setIsBuilderOpen(true);
                             }}
                             className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="แก้ไขโครงการ"
+                            title="ตรวจสอบ / แก้ไขโครงการ (เจ้าหน้าที่กองสาธา)"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -776,15 +1064,24 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         )}
       </div>
 
-      {/* Committee Approval Modal */}
+      {/* Committee Approval / Resolution Modal */}
       {approvalModalProject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-xl shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                พิจารณาอนุมัติโครงการ (คณะกรรมการบริหารกองทุนฯ)
-              </h3>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500/15 text-emerald-600 rounded-xl">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                    บันทึกมติที่ประชุมคณะกรรมการบริหารกองทุนฯ
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    เจ้าหน้าที่กองสาธารณสุขบันทึกผลการพิจารณาและการแก้ไขสถานะหลังการประชุม
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => setApprovalModalProject(null)}
                 className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
@@ -793,29 +1090,60 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-1">
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-1 border border-slate-200 dark:border-slate-700">
                 <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                   {approvalModalProject.projectName}
                 </div>
-                <div className="text-slate-500">
-                  ผู้ขอรับงบ: <strong>{approvalModalProject.proposingOrg}</strong> • วงเงินที่เสนอขอ:{' '}
-                  <strong className="text-emerald-600">
-                    {approvalModalProject.budgetRequested.toLocaleString()} บาท
-                  </strong>
+                <div className="text-slate-500 flex flex-wrap items-center gap-3">
+                  <span>ผู้ขอรับงบ: <strong>{approvalModalProject.proposingOrg}</strong></span>
+                  <span>•</span>
+                  <span>
+                    วงเงินที่เสนอขอ:{' '}
+                    <strong className="text-emerald-600">
+                      {approvalModalProject.budgetRequested.toLocaleString()} บาท
+                    </strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* Meeting info inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    ครั้งที่ประชุมกรรมการ:
+                  </label>
+                  <input
+                    type="text"
+                    value={meetingRound}
+                    onChange={(e) => setMeetingRound(e.target.value)}
+                    placeholder="เช่น ครั้งที่ 1/2570"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    วันที่ประชุม:
+                  </label>
+                  <input
+                    type="date"
+                    value={meetingDate}
+                    onChange={(e) => setMeetingDate(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                  />
                 </div>
               </div>
 
               {/* Decision Options */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <label className="font-semibold text-slate-800 dark:text-slate-200 block">
                   มติที่ประชุมคณะกรรมการฯ:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setApprovalDecision('approve')}
-                    className={`py-2 px-3 rounded-xl font-bold border transition-all text-center ${
+                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
                       approvalDecision === 'approve'
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -829,7 +1157,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                       setApprovalDecision('approve_reduced');
                       setReducedBudgetAmount(approvalModalProject.budgetRequested);
                     }}
-                    className={`py-2 px-3 rounded-xl font-bold border transition-all text-center ${
+                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
                       approvalDecision === 'approve_reduced'
                         ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -839,8 +1167,19 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setApprovalDecision('revision')}
+                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
+                      approvalDecision === 'revision'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    📝 ส่งกลับแก้ไข
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setApprovalDecision('reject')}
-                    className={`py-2 px-3 rounded-xl font-bold border transition-all text-center ${
+                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
                       approvalDecision === 'reject'
                         ? 'bg-red-600 text-white border-red-600 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -874,33 +1213,52 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
               {/* Comment text */}
               <div>
                 <label className="font-semibold text-slate-800 dark:text-slate-200 block mb-1">
-                  ความเห็นคณะกรรมการบริหารกองทุนฯ:
+                  ความเห็น / มติ / เงื่อนไขของคณะกรรมการบริหารกองทุนฯ:
                 </label>
                 <textarea
                   rows={2}
                   value={committeeComment}
                   onChange={(e) => setCommitteeComment(e.target.value)}
-                  placeholder="เช่น เห็นชอบอนุมัติตามที่เสนอ หรือ ปรับลดรายการค่าวิทยากร..."
+                  placeholder="เช่น เห็นชอบอนุมัติตามที่เสนอ หรือ ปรับลดรายการค่าวิทยากรลงเหลือ 6 ชั่วโมง..."
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                />
+              </div>
+
+              {/* Officer Notes */}
+              <div>
+                <label className="font-semibold text-slate-800 dark:text-slate-200 block mb-1">
+                  บันทึกข้อความของเจ้าหน้าที่กองสาธารณสุข:
+                </label>
+                <input
+                  type="text"
+                  value={officerNotes}
+                  onChange={(e) => setOfficerNotes(e.target.value)}
+                  placeholder="เช่น เจ้าหน้าที่ตรวจสอบเอกสารและแผนงานตามระเบียบเรียบร้อยแล้ว"
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
                 />
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setApprovalModalProject(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveApproval}
-                className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition-colors"
-              >
-                บันทึกมติการพิจารณา
-              </button>
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                ผู้บันทึก: <strong>{officerRecorder}</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setApprovalModalProject(null)}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveApproval}
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition-colors"
+                >
+                  บันทึกมติที่ประชุม
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -939,6 +1297,17 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         settings={fundSettings}
         defaultMode={printMode}
       />
+
+      {/* Disbursement & Implementation Tracking Modal */}
+      {disbursementProject && (
+        <NhsoDisbursementModal
+          isOpen={!!disbursementProject}
+          onClose={() => setDisbursementProject(null)}
+          project={disbursementProject}
+          onSave={handleSaveProject}
+          currentUserFullName={officerRecorder}
+        />
+      )}
     </div>
   );
 };
