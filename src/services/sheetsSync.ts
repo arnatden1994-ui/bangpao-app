@@ -937,6 +937,17 @@ export function mergeNhsoFundProjectsWithMaster(items: NhsoProject[]): NhsoProje
           : p.disbursedAmount ?? master.disbursedAmount,
       };
     }
+    if (p.id === 'NHSO-70-01' && p.signers?.proposerName?.includes('เอกชัย')) {
+      return {
+        ...p,
+        responsiblePerson: 'นางสาวธนพร  ฉีดเนียม (ผอ.รพ.สต.บางเป้า)',
+        signers: {
+          ...p.signers,
+          proposerName: 'นางสาวธนพร  ฉีดเนียม',
+          proposerTitle: 'ผู้อำนวยการ รพ.สต.บางเป้า',
+        },
+      };
+    }
     return p;
   });
 
@@ -1021,15 +1032,79 @@ export function getStoredNhsoFundSettings(): NhsoFundSettings {
           }
         });
 
-        return {
+        // Upgrade orgProposerDefaults to authentic 2569 master database signers
+        const OBSOLETE_PROPOSER_PATTERNS = [
+          'ทดสอบ',
+          'อรวรรณ',
+          'เอกชัย',
+          'ณัฐริญา',
+          'วิไล',
+          'มาลี',
+          'สุภาพรรณ',
+          'วรรณา',
+          'วรรณี',
+          'ศุภลักษณ์',
+          'ปราณี',
+          'สุดา',
+          'สมเกียรติ  คงแก้ว',
+          'สมเกียรติ คงแก้ว',
+          'ปรีชา',
+          'สุมิตรา',
+          'อุทัย',
+          'วิเชียร',
+          'วันดี',
+          'มารีย๊ะ',
+          'ทิพวรรณ',
+          'ประเสริฐ',
+          'เพชรประพันธ์',
+        ];
+        const DUPLICATE_SHORT_ORG_KEYS = new Set([
+          'กองสาธารณสุขฯ',
+          'กองการศึกษา',
+          'ชมรมผู้สูงอายุ รพ.กันตัง',
+          'รร.วัดสีหราษฎร์ฯ',
+          'กองทุนสวัสดิการชุมชนฯ',
+        ]);
+        const masterOrgDefaults = DEFAULT_NHSO_FUND_SETTINGS.orgProposerDefaults || {};
+        const storedOrgDefaults = parsed.orgProposerDefaults || {};
+        const upgradedOrgDefaults: Record<string, { name: string; title: string }> = {
+          ...masterOrgDefaults,
+        };
+        Object.entries(storedOrgDefaults).forEach(([orgKey, val]: [string, any]) => {
+          if (DUPLICATE_SHORT_ORG_KEYS.has(orgKey)) return;
+          if (!val || typeof val.name !== 'string') return;
+          const isObsolete =
+            !val.name.trim() ||
+            OBSOLETE_PROPOSER_PATTERNS.some((pat) => val.name.includes(pat));
+          if (!isObsolete) {
+            if (masterOrgDefaults[orgKey]) {
+              const shouldUpgradeTitle =
+                !val.title ||
+                val.name === masterOrgDefaults[orgKey].name ||
+                val.title.includes('ประธาน อสม. หมู่ที่') ||
+                val.title === 'ประธานกองทุนสวัสดิการชุมชนตำบลบางเป้า';
+              upgradedOrgDefaults[orgKey] = {
+                name: val.name,
+                title: shouldUpgradeTitle ? masterOrgDefaults[orgKey].title : val.title,
+              };
+            } else {
+              upgradedOrgDefaults[orgKey] = val;
+            }
+          }
+        });
+
+        const finalSettings: NhsoFundSettings = {
           ...DEFAULT_NHSO_FUND_SETTINGS,
           ...parsed,
+          orgProposerDefaults: upgradedOrgDefaults,
           revenueSourcesByYear: mergedRevs,
           clause10_4_PlansByYear: {
             ...(DEFAULT_NHSO_FUND_SETTINGS.clause10_4_PlansByYear || {}),
             ...(parsed.clause10_4_PlansByYear || {}),
           },
         };
+        safeSetItem(STORAGE_KEYS.NHSO_FUND_SETTINGS, JSON.stringify(finalSettings));
+        return finalSettings;
       }
     }
   } catch (e) {

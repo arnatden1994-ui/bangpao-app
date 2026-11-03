@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Save,
@@ -12,8 +12,10 @@ import {
   FileSignature,
   Sliders,
   DollarSign,
+  RotateCcw,
 } from 'lucide-react';
 import { NhsoFundSettings } from '../types/index.ts';
+import { DEFAULT_NHSO_FUND_SETTINGS } from '../data/initialNhsoFundProjects.ts';
 
 interface NhsoFundSettingsModalProps {
   isOpen: boolean;
@@ -31,6 +33,14 @@ export const NhsoFundSettingsModal: React.FC<NhsoFundSettingsModalProps> = ({
   const [formData, setFormData] = useState<NhsoFundSettings>({ ...settings });
   const [activeTab, setActiveTab] = useState<'signers' | 'rates' | 'proposers'>('signers');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [sync2569Message, setSync2569Message] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({ ...settings });
+      setSync2569Message(null);
+    }
+  }, [settings, isOpen]);
 
   // New Proposer form state
   const [newOrgName, setNewOrgName] = useState('');
@@ -38,6 +48,21 @@ export const NhsoFundSettingsModal: React.FC<NhsoFundSettingsModalProps> = ({
   const [newProposerTitle, setNewProposerTitle] = useState('');
 
   if (!isOpen) return null;
+
+  const handleSyncFrom2569 = () => {
+    const master2569Defaults = {
+      ...(DEFAULT_NHSO_FUND_SETTINGS.orgProposerDefaults || {}),
+    };
+    const updatedSettings: NhsoFundSettings = {
+      ...formData,
+      orgProposerDefaults: master2569Defaults,
+      updatedAt: new Date().toISOString(),
+    };
+    setFormData(updatedSettings);
+    onSave(updatedSettings);
+    setSync2569Message('อัปเดตรายชื่อและตำแหน่งผู้เสนอทั้ง 16 หน่วยงานตามข้อมูลจริงปีงบประมาณ 2569 เรียบร้อยแล้ว!');
+    setTimeout(() => setSync2569Message(null), 4000);
+  };
 
   const handleSave = () => {
     const updated = {
@@ -302,16 +327,31 @@ export const NhsoFundSettingsModal: React.FC<NhsoFundSettingsModalProps> = ({
           {/* TAB 2: PROPOSERS BY ORG */}
           {activeTab === 'proposers' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-base">
                     รายชื่อผู้เสนอโครงการค่าเริ่มต้น (จำแนกตามหน่วยงาน)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    เมื่อเลือกหน่วยงานในแบบฟอร์ม ระบบจะกรอกชื่อและตำแหน่งผู้เสนอให้อัตโนมัติ
+                    เมื่อเลือกหน่วยงานในแบบฟอร์ม ระบบจะกรอกชื่อและตำแหน่งผู้เสนอให้อัตโนมัติ (อ้างอิงฐานข้อมูลปีงบประมาณ 2569)
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSyncFrom2569}
+                  className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  ดึงรายชื่อและตำแหน่งปี 2569 มาอัปเดตทั้งหมด
+                </button>
               </div>
+
+              {sync2569Message && (
+                <div className="px-4 py-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  {sync2569Message}
+                </div>
+              )}
 
               {/* Add New Org */}
               <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-4">
