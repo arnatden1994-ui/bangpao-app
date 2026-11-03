@@ -670,48 +670,48 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
 
   const modalContent = (
     <div id="nhso-print-portal">
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto font-sarabun nhso-modal-overlay">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto font-sans nhso-modal-overlay">
         {/* Main Modal Card */}
-        <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-[1280px] max-h-[96vh] flex flex-col overflow-hidden nhso-modal-card">
+        <div className="bg-slate-900 rounded-3xl shadow-2xl border border-slate-700/90 w-full max-w-[1380px] max-h-[96vh] flex flex-col overflow-hidden nhso-modal-card">
           {/* Top Control Bar (Hidden when printing) - Tier 1: Header & Status, Tier 2: Modes & Actions */}
-          <div className="print:hidden font-sans border-b border-slate-800">
+          <div className="print:hidden font-sans border-b border-slate-800 shadow-lg">
             {/* Tier 1: Title & Document Specs */}
-            <div className="px-6 py-3.5 bg-slate-900/95 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-sm shrink-0">
-                  <Printer className="w-5 h-5" />
+            <div className="px-6 sm:px-8 py-4 sm:py-5 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800/95 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/25 to-teal-500/15 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-md shadow-emerald-950/50 shrink-0">
+                  <Printer className="w-7 h-7" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-bold text-white tracking-wide">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
                       ตัวอย่างก่อนพิมพ์และส่งออกเอกสาร
                     </h2>
-                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium">
+                    <span className="text-xs sm:text-sm px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold shadow-sm">
                       แม่แบบทางการ สปสช.
                     </span>
-                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-medium">
+                    <span className="text-xs sm:text-sm px-3.5 py-1 rounded-full bg-slate-800 text-slate-200 border border-slate-600/80 font-semibold">
                       TH Sarabun PSK 16pt
                     </span>
-                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-medium">
+                    <span className="text-xs sm:text-sm px-3.5 py-1 rounded-full bg-slate-800 text-slate-200 border border-slate-600/80 font-semibold">
                       A4 แนวนอน
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-sm sm:text-base text-slate-300 mt-1 font-medium">
                     แบบฟอร์ม 13 ช่อง & เอกสารแนบ 2 แยกสีตรงตามต้นฉบับ • รองรับการพิมพ์ตรงขนาด A4 และส่งออกไฟล์ Word (.doc) / Excel (.xlsx)
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3.5 shrink-0 flex-wrap">
                 {/* Scope Toggle when user selected specific rows */}
                 {printMode !== 'single' && selectedProjectIds.length > 0 && (
-                  <div className="flex bg-slate-800 rounded-xl p-0.5 border border-emerald-500/40 text-[11px]">
+                  <div className="flex bg-slate-800/95 rounded-2xl p-1 border-2 border-emerald-500/40 text-xs sm:text-sm shadow-inner">
                     <button
                       type="button"
                       onClick={() => setOnlySelectedScope(true)}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
                         onlySelectedScope
-                          ? 'bg-emerald-600 text-white shadow'
+                          ? 'bg-emerald-600 text-white shadow-md'
                           : 'text-slate-300 hover:text-white'
                       }`}
                     >
@@ -720,9 +720,9 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setOnlySelectedScope(false)}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
                         !onlySelectedScope
-                          ? 'bg-emerald-600 text-white shadow'
+                          ? 'bg-emerald-600 text-white shadow-md'
                           : 'text-slate-300 hover:text-white'
                       }`}
                     >
@@ -732,8 +732,8 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                 )}
 
                 {/* Page / Status indicator */}
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/90 border border-slate-700 text-xs font-semibold text-emerald-300 shadow-inner">
-                  <span>📄</span>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-800/95 border border-slate-600/90 text-sm sm:text-base font-bold text-emerald-300 shadow-inner">
+                  <span className="text-base sm:text-lg">📄</span>
                   <span>
                     {printMode === 'single'
                       ? pages.length === 1
@@ -741,7 +741,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                         : `เอกสาร ${pages.length} แผ่น (หน้า 1-${pages.length})`
                       : printMode === 'tracking_attachment2'
                       ? `เอกสารแนบ 2 (${summaryProjects.length} โครงการ • ${totalSummaryBudget.toLocaleString()} บาท)`
-                      : `สรุปภาพรวม (${summaryProjects.length} โครงการ)`}
+                      : `สรุปภาพรวม ${summaryProjects.length} โครงการ`}
                   </span>
                 </div>
 
@@ -749,68 +749,68 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                 <button
                   onClick={onClose}
                   type="button"
-                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer border border-transparent hover:border-slate-700"
+                  className="p-2.5 text-slate-300 hover:text-white rounded-2xl bg-slate-800/70 hover:bg-rose-600/90 transition-all cursor-pointer border border-slate-700 hover:border-rose-500 shadow-sm"
                   title="ปิดหน้าต่าง (ESC)"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
             </div>
 
             {/* Tier 2: Document Mode Switcher & Export / Print Actions */}
-            <div className="px-6 py-2.5 bg-slate-900 flex flex-wrap items-center justify-between gap-3">
+            <div className="px-6 sm:px-8 py-3.5 bg-slate-900/95 flex flex-wrap items-center justify-between gap-4">
               {/* Left: Mode Switcher */}
-              <div className="flex flex-wrap bg-slate-800/90 rounded-xl p-1 border border-slate-700/80 shadow-inner gap-1">
+              <div className="flex flex-wrap bg-slate-800/95 rounded-2xl p-1.5 border border-slate-700 shadow-inner gap-1.5">
                 {project && (
                   <button
                     type="button"
                     onClick={() => setPrintMode('single')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    className={`px-4 sm:px-5 py-2.5 rounded-xl text-sm sm:text-base font-bold flex items-center gap-2.5 transition-all cursor-pointer ${
                       printMode === 'single'
-                        ? 'bg-emerald-600 text-white shadow-md'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50 ring-1 ring-emerald-400/40'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
                     }`}
                   >
-                    <FileText className="w-3.5 h-3.5" />
+                    <FileText className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                     <span>แบบเสนอโครงการ (13 ช่อง)</span>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setPrintMode('tracking_attachment2')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  className={`px-4 sm:px-5 py-2.5 rounded-xl text-sm sm:text-base font-bold flex items-center gap-2.5 transition-all cursor-pointer ${
                     printMode === 'tracking_attachment2'
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50 ring-1 ring-emerald-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
                   }`}
                 >
-                  <ListChecks className="w-3.5 h-3.5" />
+                  <ListChecks className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                   <span>สรุปและติดตามผล (เอกสารแนบ 2 - แยกสี)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPrintMode('summary')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  className={`px-4 sm:px-5 py-2.5 rounded-xl text-sm sm:text-base font-bold flex items-center gap-2.5 transition-all cursor-pointer ${
                     printMode === 'summary'
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50 ring-1 ring-emerald-400/40'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
                   }`}
                 >
-                  <Table className="w-3.5 h-3.5" />
-                  <span>แบบสรุปเสนอ กก. (อนุมัติ/ไม่อนุมัติ)</span>
+                  <Table className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                  <span>แบบสรุปภาพรวมเสนอ กก.</span>
                 </button>
               </div>
 
               {/* Right: Export & Print Action Buttons */}
-              <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
                 {/* Export Word */}
                 <button
                   onClick={handleExportWord}
                   type="button"
-                  className="px-3.5 py-1.5 bg-blue-600/90 hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 cursor-pointer border border-blue-500/40"
+                  className="px-4 sm:px-5 py-2.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-sm sm:text-base font-bold rounded-xl flex items-center gap-2.5 shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5 cursor-pointer border border-blue-400/40"
                   title="ส่งออกไฟล์ Word (.doc) ฟอนต์ TH Sarabun PSK เปิดแก้ไขได้ใน MS Word"
                 >
-                  <FileText className="w-3.5 h-3.5" />
+                  <FileText className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                   <span>ส่งออก Word</span>
                 </button>
 
@@ -818,22 +818,22 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                 <button
                   onClick={handleExportExcel}
                   type="button"
-                  className="px-3.5 py-1.5 bg-emerald-700/90 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 cursor-pointer border border-emerald-600/40"
+                  className="px-4 sm:px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-sm sm:text-base font-bold rounded-xl flex items-center gap-2.5 shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5 cursor-pointer border border-emerald-500/40"
                   title="ส่งออกไฟล์ Excel (.xlsx) รูปแบบแม่แบบทางการ สปสช. พร้อมสูตรคำนวณ"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                   <span>ส่งออก Excel</span>
                 </button>
 
-                <div className="h-5 w-px bg-slate-700/80 mx-1 hidden sm:block" />
+                <div className="h-7 w-px bg-slate-700 mx-1 hidden sm:block" />
 
                 {/* Primary Print Button */}
                 <button
                   onClick={handlePrint}
                   type="button"
-                  className="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer ring-1 ring-emerald-400/30"
+                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:from-emerald-600 active:to-teal-600 text-white text-base sm:text-lg font-extrabold rounded-xl flex items-center gap-2.5 shadow-lg shadow-emerald-950/60 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer ring-2 ring-emerald-300/40"
                 >
-                  <Printer className="w-4 h-4" />
+                  <Printer className="w-5 h-5 shrink-0" />
                   <span>พิมพ์ / บันทึก PDF</span>
                 </button>
               </div>
@@ -861,12 +861,12 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                       className="nhso-screen-sheet-wrapper max-w-[1140px] mx-auto mb-8 print:mb-0 print:max-w-none"
                     >
                       {/* On-screen Page Badge Indicator (Hidden when printing) */}
-                      <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-2 mb-2 px-1 text-slate-300 font-sans text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <span className="font-bold flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-lg border border-emerald-500/30 shadow-sm">
+                      <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-3 mb-3 px-1 text-slate-200 font-sans text-sm sm:text-base">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-bold flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-4 py-1.5 rounded-xl border border-emerald-500/40 shadow-sm text-sm sm:text-base">
                             📄 แผ่นที่ {pageNum} จาก {totalPages}
                           </span>
-                          <span className="text-slate-300 font-medium">
+                          <span className="text-slate-200 font-semibold text-sm sm:text-base">
                             {totalPages === 1
                               ? 'โครงร่างเอกสารฉบับสมบูรณ์ (ตาราง 13 ช่อง + ยอดงบรวม + ลายมือชื่อ 3 ฝ่าย)'
                               : pageIdx === 0
@@ -874,11 +874,11 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                               : `แผ่นที่ 2 : ตารางกิจกรรมต่อเนื่อง + ยอดรวมงบประมาณสุทธิ + ผู้มีอำนาจลงนาม 3 ฝ่าย`}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-400 text-[11px]">
-                          <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                        <div className="flex items-center gap-2.5 text-slate-300 text-xs sm:text-sm font-semibold">
+                          <span className="px-3 py-1 rounded-lg bg-slate-800/95 border border-slate-700">
                             A4 Landscape (297 × 210 มม.)
                           </span>
-                          <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                          <span className="px-3 py-1 rounded-lg bg-slate-800/95 border border-slate-700">
                             TH Sarabun PSK 16pt
                           </span>
                         </div>
@@ -1192,21 +1192,21 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             {/* ============================================================== */}
             {printMode === 'summary' && (
               <div className="nhso-print-canvas max-w-[1140px] mx-auto">
-                <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-2 mb-3 px-1 text-slate-300 font-sans text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-bold flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-lg border border-emerald-500/30 shadow-sm">
+                <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-3 mb-3.5 px-1 text-slate-200 font-sans text-sm sm:text-base">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-bold flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-4 py-1.5 rounded-xl border border-emerald-500/40 shadow-sm text-sm sm:text-base">
                       📋 แบบสรุปภาพรวมโครงการ (เสนอคณะกรรมการบริหารกองทุนฯ)
                     </span>
-                    <span className="text-slate-300 font-medium">
+                    <span className="text-slate-200 font-semibold text-sm sm:text-base">
                       รวมทั้งหมด {summaryProjects.length} โครงการ • งบประมาณรวม {totalSummaryBudget.toLocaleString()} บาท
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400 text-[11px]">
-                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                  <div className="flex items-center gap-2.5 text-slate-300 text-xs sm:text-sm font-semibold">
+                    <span className="px-3 py-1 rounded-lg bg-slate-800/95 border border-slate-700">
                       A4 Landscape
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
-                      TH Sarabun PSK
+                    <span className="px-3 py-1 rounded-lg bg-slate-800/95 border border-slate-700">
+                      TH Sarabun PSK 16pt
                     </span>
                   </div>
                 </div>
@@ -1341,25 +1341,25 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             {/* ============================================================== */}
             {printMode === 'tracking_attachment2' && (
               <div className="nhso-print-canvas max-w-[1140px] mx-auto">
-                <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-2 mb-3 px-1 text-slate-300 font-sans text-xs">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-bold flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-lg border border-emerald-500/30 shadow-sm">
+                <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-3 mb-3.5 px-1 text-slate-200 font-sans text-sm sm:text-base">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-bold flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-4 py-1.5 rounded-xl border border-emerald-500/40 shadow-sm text-sm sm:text-base">
                       🎨 แบบสรุปโครงการและผลการติดตาม (เอกสารแนบ 2 - แยกสีประเภท & หน่วยงาน)
                     </span>
-                    <span className="text-slate-300 font-medium">
+                    <span className="text-slate-200 font-semibold text-sm sm:text-base">
                       รวม {summaryProjects.length} โครงการ • งบประมาณรวม {totalSummaryBudget.toLocaleString()} บาท • ดำเนินการแล้ว {grandTotalCompleted} • ขอขยายเวลา {grandTotalExtended} • ไม่ได้ดำเนินการ {grandTotalNotExecuted}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400 text-[11px]">
+                  <div className="flex items-center gap-2.5 text-slate-300 text-xs sm:text-sm font-semibold">
                     {onToggleTracking && (
-                      <span className="px-2.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 font-semibold">
+                      <span className="px-3 py-1 rounded-lg bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 font-bold">
                         💡 คลิกที่ช่องติ๊ก ☑ ในตารางเพื่อสลับสถานะได้ทันที
                       </span>
                     )}
-                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                    <span className="px-3 py-1 rounded-lg bg-slate-800/95 border border-slate-700">
                       A4 Landscape
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                    <span className="px-3 py-1 rounded-lg bg-slate-800/95 border border-slate-700">
                       TH Sarabun PSK 16pt
                     </span>
                   </div>
@@ -1661,8 +1661,8 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
           font-style: normal;
         }
 
-        .nhso-print-canvas,
-        .nhso-print-canvas * {
+        .nhso-page,
+        .nhso-page * {
           font-family: 'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
         }
 
