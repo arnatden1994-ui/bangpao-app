@@ -40,6 +40,7 @@ import {
   getStoredNhso,
   getStoredNhsoFundProjects,
   saveStoredNhsoFundProjects,
+  mergeNhsoFundProjectsWithMaster,
   getStoredLtc,
   getStoredEquipment,
   getStoredEquipmentUnits,
@@ -569,11 +570,10 @@ export default function App() {
     const unsubLoans = subscribeCollection<EquipmentLoan>(COLLECTIONS.LOANS, (items) => {
       if (items && items.length > 0) setLoans(items);
     });
-    const unsubNhso = subscribeCollection<NhsoProject>(COLLECTIONS.NHSO, (items) => {
-      if (items && items.length > 0) setNhsoProjects(items);
-    });
     const unsubNhsoFund = subscribeCollection<NhsoProject>(COLLECTIONS.NHSO_FUND, (items) => {
-      if (items && items.length > 0) setNhsoProjects(items);
+      if (items && items.length > 0) {
+        setNhsoProjects(mergeNhsoFundProjectsWithMaster(items));
+      }
     });
     const unsubLtc = subscribeCollection<LtcPatient>(COLLECTIONS.LTC, (items) => {
       if (items && items.length > 0) setLtcPatients(items);
@@ -590,7 +590,6 @@ unsubLicenses();
       unsubPetitions();
       unsubEquipment();
       unsubLoans();
-      unsubNhso();
       unsubNhsoFund();
       unsubLtc();
       unsubUsers();
@@ -1690,26 +1689,17 @@ unsubLicenses();
                 projects={nhsoProjects}
                 userRole={currentUser.role}
                 currentUser={currentUser}
-                onAddNew={() => {
-                  const newProj: NhsoProject = {
-                    id: `NHSO-${Date.now()}`,
-                    projectCode: `สปสช-69-00${nhsoProjects.length + 1}`,
-                    projectName: `โครงการฟื้นฟูสมรรถภาพผู้มีภาวะพึ่งพิงตำบลบางเป้า ครั้งที่ ${nhsoProjects.length + 1}`,
-                    proposingOrg: 'ชมรม อสม. ตำบลบางเป้า',
-                    category: 'rehabilitation',
-                    budgetRequested: 40000,
-                    budgetApproved: 0,
-                    status: 'submitted',
-                    fiscalYear: '2569',
-                    startDate: '2026-11-01',
-                    endDate: '2027-03-31',
-                    targetParticipants: 150,
-                    responsiblePerson: currentUser.fullName,
-                    phone: '081-456-7890',
-                  };
-                  setNhsoProjects([newProj, ...nhsoProjects]);
-                  saveToFirestore(COLLECTIONS.NHSO, newProj).catch(() => {});
-                  showToast('success', `บันทึกเสนอโครงการใหม่ "${newProj.projectName}" เรียบร้อย`);
+                onUpdateProject={(updatedProj) => {
+                  setNhsoProjects((prev) => {
+                    const exists = prev.some((p) => p.id === updatedProj.id);
+                    const next = exists
+                      ? prev.map((p) => (p.id === updatedProj.id ? updatedProj : p))
+                      : [updatedProj, ...prev];
+                    return mergeNhsoFundProjectsWithMaster(next);
+                  });
+                }}
+                onDeleteProject={(id) => {
+                  setNhsoProjects((prev) => prev.filter((p) => p.id !== id));
                 }}
                 onApproveProject={(id, b) => {
                   if (perms.canApprove) {
@@ -1717,7 +1707,6 @@ unsubLicenses();
                       prev.map((p) => {
                         if (p.id === id) {
                           const updatedP = { ...p, status: 'approved' as const, budgetApproved: b };
-                          saveToFirestore(COLLECTIONS.NHSO, updatedP).catch(() => {});
                           return updatedP;
                         }
                         return p;

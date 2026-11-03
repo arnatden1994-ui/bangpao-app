@@ -1,4 +1,9 @@
 import { NhsoProject, NhsoFundSettings } from '../types/index.ts';
+import {
+  isProjectTrackingCompleted,
+  isProjectTrackingExtended,
+  isProjectTrackingRefunded,
+} from './nhsoThemeAndTracking.ts';
 
 // Exact styles.xml from the official master_nhso.xlsx (TH SarabunPSK fonts, borders, alignments, number formats)
 const MASTER_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -743,6 +748,382 @@ export async function exportSummaryToMasterXlsx(params: {
     { name: 'xl/workbook.xml', data: encoder.encode(workbookXml) },
     { name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(workbookRelsXml) },
     { name: 'xl/styles.xml', data: encoder.encode(MASTER_STYLES_XML) },
+    { name: 'xl/sharedStrings.xml', data: encoder.encode(sstXml) },
+    { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(sheetXml) },
+  ];
+
+  const zipBytes = buildZip(entries);
+  const blob = new Blob([zipBytes as unknown as BlobPart], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+const ATTACHMENT2_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="5">
+    <font><sz val="16.0"/><color rgb="FF000000"/><name val="TH SarabunPSK"/></font>
+    <font><b/><sz val="16.0"/><color rgb="FF000000"/><name val="TH SarabunPSK"/></font>
+    <font><b/><sz val="18.0"/><color rgb="FF000000"/><name val="TH SarabunPSK"/></font>
+    <font><b/><sz val="16.0"/><color rgb="FFFFFFFF"/><name val="TH SarabunPSK"/></font>
+    <font><sz val="15.0"/><color rgb="FF000000"/><name val="TH SarabunPSK"/></font>
+  </fonts>
+  <fills count="15">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFCE4D6"/><bgColor rgb="FFFCE4D6"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFA9D08E"/><bgColor rgb="FFA9D08E"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFD966"/><bgColor rgb="FFFFD966"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF9BC2E6"/><bgColor rgb="FF9BC2E6"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFD5A6BD"/><bgColor rgb="FFD5A6BD"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF4472C4"/><bgColor rgb="FF4472C4"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF70AD47"/><bgColor rgb="FF70AD47"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFE699"/><bgColor rgb="FFFFE699"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFB4DECB"/><bgColor rgb="FFB4DECB"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8CBAD"/><bgColor rgb="FFF8CBAD"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFD9D2E9"/><bgColor rgb="FFD9D2E9"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFB4A7D6"/><bgColor rgb="FFB4A7D6"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFA2C4C9"/><bgColor rgb="FFA2C4C9"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border/>
+    <border>
+      <left style="thin"><color rgb="FF000000"/></left>
+      <right style="thin"><color rgb="FF000000"/></right>
+      <top style="thin"><color rgb="FF000000"/></top>
+      <bottom style="thin"><color rgb="FF000000"/></bottom>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf borderId="0" fillId="0" fontId="0" numFmtId="0"/></cellStyleXfs>
+  <cellXfs count="30">
+    <!-- 0: Normal unbordered -->
+    <xf borderId="0" fillId="0" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyFont="1"><alignment vertical="center"/></xf>
+    <!-- 1: Peach Title Banner centered bold 18pt -->
+    <xf borderId="0" fillId="2" fontId="2" numFmtId="0" xfId="0" applyAlignment="1" applyFill="1" applyFont="1"><alignment horizontal="center" vertical="center"/></xf>
+    <!-- 2: Bold unbordered left 16pt -->
+    <xf borderId="0" fillId="0" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <!-- 3..6: Category Banner unbordered (Cat1=3, Cat2=4, Cat3=5, Cat7=6) -->
+    <xf borderId="0" fillId="3" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="0" fillId="4" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="0" fillId="5" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="0" fillId="6" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <!-- 7..10: Category Header / Subtotal bordered centered bold (Cat1=7, Cat2=8, Cat3=9, Cat7=10) -->
+    <xf borderId="1" fillId="3" fontId="1" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf borderId="1" fillId="4" fontId="1" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf borderId="1" fillId="5" fontId="1" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf borderId="1" fillId="6" fontId="1" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <!-- 11: Data cell centered bordered -->
+    <xf borderId="1" fillId="0" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFont="1"><alignment horizontal="center" vertical="center"/></xf>
+    <!-- 12: Data cell left bordered wrap -->
+    <xf borderId="1" fillId="0" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFont="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <!-- 13: Data cell number right/center bordered -->
+    <xf borderId="1" fillId="0" fontId="0" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="right" vertical="center"/></xf>
+    <!-- 14: Data cell checkmark centered bold -->
+    <xf borderId="1" fillId="0" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFont="1"><alignment horizontal="center" vertical="center"/></xf>
+    <!-- 15..20: Org colored cells bordered left (15=Yellow, 16=Mint, 17=Pink, 18=Blue, 19=Peach, 20=Lavender) -->
+    <xf borderId="1" fillId="9" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="1" fillId="10" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="1" fillId="6" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="1" fillId="5" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="1" fillId="11" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="1" fillId="12" fontId="0" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <!-- 21: Grand Total Blue Header (white bold text) -->
+    <xf borderId="1" fillId="7" fontId="3" numFmtId="0" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <!-- 22: Grand Total Green Data (white bold text, number format) -->
+    <xf borderId="1" fillId="8" fontId="3" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="center" vertical="center"/></xf>
+    <!-- 23..26: Cat 4,5,6,8 Banners & Headers -->
+    <xf borderId="0" fillId="13" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="1" fillId="13" fontId="1" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf borderId="0" fillId="14" fontId="1" numFmtId="0" xfId="0" applyAlignment="1" applyFill="1" applyFont="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf borderId="1" fillId="14" fontId="1" numFmtId="3" xfId="0" applyAlignment="1" applyBorder="1" applyFill="1" applyFont="1" applyNumberFormat="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle xfId="0" name="Normal" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+function getAttachment2CatStyleIds(cNum: number): { bannerStyle: number; headerStyle: number } {
+  if (cNum === 1) return { bannerStyle: 3, headerStyle: 7 };
+  if (cNum === 2) return { bannerStyle: 4, headerStyle: 8 };
+  if (cNum === 3) return { bannerStyle: 5, headerStyle: 9 };
+  if (cNum === 7) return { bannerStyle: 6, headerStyle: 10 };
+  if (cNum === 4 || cNum === 8) return { bannerStyle: 23, headerStyle: 24 };
+  return { bannerStyle: 25, headerStyle: 26 };
+}
+
+function getAttachment2OrgStyleId(orgName?: string): number {
+  const n = (orgName || '').trim();
+  if (n.includes('กองสาธารณสุข')) return 15;
+  if (n.includes('โรงพยาบาลกันตัง') || n.includes('ควนทองสีห์')) return 16;
+  if (n.includes('รพ.สต.บางเป้า')) return 17;
+  if (n.includes('บ้านป่าเตียว')) return 18;
+  if (n.includes('วัดสีหราษฎร์')) return 19;
+  if (n.includes('รร.บ้านบางเป้า') || n.includes('โรงเรียนบ้านบางเป้า')) return 20;
+  return 12;
+}
+
+export async function exportAttachment2ToMasterXlsx(params: {
+  targetYear: string;
+  summaryProjects: NhsoProject[];
+  groupedByCategory: Record<number, NhsoProject[]>;
+  totalSummaryBudget: number;
+  filename: string;
+}): Promise<void> {
+  const { targetYear, summaryProjects, groupedByCategory, totalSummaryBudget, filename } = params;
+  const encoder = new TextEncoder();
+
+  const sharedStrings: string[] = [];
+  const ssMap = new Map<string, number>();
+  const addStr = (s: string): number => {
+    const val = s ?? '';
+    const existing = ssMap.get(val);
+    if (existing !== undefined) return existing;
+    const idx = sharedStrings.length;
+    sharedStrings.push(val);
+    ssMap.set(val, idx);
+    return idx;
+  };
+
+  const strCell = (ref: string, style: number, text: string) => {
+    const idx = addStr(text);
+    return `<c r="${ref}" s="${style}" t="s"><v>${idx}</v></c>`;
+  };
+  const numCell = (ref: string, style: number, num: number) =>
+    `<c r="${ref}" s="${style}"><v>${Number(num || 0)}</v></c>`;
+  const emptyCell = (ref: string, style: number) => `<c r="${ref}" s="${style}"/>`;
+
+  const merges: string[] = ['A1:G1', 'A2:G2'];
+  const rowsXml: string[] = [];
+
+  // Row 1 & Row 2: Peach Banner (เอกสารแนบ 2)
+  rowsXml.push(
+    `<row r="1" ht="26.0" customHeight="1">` +
+      strCell(
+        'A1',
+        1,
+        'สรุปโครงการที่ขอรับการสนับสนุนงบประมาณจากกองทุนหลักประกันสุขภาพเทศบาลตำบลบางเป้า   (เอกสารแนบ 2)'
+      ) +
+      emptyCell('B1', 1) +
+      emptyCell('C1', 1) +
+      emptyCell('D1', 1) +
+      emptyCell('E1', 1) +
+      emptyCell('F1', 1) +
+      emptyCell('G1', 1) +
+      `</row>`
+  );
+  rowsXml.push(
+    `<row r="2" ht="24.0" customHeight="1">` +
+      strCell('A2', 1, `ประจำปีงบประมาณ ${targetYear}`) +
+      emptyCell('B2', 1) +
+      emptyCell('C2', 1) +
+      emptyCell('D2', 1) +
+      emptyCell('E2', 1) +
+      emptyCell('F2', 1) +
+      emptyCell('G2', 1) +
+      `</row>`
+  );
+
+  // Row 4: จำนวน X โครงการ
+  rowsXml.push(
+    `<row r="4" ht="22.0" customHeight="1">${strCell(
+      'A4',
+      2,
+      `จำนวน ${summaryProjects.length} โครงการ`
+    )}</row>`
+  );
+
+  let r = 5;
+  for (const [catNumStr, projectsInCat] of Object.entries(groupedByCategory)) {
+    const cNum = Number(catNumStr);
+    const { bannerStyle, headerStyle } = getAttachment2CatStyleIds(cNum);
+    const subtotal = projectsInCat.reduce((s, p) => s + p.budgetRequested, 0);
+    const completedInCat = projectsInCat.filter((p) => isProjectTrackingCompleted(p)).length;
+    const extendedInCat = projectsInCat.filter((p) => isProjectTrackingExtended(p)).length;
+    const refundedInCat = projectsInCat.filter((p) => isProjectTrackingRefunded(p)).length;
+
+    merges.push(`A${r}:B${r}`);
+    rowsXml.push(
+      `<row r="${r}" ht="23.0" customHeight="1">` +
+        strCell(`A${r}`, bannerStyle, `ประเภทที่ ${cNum}     จำนวน  ${projectsInCat.length}  โครงการ`) +
+        emptyCell(`B${r}`, bannerStyle) +
+        `</row>`
+    );
+    r += 2;
+
+    const h1 = r;
+    const h2 = r + 1;
+    merges.push(
+      `A${h1}:A${h2}`,
+      `B${h1}:B${h2}`,
+      `C${h1}:C${h2}`,
+      `D${h1}:D${h2}`,
+      `E${h1}:G${h1}`
+    );
+
+    rowsXml.push(
+      `<row r="${h1}" ht="22.0" customHeight="1">` +
+        strCell(`A${h1}`, headerStyle, 'ลำดับที่') +
+        strCell(`B${h1}`, headerStyle, 'ชื่อโครงการ') +
+        strCell(`C${h1}`, headerStyle, 'ผู้ขอรับงบ') +
+        strCell(`D${h1}`, headerStyle, 'งบประมาณ\n(บาท)') +
+        strCell(`E${h1}`, headerStyle, 'ผลการติดตามโครงการ') +
+        emptyCell(`F${h1}`, headerStyle) +
+        emptyCell(`G${h1}`, headerStyle) +
+        `</row>`
+    );
+    rowsXml.push(
+      `<row r="${h2}" ht="22.0" customHeight="1">` +
+        emptyCell(`A${h2}`, headerStyle) +
+        emptyCell(`B${h2}`, headerStyle) +
+        emptyCell(`C${h2}`, headerStyle) +
+        emptyCell(`D${h2}`, headerStyle) +
+        strCell(`E${h2}`, headerStyle, 'ดำเนินการแล้ว') +
+        strCell(`F${h2}`, headerStyle, 'ขอขยายเวลา') +
+        strCell(`G${h2}`, headerStyle, 'คืนเงิน') +
+        `</row>`
+    );
+    r += 2;
+
+    projectsInCat.forEach((p, idx) => {
+      const orgStyle = getAttachment2OrgStyleId(p.proposingOrg);
+      const isComp = isProjectTrackingCompleted(p);
+      const isExt = isProjectTrackingExtended(p);
+      const isRef = isProjectTrackingRefunded(p);
+
+      rowsXml.push(
+        `<row r="${r}" ht="23.0" customHeight="1">` +
+          numCell(`A${r}`, 11, Number(p.orderNumber || idx + 1)) +
+          strCell(`B${r}`, 12, p.projectName || '') +
+          strCell(`C${r}`, orgStyle, p.proposingOrg || '') +
+          numCell(`D${r}`, 13, Number(p.budgetRequested || 0)) +
+          strCell(`E${r}`, 14, isComp ? '☑' : '') +
+          strCell(`F${r}`, 14, isExt ? '☑' : '') +
+          strCell(`G${r}`, 14, isRef ? '☑' : '') +
+          `</row>`
+      );
+      r += 1;
+    });
+
+    rowsXml.push(
+      `<row r="${r}" ht="24.0" customHeight="1">` +
+        strCell(`A${r}`, headerStyle, 'รวม') +
+        strCell(`B${r}`, headerStyle, `${projectsInCat.length} โครงการ`) +
+        emptyCell(`C${r}`, headerStyle) +
+        numCell(`D${r}`, headerStyle, subtotal) +
+        strCell(`E${r}`, headerStyle, completedInCat > 0 ? `${completedInCat}` : '-') +
+        strCell(`F${r}`, headerStyle, extendedInCat > 0 ? `${extendedInCat}` : '-') +
+        strCell(`G${r}`, headerStyle, refundedInCat > 0 ? `${refundedInCat} โครงการ` : '-') +
+        `</row>`
+    );
+    r += 2;
+  }
+
+  // Bottom Grand Total Table (Royal Blue #4472c4 header + Green #70ad47 values)
+  const grandComp = summaryProjects.filter((p) => isProjectTrackingCompleted(p)).length;
+  const grandExt = summaryProjects.filter((p) => isProjectTrackingExtended(p)).length;
+  const grandNotExec = summaryProjects.filter(
+    (p) => !isProjectTrackingCompleted(p) && !isProjectTrackingExtended(p) && isProjectTrackingRefunded(p)
+  ).length;
+
+  const gt1 = r;
+  const gt2 = r + 1;
+  merges.push(`A${gt1}:A${gt2}`);
+
+  rowsXml.push(
+    `<row r="${gt1}" ht="24.0" customHeight="1">` +
+      strCell(`A${gt1}`, 21, 'รวมทั้งหมด') +
+      strCell(`B${gt1}`, 21, 'จำนวนโครงการ') +
+      strCell(`C${gt1}`, 21, '') +
+      strCell(`D${gt1}`, 21, 'งบประมาณ') +
+      strCell(`E${gt1}`, 21, 'ดำเนินการแล้ว') +
+      strCell(`F${gt1}`, 21, 'ขอขยายเวลา') +
+      strCell(`G${gt1}`, 21, 'ไม่ได้ดำเนินการ') +
+      `</row>`
+  );
+  rowsXml.push(
+    `<row r="${gt2}" ht="25.0" customHeight="1">` +
+      emptyCell(`A${gt2}`, 21) +
+      strCell(`B${gt2}`, 22, `${summaryProjects.length} โครงการ`) +
+      emptyCell(`C${gt2}`, 22) +
+      numCell(`D${gt2}`, 22, totalSummaryBudget) +
+      numCell(`E${gt2}`, 22, grandComp) +
+      numCell(`F${gt2}`, 22, grandExt) +
+      numCell(`G${gt2}`, 22, grandNotExec) +
+      `</row>`
+  );
+
+  const mergeXml = `<mergeCells count="${merges.length}">${merges
+    .map((m) => `<mergeCell ref="${m}"/>`)
+    .join('')}</mergeCells>`;
+
+  const sheetXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>` +
+    `<sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>` +
+    `<sheetFormatPr defaultRowHeight="22.0"/>` +
+    `<cols>` +
+    `<col customWidth="1" min="1" max="1" width="8.5"/>` +
+    `<col customWidth="1" min="2" max="2" width="58.0"/>` +
+    `<col customWidth="1" min="3" max="3" width="22.0"/>` +
+    `<col customWidth="1" min="4" max="4" width="12.5"/>` +
+    `<col customWidth="1" min="5" max="7" width="13.5"/>` +
+    `</cols>` +
+    `<sheetData>${rowsXml.join('')}</sheetData>` +
+    mergeXml +
+    `<printOptions horizontalCentered="1"/>` +
+    `<pageMargins bottom="0.35" footer="0.0" header="0.0" left="0.25" right="0.25" top="0.35"/>` +
+    `<pageSetup fitToHeight="0" fitToWidth="1" paperSize="9" orientation="landscape"/>` +
+    `</worksheet>`;
+
+  const sstXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${sharedStrings.length}" uniqueCount="${sharedStrings.length}">` +
+    sharedStrings.map((s) => `<si><t xml:space="preserve">${xmlEscape(s)}</t></si>`).join('') +
+    `</sst>`;
+
+  const workbookXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<sheets><sheet name="เอกสารแนบ 2" sheetId="1" r:id="rId1"/></sheets>` +
+    `</workbook>`;
+
+  const workbookRelsXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+    `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>` +
+    `</Relationships>`;
+
+  const rootRelsXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+    `</Relationships>`;
+
+  const contentTypesXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+    `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+    `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+    `<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>` +
+    `</Types>`;
+
+  const entries: ZipEntry[] = [
+    { name: '[Content_Types].xml', data: encoder.encode(contentTypesXml) },
+    { name: '_rels/.rels', data: encoder.encode(rootRelsXml) },
+    { name: 'xl/workbook.xml', data: encoder.encode(workbookXml) },
+    { name: 'xl/_rels/workbook.xml.rels', data: encoder.encode(workbookRelsXml) },
+    { name: 'xl/styles.xml', data: encoder.encode(ATTACHMENT2_STYLES_XML) },
     { name: 'xl/sharedStrings.xml', data: encoder.encode(sstXml) },
     { name: 'xl/worksheets/sheet1.xml', data: encoder.encode(sheetXml) },
   ];

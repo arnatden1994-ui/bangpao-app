@@ -33,6 +33,12 @@ import {
   CalendarDays,
   ShieldCheck,
   CheckSquare,
+  Square,
+  ListChecks,
+  FolderPlus,
+  RotateCcw,
+  Sparkles,
+  Table,
 } from 'lucide-react';
 import {
   NhsoProject,
@@ -45,12 +51,20 @@ import {
   saveStoredNhsoFundProjects,
   getStoredNhsoFundSettings,
   saveStoredNhsoFundSettings,
+  mergeNhsoFundProjectsWithMaster,
 } from '../services/sheetsSync.ts';
 import {
   saveNhsoFundProjectToFirestore,
   deleteNhsoFundProjectFromFirestore,
   saveNhsoFundSettingsToFirestore,
 } from '../services/firebaseService.ts';
+import {
+  getCategoryColorTheme,
+  getOrgColorTheme,
+  isProjectTrackingCompleted,
+  isProjectTrackingExtended,
+  isProjectTrackingRefunded,
+} from '../utils/nhsoThemeAndTracking.ts';
 import { NhsoProjectBuilderModal } from './NhsoProjectBuilderModal.tsx';
 import { NhsoFundSettingsModal } from './NhsoFundSettingsModal.tsx';
 import { PrintNhsoProjectModal } from './PrintNhsoProjectModal.tsx';
@@ -80,7 +94,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   settings: externalSettings,
   onSaveSettings: externalSaveSettings,
 }) => {
-  // Local or external state
+  // Local or external state (always merged with 2569 Master Database so 27 projects are never lost)
   const [internalProjects, setInternalProjects] = useState<NhsoProject[]>(() =>
     getStoredNhsoFundProjects()
   );
@@ -88,22 +102,44 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     externalSettings || getStoredNhsoFundSettings()
   );
 
-  const projects = externalProjects && externalProjects.length > 0 ? externalProjects : internalProjects;
+  const projects = useMemo(() => {
+    const raw =
+      externalProjects && externalProjects.length > 0 ? externalProjects : internalProjects;
+    return mergeNhsoFundProjectsWithMaster(raw);
+  }, [externalProjects, internalProjects]);
 
-  // Filter & Search states
-  const [selectedYear, setSelectedYear] = useState<string>('2570');
+  // Filter & Search states (Default to 2569 so user sees the 27 completed projects of งป.69 right away)
+  const [selectedYear, setSelectedYear] = useState<string>('2569');
+  const [customYears, setCustomYears] = useState<string[]>(['2569', '2570', '2571']);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
-  const [activeWorkflowTab, setActiveWorkflowTab] = useState<'all' | 'under_review' | 'approved' | 'disbursing' | 'completed'>('all');
+  const [trackingFilter, setTrackingFilter] = useState<
+    'all' | 'completed' | 'extended' | 'refunded' | 'selected_only'
+  >('all');
+  const [activeWorkflowTab, setActiveWorkflowTab] = useState<
+    'all' | 'under_review' | 'approved' | 'disbursing' | 'completed'
+  >('all');
+
+  // Table View Mode: Color-coded Attachment 2 Tracking vs Detailed Management
+  const [tableViewMode, setTableViewMode] = useState<
+    'attachment2_tracking' | 'detailed_management'
+  >('attachment2_tracking');
+
+  // Multi-row Checkbox Selection & Multi-year Carry-Forward states
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [targetCarryYear, setTargetCarryYear] = useState<string>('2570');
+  const [actionToast, setActionToast] = useState<string | null>(null);
 
   // Modals state
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
-  const [printMode, setPrintMode] = useState<'single' | 'summary'>('single');
+  const [printMode, setPrintMode] = useState<'single' | 'summary' | 'tracking_attachment2'>(
+    'tracking_attachment2'
+  );
   const [editingProject, setEditingProject] = useState<NhsoProject | null>(null);
   const [printingProject, setPrintingProject] = useState<NhsoProject | null>(null);
   const [disbursementProject, setDisbursementProject] = useState<NhsoProject | null>(null);
@@ -195,21 +231,168 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     setIsEditingFundBudget(false);
   };
 
-  // Quick clone from template
-  const handleCloneProject = (sourceProj: NhsoProject) => {
+  const showToast = (msg: string) => {
+    setActionToast(msg);
+    setTimeout(() => {
+      setActionToast((prev) => (prev === msg ? null : prev));
+    }, 5500);
+  };
+
+  // Interactive 1-click toggle for ผลการติดตามโครงการ (ดำเนินการแล้ว | ขอขยายเวลา | คืนเงิน)
+  const handleToggleProjectTracking = (
+    projectId: string,
+    field: 'trackingCompleted' | 'trackingExtended' | 'trackingRefunded'
+  ) => {
+    const target = projects.find((p) => p.id === projectId);
+    if (!target) return;
+
+    const currentVal =
+      field === 'trackingCompleted'
+        ? isProjectTrackingCompleted(target)
+        : field === 'trackingExtended'
+        ? isProjectTrackingExtended(target)
+        : isProjectTrackingRefunded(target);
+
+    const nextVal = !currentVal;
+    const updated: NhsoProject = {
+      ...target,
+      trackingCompleted:
+        field === 'trackingCompleted' ? nextVal : isProjectTrackingCompleted(target),
+      trackingExtended:
+        field === 'trackingExtended' ? nextVal : isProjectTrackingExtended(target),
+      trackingRefunded:
+        field === 'trackingRefunded' ? nextVal : isProjectTrackingRefunded(target),
+      updatedAt: new Date().toISOString(),
+    };
+
+    handleSaveProject(updated);
+  };
+
+  // Bulk set tracking status for all selected projects
+  const handleBulkSetTracking = (
+    mode: 'completed' | 'extended' | 'refunded' | 'clear'
+  ) => {
+    if (selectedProjectIds.length === 0) return;
+    const nextList = projects.map((p) => {
+      if (!selectedProjectIds.includes(p.id)) return p;
+      const updated: NhsoProject = {
+        ...p,
+        trackingCompleted: mode === 'completed',
+        trackingExtended: mode === 'extended',
+        trackingRefunded: mode === 'refunded',
+        updatedAt: new Date().toISOString(),
+      };
+      saveNhsoFundProjectToFirestore(updated);
+      if (externalUpdate) externalUpdate(updated);
+      return updated;
+    });
+    setInternalProjects(nextList);
+    saveStoredNhsoFundProjects(nextList);
+    showToast(
+      `อัปเดตสถานะการติดตามผลจำนวน ${selectedProjectIds.length} โครงการเรียบร้อยแล้ว`
+    );
+  };
+
+  // Checkbox selection helpers
+  const toggleSelectProject = (id: string) => {
+    setSelectedProjectIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectCategory = (catProjects: NhsoProject[]) => {
+    const ids = catProjects.map((p) => p.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedProjectIds.includes(id));
+    if (allSelected) {
+      setSelectedProjectIds((prev) => prev.filter((id) => !ids.includes(id)));
+    } else {
+      setSelectedProjectIds((prev) => Array.from(new Set([...prev, ...ids])));
+    }
+  };
+
+  // Carry-forward / Copy selected dataset into a target fiscal year (2570, 2571, 2572...)
+  const handleBulkCarryForwardToYear = (destYear: string) => {
+    const selectedItems = projects
+      .filter((p) => selectedProjectIds.includes(p.id))
+      .sort((a, b) => (a.orderNumber || 999) - (b.orderNumber || 999));
+    if (selectedItems.length === 0) return;
+
+    const existingInDest = projects.filter((p) => p.fiscalYear === destYear);
+    let nextOrder =
+      existingInDest.reduce((max, p) => Math.max(max, p.orderNumber || 0), 0) + 1;
+    const shortYr = destYear.slice(-2);
+    const prevYr = String(Number(destYear) - 1);
+
+    const clonedProjects: NhsoProject[] = selectedItems.map((src, idx) => {
+      const orderNum = nextOrder + idx;
+      const updatedName = (src.projectName || '')
+        .replace(/ประจำปี\s*25\d{2}/g, `ประจำปี ${destYear}`)
+        .replace(/ปีงบประมาณ\s*25\d{2}/g, `ปีงบประมาณ ${destYear}`);
+
+      return {
+        ...src,
+        id: `NHSO-${shortYr}-${Date.now().toString().slice(-4)}-${idx + 1}`,
+        fiscalYear: destYear,
+        orderNumber: orderNum,
+        projectCode: `กองทุน-${shortYr}-${String(orderNum).padStart(3, '0')}`,
+        projectName: updatedName,
+        duration: `ต.ค. ${prevYr} - ก.ย. ${destYear}`,
+        status: 'approved',
+        committeeDecision: 'approve',
+        committeeComment: `ดึงข้อมูลต่อเนื่องมาจากชุดฐานข้อมูลปีงบประมาณ ${src.fiscalYear}`,
+        meetingRound: `ครั้งที่ 1/${destYear}`,
+        budgetApproved: src.budgetRequested,
+        disbursedAmount: 0,
+        disbursementRecords: [],
+        implementationStatus: 'not_started',
+        trackingCompleted: false,
+        trackingExtended: false,
+        trackingRefunded: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    const nextList = [...clonedProjects, ...projects];
+    setInternalProjects(nextList);
+    saveStoredNhsoFundProjects(nextList);
+    clonedProjects.forEach((cp) => {
+      saveNhsoFundProjectToFirestore(cp);
+      if (externalUpdate) externalUpdate(cp);
+    });
+
+    if (!customYears.includes(destYear)) {
+      setCustomYears((prev) => Array.from(new Set([...prev, destYear])).sort());
+    }
+    setSelectedYear(destYear);
+    setSelectedProjectIds(clonedProjects.map((cp) => cp.id));
+    showToast(
+      `ดึงชุดข้อมูล ${clonedProjects.length} โครงการ ไปเพิ่มในปีงบประมาณ ${destYear} เรียบร้อยแล้ว!`
+    );
+  };
+
+  // Quick clone single project to target year
+  const handleCloneProject = (sourceProj: NhsoProject, destYr = '2570') => {
+    const shortYr = destYr.slice(-2);
+    const nextOrder =
+      projects.filter((p) => p.fiscalYear === destYr).length + 1;
     const cloned: NhsoProject = {
       ...sourceProj,
-      id: `NHSO-70-${Date.now().toString().slice(-4)}`,
-      fiscalYear: '2570',
-      projectCode: `กองทุน-70-00${projects.filter((p) => p.fiscalYear === '2570').length + 1}`,
-      projectName: `${sourceProj.projectName.replace('2569', '2570')} (ฉบับร่าง 2570)`,
+      id: `NHSO-${shortYr}-${Date.now().toString().slice(-4)}`,
+      fiscalYear: destYr,
+      orderNumber: nextOrder,
+      projectCode: `กองทุน-${shortYr}-${String(nextOrder).padStart(3, '0')}`,
+      projectName: `${sourceProj.projectName.replace(/25\d{2}/g, destYr)}`,
       status: 'submitted',
       committeeDecision: 'pending',
-      committeeComment: 'คัดลอกมาจากแม่แบบปี 2569 เพื่อเสนอในรอบปี 2570',
+      committeeComment: `คัดลอกมาจากแม่แบบปี ${sourceProj.fiscalYear} เพื่อเสนอในรอบปี ${destYr}`,
       budgetApproved: 0,
       disbursedAmount: 0,
       disbursementRecords: [],
       implementationStatus: 'not_started',
+      trackingCompleted: false,
+      trackingExtended: false,
+      trackingRefunded: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -217,58 +400,97 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     setIsBuilderOpen(true);
   };
 
-  // Filtered project list
-  const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
-      // Year match
-      if (selectedYear !== 'all' && p.fiscalYear !== selectedYear) return false;
-      // Category match
-      if (selectedCategory !== 'all' && (p.categoryNumber || 1) !== selectedCategory) return false;
-      // Status match
-      if (statusFilter !== 'all' && p.status !== statusFilter) return false;
-      // Workflow Tab filter
-      if (activeWorkflowTab === 'under_review') {
-        if (p.status !== 'submitted' && p.status !== 'under_review' && p.status !== 'draft')
-          return false;
-      } else if (activeWorkflowTab === 'approved') {
-        if (p.status !== 'approved' && p.status !== 'approved_reduced') return false;
-      } else if (activeWorkflowTab === 'disbursing') {
-        if (
-          (p.status !== 'approved' && p.status !== 'approved_reduced') ||
-          (p.disbursedAmount || 0) >= (p.budgetApproved || p.budgetRequested)
-        )
-          return false;
-      } else if (activeWorkflowTab === 'completed') {
-        if (p.status !== 'completed' && p.implementationStatus !== 'completed_reported')
-          return false;
-      }
-      // Org match
-      if (selectedOrgFilter !== 'all' && p.proposingOrg !== selectedOrgFilter) return false;
-      // Search
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const matchName = (p.projectName || '').toLowerCase().includes(q);
-        const matchOrg = (p.proposingOrg || '').toLowerCase().includes(q);
-        const matchCode = (p.projectCode || '').toLowerCase().includes(q);
-        const matchResp = (p.responsiblePerson || '').toLowerCase().includes(q);
-        if (!matchName && !matchOrg && !matchCode && !matchResp) return false;
-      }
-      return true;
+  // Available fiscal years (sorted)
+  const availableYears = useMemo(() => {
+    const set = new Set<string>(['2569', '2570', '2571', ...customYears]);
+    projects.forEach((p) => {
+      if (p.fiscalYear) set.add(p.fiscalYear);
     });
+    return Array.from(set).sort();
+  }, [projects, customYears]);
+
+  // Filtered project list (sorted by orderNumber)
+  const filteredProjects = useMemo(() => {
+    return projects
+      .filter((p) => {
+        // Year match
+        if (selectedYear !== 'all' && p.fiscalYear !== selectedYear) return false;
+        // Category match
+        if (selectedCategory !== 'all' && (p.categoryNumber || 1) !== selectedCategory) return false;
+        // Status match
+        if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+        // Tracking status / Checkbox filter
+        if (trackingFilter === 'completed' && !isProjectTrackingCompleted(p)) return false;
+        if (trackingFilter === 'extended' && !isProjectTrackingExtended(p)) return false;
+        if (trackingFilter === 'refunded' && !isProjectTrackingRefunded(p)) return false;
+        if (trackingFilter === 'selected_only' && !selectedProjectIds.includes(p.id))
+          return false;
+        // Workflow Tab filter
+        if (activeWorkflowTab === 'under_review') {
+          if (p.status !== 'submitted' && p.status !== 'under_review' && p.status !== 'draft')
+            return false;
+        } else if (activeWorkflowTab === 'approved') {
+          if (p.status !== 'approved' && p.status !== 'approved_reduced') return false;
+        } else if (activeWorkflowTab === 'disbursing') {
+          if (
+            (p.status !== 'approved' && p.status !== 'approved_reduced') ||
+            (p.disbursedAmount || 0) >= (p.budgetApproved || p.budgetRequested)
+          )
+            return false;
+        } else if (activeWorkflowTab === 'completed') {
+          if (!isProjectTrackingCompleted(p)) return false;
+        }
+        // Org match
+        if (selectedOrgFilter !== 'all' && p.proposingOrg !== selectedOrgFilter) return false;
+        // Search
+        if (search.trim()) {
+          const q = search.toLowerCase();
+          const matchName = (p.projectName || '').toLowerCase().includes(q);
+          const matchOrg = (p.proposingOrg || '').toLowerCase().includes(q);
+          const matchCode = (p.projectCode || '').toLowerCase().includes(q);
+          const matchResp = (p.responsiblePerson || '').toLowerCase().includes(q);
+          if (!matchName && !matchOrg && !matchCode && !matchResp) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.orderNumber || 999) - (b.orderNumber || 999));
   }, [
     projects,
     selectedYear,
     selectedCategory,
     statusFilter,
+    trackingFilter,
+    selectedProjectIds,
     selectedOrgFilter,
     activeWorkflowTab,
     search,
   ]);
 
+  // Grouped by category for Attachment 2 Color-coded View
+  const filteredGroupedByCategory = useMemo(() => {
+    const groups: Record<number, NhsoProject[]> = {};
+    for (let c = 1; c <= 8; c++) {
+      const matched = filteredProjects.filter((p) => (p.categoryNumber || 1) === c);
+      if (matched.length > 0) {
+        groups[c] = matched;
+      }
+    }
+    return groups;
+  }, [filteredProjects]);
+
   // Statistics for current selected year
   const yearProjects = useMemo(() => {
-    return selectedYear === 'all' ? projects : projects.filter((p) => p.fiscalYear === selectedYear);
+    return (
+      selectedYear === 'all' ? projects : projects.filter((p) => p.fiscalYear === selectedYear)
+    ).sort((a, b) => (a.orderNumber || 999) - (b.orderNumber || 999));
   }, [projects, selectedYear]);
+
+  const yearCompletedCount = yearProjects.filter((p) => isProjectTrackingCompleted(p)).length;
+  const yearExtendedCount = yearProjects.filter((p) => isProjectTrackingExtended(p)).length;
+  const yearRefundedCount = yearProjects.filter((p) => isProjectTrackingRefunded(p)).length;
+  const yearNotExecutedCount = yearProjects.filter(
+    (p) => !isProjectTrackingCompleted(p) && !isProjectTrackingExtended(p) && isProjectTrackingRefunded(p)
+  ).length;
 
   const currentRevenueSource = fundSettings.revenueSourcesByYear?.[selectedYear];
   const currentClause10_4_Plan = fundSettings.clause10_4_PlansByYear?.[selectedYear];
@@ -427,15 +649,15 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                 setEditingProject(null);
                 setIsBuilderOpen(true);
               }}
-              className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+              className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              เขียนเสนอโครงการใหม่ ({selectedYear})
+              เขียนเสนอโครงการใหม่ ({selectedYear === 'all' ? '2570' : selectedYear})
             </button>
 
             <button
               onClick={() => setIsRevenueModalOpen(true)}
-              className="px-3.5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
+              className="px-3.5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               title="คำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) และงบประชุม 10(4)"
             >
               <Coins className="w-4 h-4 text-slate-950" />
@@ -445,19 +667,32 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
             <button
               onClick={() => {
                 setPrintingProject(null);
+                setPrintMode('tracking_attachment2');
+                setIsPrintOpen(true);
+              }}
+              className="px-3.5 py-2.5 bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-100 font-bold text-xs rounded-xl backdrop-blur-md border border-emerald-400/40 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              title="พิมพ์สรุปโครงการและผลการติดตาม (เอกสารแนบ 2 - แยกสี)"
+            >
+              <ListChecks className="w-4 h-4 text-emerald-300" />
+              พิมพ์สรุป & ติดตามผล (เอกสารแนบ 2)
+            </button>
+
+            <button
+              onClick={() => {
+                setPrintingProject(null);
                 setPrintMode('summary');
                 setIsPrintOpen(true);
               }}
-              className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white font-medium text-xs rounded-xl backdrop-blur-md border border-white/20 flex items-center gap-1.5 transition-all"
+              className="px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white font-medium text-xs rounded-xl backdrop-blur-md border border-white/20 flex items-center gap-1.5 transition-all cursor-pointer"
               title="พิมพ์แบบสรุปภาพรวมโครงการทั้งหมดเสนอคณะกรรมการฯ"
             >
               <Printer className="w-4 h-4" />
-              พิมพ์สรุปภาพรวม A4
+              พิมพ์สรุปเสนอ กก.
             </button>
 
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium text-xs rounded-xl backdrop-blur-md border border-white/15 flex items-center gap-1.5 transition-all"
+              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium text-xs rounded-xl backdrop-blur-md border border-white/15 flex items-center gap-1.5 transition-all cursor-pointer"
               title="ตั้งค่าผู้ลงนาม 3 ระดับและอัตราค่าใช้จ่ายมาตรฐาน"
             >
               <Sliders className="w-4 h-4" />
@@ -466,42 +701,68 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
           </div>
         </div>
 
-        {/* Fiscal Year Switcher Bar */}
+        {/* Fiscal Year Switcher Bar (Supports 2569, 2570, 2571, and adding future years) */}
         <div className="mt-6 pt-5 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-emerald-200 font-medium">รอบปีงบประมาณ:</span>
-            <div className="flex bg-black/25 p-1 rounded-xl border border-white/10 text-xs">
+            <div className="flex flex-wrap bg-black/25 p-1 rounded-xl border border-white/10 text-xs gap-1">
+              {availableYears.map((yr) => {
+                const count = projects.filter((p) => p.fiscalYear === yr).length;
+                const isSelected = selectedYear === yr;
+                const label =
+                  yr === '2569'
+                    ? `📜 ปีงบ 2569 (ดำเนินการแล้ว 27 โครงการ)`
+                    : yr === '2570'
+                    ? `🌟 ปีงบ 2570 (ปีปัจจุบัน / รับคำขอ)`
+                    : `📅 ปีงบ ${yr}`;
+
+                return (
+                  <button
+                    key={yr}
+                    type="button"
+                    onClick={() => {
+                      setSelectedYear(yr);
+                      setSelectedProjectIds([]);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-500 text-slate-950 shadow-md'
+                        : 'text-white/80 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900/25">
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+
               <button
-                onClick={() => setSelectedYear('2570')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                  selectedYear === '2570'
-                    ? 'bg-emerald-500 text-slate-950 shadow-md'
-                    : 'text-white/80 hover:text-white'
-                }`}
+                type="button"
+                onClick={() => {
+                  const maxYr = Math.max(
+                    ...availableYears.map((y) => Number(y) || 2570)
+                  );
+                  const nextYr = String(maxYr + 1);
+                  setCustomYears((prev) => Array.from(new Set([...prev, nextYr])).sort());
+                  setSelectedYear(nextYr);
+                  setTargetCarryYear(nextYr);
+                  showToast(
+                    `เปิดรอบปีงบประมาณใหม่ พ.ศ. ${nextYr} แล้ว! คุณสามารถกลับไปติ๊กเลือกชุดข้อมูลจากปี 2569 หรือ 2570 เพื่อดึงมาใช้ในปี ${nextYr} ได้ทันที`
+                  );
+                }}
+                className="px-2.5 py-1.5 rounded-lg font-semibold text-emerald-200 hover:text-white hover:bg-emerald-500/20 border border-dashed border-emerald-400/40 transition-all flex items-center gap-1 cursor-pointer"
+                title="เพิ่มรอบปีงบประมาณถัดไป (เช่น 2572, 2573...)"
               >
-                <span>🌟 ปีงบ 2570 (ปีปัจจุบัน / รับคำขอ)</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900/20">
-                  {projects.filter((p) => p.fiscalYear === '2570').length}
-                </span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>เพิ่มปีงบถัดไป</span>
               </button>
 
               <button
-                onClick={() => setSelectedYear('2569')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                  selectedYear === '2569'
-                    ? 'bg-emerald-500 text-slate-950 shadow-md'
-                    : 'text-white/80 hover:text-white'
-                }`}
-              >
-                <span>📜 ปีงบ 2569 (ประวัติ / 27 แม่แบบ)</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900/20">
-                  {projects.filter((p) => p.fiscalYear === '2569').length}
-                </span>
-              </button>
-
-              <button
+                type="button"
                 onClick={() => setSelectedYear('all')}
-                className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                   selectedYear === 'all'
                     ? 'bg-emerald-500 text-slate-950 shadow-md font-bold'
                     : 'text-white/80 hover:text-white'
@@ -523,6 +784,23 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Toast Notification Banner */}
+      {actionToast && (
+        <div className="bg-emerald-900/95 border border-emerald-400/50 text-white px-4 py-3 rounded-2xl shadow-lg flex items-center justify-between gap-3 text-xs font-semibold animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+            <span>{actionToast}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionToast(null)}
+            className="text-emerald-200 hover:text-white p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -748,21 +1026,22 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         </button>
       </div>
 
-      {/* Filter and Categories Bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-        {/* Search & Select Controls */}
-        <div className="flex flex-col md:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
+      {/* Comprehensive Color-Coded Filter Panel (Category, Organization, Tracking Status, Search) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
+        {/* Row 1: Search + Quick Selects + View Mode Switcher */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ค้นหาชื่อโครงการ, หน่วยงานผู้ขอ, ผู้รับผิดชอบ หรือรหัส..."
+              placeholder="ค้นหาชื่อโครงการ, หน่วยงานผู้ขอรับงบ, ผู้รับผิดชอบ หรือรหัส..."
               className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             {search && (
               <button
+                type="button"
                 onClick={() => setSearch('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
@@ -771,367 +1050,1145 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            {/* Org filter */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Org dropdown */}
             <select
               value={selectedOrgFilter}
               onChange={(e) => setSelectedOrgFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300"
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-medium"
             >
-              <option value="all">ทุกหน่วยงานผู้ขอ ({distinctOrgs.length})</option>
+              <option value="all">ทุกหน่วยงานผู้ขอ ({distinctOrgs.length} หน่วยงาน)</option>
               {distinctOrgs.map((org) => (
                 <option key={org} value={org}>
-                  {org}
+                  {org} ({yearProjects.filter((p) => p.proposingOrg === org).length})
                 </option>
               ))}
             </select>
 
-            {/* Status filter */}
+            {/* Status dropdown */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300"
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-medium"
             >
-              <option value="all">ทุกสถานะ</option>
+              <option value="all">ทุกมติ กก.</option>
               <option value="submitted">รอพิจารณา / เสนอขอ</option>
               <option value="approved">อนุมัติแล้ว</option>
               <option value="approved_reduced">อนุมัติปรับลดงบ</option>
+              <option value="completed">เสร็จสิ้น / รายงานผลแล้ว</option>
               <option value="draft">ฉบับร่าง</option>
               <option value="rejected">ไม่อนุมัติ</option>
             </select>
-          </div>
-        </div>
 
-        {/* 8 Categories Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 text-xs no-scrollbar">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-all ${
-              selectedCategory === 'all'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            ทุกประเภท ({yearProjects.length})
-          </button>
-          {NHSO_FUND_CATEGORIES.map((cat) => {
-            const count = yearProjects.filter((p) => (p.categoryNumber || 1) === cat.number).length;
-            return (
+            {/* Reset all filters button */}
+            {(selectedCategory !== 'all' ||
+              selectedOrgFilter !== 'all' ||
+              trackingFilter !== 'all' ||
+              statusFilter !== 'all' ||
+              search.trim() !== '') && (
               <button
-                key={cat.number}
-                onClick={() => setSelectedCategory(cat.number)}
-                className={`px-2.5 py-1.5 rounded-lg whitespace-nowrap font-medium transition-all flex items-center gap-1.5 border ${
-                  selectedCategory === cat.number
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm font-semibold'
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                }`}
-                title={cat.title}
+                type="button"
+                onClick={() => {
+                  setSelectedCategory('all');
+                  setSelectedOrgFilter('all');
+                  setTrackingFilter('all');
+                  setStatusFilter('all');
+                  setSearch('');
+                }}
+                className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer"
               >
-                <span>ประเภท {cat.number}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10 dark:bg-white/10">
-                  {count}
-                </span>
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>ล้างตัวกรอง</span>
               </button>
-            );
-          })}
-        </div>
-      </div>
+            )}
 
-      {/* Projects Table & List View */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-              รายการโครงการ ({filteredProjects.length} โครงการ)
-            </h3>
-            <span className="text-xs text-slate-500">
-              รวมงบที่ขอ:{' '}
-              <strong className="text-emerald-600">
-                {filteredProjects.reduce((s, p) => s + p.budgetRequested, 0).toLocaleString()}
-              </strong>{' '}
-              บาท
-            </span>
+            {/* View Mode Switcher */}
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+              <button
+                type="button"
+                onClick={() => setTableViewMode('attachment2_tracking')}
+                className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  tableViewMode === 'attachment2_tracking'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <ListChecks className="w-3.5 h-3.5" />
+                <span>ตารางแยกสี & ปุ่มติ๊ก (เอกสารแนบ 2)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableViewMode('detailed_management')}
+                className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  tableViewMode === 'detailed_management'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Table className="w-3.5 h-3.5" />
+                <span>ตารางบริหาร & เบิกจ่ายละเอียด</span>
+              </button>
+            </div>
           </div>
-
-          <div className="text-xs text-slate-500">
-            แสดงข้อมูลปีงบ: <strong>{selectedYear === 'all' ? 'ทุกปี' : selectedYear}</strong>
-          </div>
         </div>
 
-        {filteredProjects.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 space-y-3">
-            <FileText className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-            <p className="text-sm font-medium">ไม่พบโครงการตามเงื่อนไขที่เลือก</p>
-            <p className="text-xs text-slate-500">
-              คุณสามารถสร้างโครงการใหม่ หรือคัดลอกจากแม่แบบปี 2569 ได้ทันที
-            </p>
+        {/* Row 2: Color-Coded Category Filter Pills (Matching เอกสารแนบ 2 Colors) */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+            <span>🎨 กรองตามประเภทโครงการ (แยกสีตามประเภทกองทุน สปสช.):</span>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
             <button
-              onClick={() => {
-                setEditingProject(null);
-                setIsBuilderOpen(true);
-              }}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow transition-colors inline-flex items-center gap-1.5"
+              type="button"
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-bold transition-all cursor-pointer border ${
+                selectedCategory === 'all'
+                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+              }`}
             >
-              <Plus className="w-4 h-4" /> สร้างโครงการใหม่
+              ทุกประเภท ({yearProjects.length})
             </button>
+            {NHSO_FUND_CATEGORIES.map((cat) => {
+              const count = yearProjects.filter((p) => (p.categoryNumber || 1) === cat.number).length;
+              const catTheme = getCategoryColorTheme(cat.number);
+              const isSelected = selectedCategory === cat.number;
+              return (
+                <button
+                  key={cat.number}
+                  type="button"
+                  onClick={() =>
+                    setSelectedCategory(isSelected ? 'all' : cat.number)
+                  }
+                  style={{
+                    backgroundColor: isSelected || count > 0 ? catTheme.headerHex : undefined,
+                    borderColor: catTheme.borderHex,
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer ${
+                    isSelected
+                      ? 'ring-2 ring-offset-1 ring-slate-900 dark:ring-white font-black text-slate-950 shadow-md scale-[1.02]'
+                      : count > 0
+                      ? 'font-bold text-slate-950 opacity-90 hover:opacity-100'
+                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-800 opacity-60'
+                  }`}
+                  title={cat.title}
+                >
+                  <span>ประเภทที่ {cat.number}</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/15 text-slate-950 font-extrabold">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-800">
-                <tr>
-                  <th className="py-3 px-3 w-12 text-center">#</th>
-                  <th className="py-3 px-3">ชื่อโครงการ / แผนงาน</th>
-                  <th className="py-3 px-3 w-44">ผู้ขอรับงบ / ผู้รับผิดชอบ</th>
-                  <th className="py-3 px-3 w-28">ประเภท</th>
-                  <th className="py-3 px-3 w-28 text-right">งบที่ขอ (บาท)</th>
-                  <th className="py-3 px-3 w-28 text-right">งบอนุมัติ</th>
-                  <th className="py-3 px-3 w-28 text-right">เบิกจ่ายแล้ว</th>
-                  <th className="py-3 px-3 w-32 text-center">มติกรรมการ</th>
-                  <th className="py-3 px-3 w-44 text-center">เมนูจัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredProjects.map((p, idx) => {
-                  const cat = NHSO_FUND_CATEGORIES.find((c) => c.number === (p.categoryNumber || 1));
-                  const isApproved =
-                    p.status === 'approved' ||
-                    p.status === 'approved_reduced' ||
-                    p.status === 'completed' ||
-                    p.committeeDecision === 'approve' ||
-                    (p.disbursedAmount || 0) > 0;
-                  const approvedAmount = (p.budgetApproved && p.budgetApproved > 0) ? p.budgetApproved : p.budgetRequested;
-                  const disbursed = p.disbursedAmount || 0;
-                  const percent =
-                    approvedAmount > 0 ? Math.round((disbursed / approvedAmount) * 100) : 0;
+        </div>
 
-                  return (
-                    <tr
-                      key={p.id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                    >
-                      <td className="py-3 px-3 text-center font-bold text-slate-400">
-                        {p.orderNumber || idx + 1}
-                      </td>
-
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-slate-900 dark:text-slate-100 line-clamp-2">
-                          {p.projectName}
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
-                          <span>{p.projectCode || `กองทุน-${p.fiscalYear.slice(-2)}`}</span>
-                          <span>•</span>
-                          <span>ปีงบ {p.fiscalYear}</span>
-                          {p.activityGroups && p.activityGroups.length > 1 && (
-                            <>
-                              <span>•</span>
-                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 text-[10px]">
-                                📋 {p.activityGroups.length} กิจกรรม
-                              </span>
-                            </>
-                          )}
-                          {p.meetingRound && (
-                            <>
-                              <span>•</span>
-                              <span className="text-blue-600 font-medium">
-                                มติ: {p.meetingRound}
-                              </span>
-                            </>
-                          )}
-                          {p.implementationStatus === 'completed_reported' && (
-                            <span className="text-emerald-700 bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.2 rounded text-[10px] font-semibold">
-                              ✓ ส่งรายงานแล้ว
-                            </span>
-                          )}
-                          {p.implementationStatus === 'in_progress' && (
-                            <span className="text-blue-700 bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.2 rounded text-[10px] font-semibold">
-                              🔄 กำลังดำเนินกิจกรรม
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-3">
-                        <div className="font-medium text-slate-800 dark:text-slate-200">
-                          {p.proposingOrg}
-                        </div>
-                        <div className="text-[11px] text-slate-500 line-clamp-1">
-                          {p.responsiblePerson}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-3">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
-                            cat?.badgeColor || 'bg-slate-100 text-slate-700'
-                          }`}
-                          title={cat?.title}
-                        >
-                          ประเภท {p.categoryNumber || 1}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 text-right font-semibold text-slate-900 dark:text-slate-100">
-                        {p.budgetRequested.toLocaleString()}
-                      </td>
-
-                      <td className="py-3 px-3 text-right font-bold">
-                        {isApproved ? (
-                          <span className="text-emerald-600 dark:text-emerald-400">
-                            {approvedAmount.toLocaleString()}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-
-                      {/* Disbursed Amount with Interactive Button */}
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setDisbursementProject(p)}
-                          className="group/disb text-right block w-full p-1 -m-1 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors"
-                          title="คลิกเพื่อบันทึกการเบิกจ่าย / ติดตามผลโครงการนี้"
-                        >
-                          {disbursed > 0 ? (
-                            <div>
-                              <div className="font-bold text-cyan-600 dark:text-cyan-400 group-hover/disb:underline">
-                                {disbursed.toLocaleString()}
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                {percent}% {disbursed >= approvedAmount && '✓ ครบ'}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-cyan-600 dark:text-cyan-400 font-semibold group-hover/disb:underline flex items-center justify-end gap-1">
-                              <Coins className="w-3 h-3 inline" /> บันทึกเบิก
-                            </span>
-                          )}
-                        </button>
-                      </td>
-
-                      {/* Committee Resolution / Status */}
-                      <td className="py-3 px-3 text-center">
-                        {p.status === 'completed' && (
-                          <button
-                            onClick={() => openApprovalModal(p)}
-                            className="px-2.5 py-1 bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 hover:bg-purple-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            title="โครงการดำเนินงานและปิดโครงการแล้ว (คลิกเพื่อดู/แก้ไขมติ)"
-                          >
-                            <CheckCircle2 className="w-3 h-3 text-purple-600" />
-                            <span>อนุมัติ & เสร็จสิ้น</span>
-                          </button>
-                        )}
-                        {p.status === 'approved' && (
-                          <button
-                            onClick={() => openApprovalModal(p)}
-                            className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            title="คลิกเพื่อแก้ไขมติกรรมการ"
-                          >
-                            <Check className="w-3 h-3" /> อนุมัติเต็ม
-                          </button>
-                        )}
-                        {p.status === 'approved_reduced' && (
-                          <button
-                            onClick={() => openApprovalModal(p)}
-                            className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            title="คลิกเพื่อแก้ไขมติกรรมการ"
-                          >
-                            <Check className="w-3 h-3" /> อนุมัติปรับลด
-                          </button>
-                        )}
-                        {p.status === 'rejected' && (
-                          <button
-                            onClick={() => openApprovalModal(p)}
-                            className="px-2.5 py-1 bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 hover:bg-red-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            title="คลิกเพื่อแก้ไขมติกรรมการ"
-                          >
-                            <X className="w-3 h-3" /> ไม่อนุมัติ
-                          </button>
-                        )}
-                        {(p.status === 'submitted' || p.status === 'under_review') && (
-                          <button
-                            onClick={() => openApprovalModal(p)}
-                            className="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            title="เจ้าหน้าที่กองสาธาคลิกเพื่อบันทึกมติที่ประชุมกรรมการ"
-                          >
-                            <Clock className="w-3 h-3" /> บันทึกมติ กก.
-                          </button>
-                        )}
-                        {p.status === 'draft' && (
-                          <button
-                            onClick={() => openApprovalModal(p)}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-medium text-[10px]"
-                          >
-                            ร่างโครงการ
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Action Menu */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {/* Print 13 columns */}
-                          <button
-                            onClick={() => {
-                              setPrintingProject(p);
-                              setPrintMode('single');
-                              setIsPrintOpen(true);
-                            }}
-                            className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="พิมพ์แบบ 13 ช่อง (A4 แนวนอน)"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
-
-                          {/* Edit / Verify (Public Health Officer) */}
-                          <button
-                            onClick={() => {
-                              setEditingProject(p);
-                              setIsBuilderOpen(true);
-                            }}
-                            className="p-1.5 text-slate-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="ตรวจสอบ / แก้ไขโครงการ"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-
-                          {/* Disbursement Tracking */}
-                          <button
-                            onClick={() => setDisbursementProject(p)}
-                            className="p-1.5 text-cyan-700 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:hover:bg-cyan-900 rounded-lg transition-colors font-bold shadow-xs"
-                            title="บันทึกการเบิกจ่าย & ติดตามผลการดำเนินงาน"
-                          >
-                            <Coins className="w-4 h-4" />
-                          </button>
-
-                          {/* Clone */}
-                          <button
-                            onClick={() => handleCloneProject(p)}
-                            className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="คัดลอกเป็นโครงการปี 70"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-
-                          {/* Delete */}
-                          <button
-                            onClick={() => handleDeleteProject(p.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                            title="ลบโครงการ"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        {/* Row 3: Color-Coded Proposing Organization Filter Pills (แยกสีตามหน่วยงานผู้ขอรับงบ) */}
+        {distinctOrgs.length > 0 && (
+          <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+            <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+              <span>🏢 กรองตามหน่วยงาน / กลุ่มองค์กรผู้ขอรับงบ (แยกสีชัดเจน):</span>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+              <button
+                type="button"
+                onClick={() => setSelectedOrgFilter('all')}
+                className={`px-2.5 py-1 rounded-lg whitespace-nowrap font-bold transition-all cursor-pointer border ${
+                  selectedOrgFilter === 'all'
+                    ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                ทุกหน่วยงาน ({distinctOrgs.length})
+              </button>
+              {distinctOrgs.map((org) => {
+                const orgTheme = getOrgColorTheme(org);
+                const count = yearProjects.filter((p) => p.proposingOrg === org).length;
+                const isSelected = selectedOrgFilter === org;
+                return (
+                  <button
+                    key={org}
+                    type="button"
+                    onClick={() => setSelectedOrgFilter(isSelected ? 'all' : org)}
+                    style={{
+                      backgroundColor:
+                        orgTheme.bgHex !== '#ffffff' ? orgTheme.bgHex : '#f8fafc',
+                      borderColor: orgTheme.borderHex,
+                    }}
+                    className={`px-2.5 py-1 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 border text-slate-950 cursor-pointer ${
+                      isSelected
+                        ? 'ring-2 ring-offset-1 ring-emerald-600 font-black shadow-sm scale-[1.02]'
+                        : 'font-semibold opacity-90 hover:opacity-100'
+                    }`}
+                  >
+                    <span>{org}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10 font-bold">
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
+
+        {/* Row 4: Tracking Status Filter Pills & Selection Filter */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-slate-500 font-semibold mr-1">
+              ☑️ กรองผลการติดตามโครงการ:
+            </span>
+            <button
+              type="button"
+              onClick={() => setTrackingFilter('all')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border ${
+                trackingFilter === 'all'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              ทั้งหมด ({yearProjects.length})
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setTrackingFilter(trackingFilter === 'completed' ? 'all' : 'completed')
+              }
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                trackingFilter === 'completed'
+                  ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+              }`}
+            >
+              <span>☑ ดำเนินการแล้ว ({yearCompletedCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setTrackingFilter(trackingFilter === 'extended' ? 'all' : 'extended')
+              }
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                trackingFilter === 'extended'
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+              }`}
+            >
+              <span>⏳ ขอขยายเวลา ({yearExtendedCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setTrackingFilter(trackingFilter === 'refunded' ? 'all' : 'refunded')
+              }
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                trackingFilter === 'refunded'
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                  : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+              }`}
+            >
+              <span>↩️ คืนเงิน ({yearRefundedCount} • ไม่ได้ดำเนินการ {yearNotExecutedCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setTrackingFilter(
+                  trackingFilter === 'selected_only' ? 'all' : 'selected_only'
+                )
+              }
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                trackingFilter === 'selected_only'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                  : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+              }`}
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              <span>เฉพาะชุดที่ติ๊กเลือก ({selectedProjectIds.length})</span>
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Multi-Year Dataset Checkbox Selection & Carry-Forward Action Bar */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white rounded-2xl p-4 border border-emerald-500/30 shadow-lg flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const filteredIds = filteredProjects.map((p) => p.id);
+                const allFilteredSelected =
+                  filteredIds.length > 0 &&
+                  filteredIds.every((id) => selectedProjectIds.includes(id));
+                if (allFilteredSelected) {
+                  setSelectedProjectIds((prev) =>
+                    prev.filter((id) => !filteredIds.includes(id))
+                  );
+                } else {
+                  setSelectedProjectIds((prev) =>
+                    Array.from(new Set([...prev, ...filteredIds]))
+                  );
+                }
+              }}
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow transition-all cursor-pointer"
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>
+                {filteredProjects.length > 0 &&
+                filteredProjects.every((p) => selectedProjectIds.includes(p.id))
+                  ? 'ยกเลิกติ๊กเลือกทั้งหมด'
+                  : `ติ๊กเลือกทั้งหมดในหน้านี้ (${filteredProjects.length})`}
+              </span>
+            </button>
+
+            {selectedProjectIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedProjectIds([])}
+                className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-xl border border-white/15 cursor-pointer"
+              >
+                ล้างที่เลือก ({selectedProjectIds.length})
+              </button>
+            )}
+          </div>
+
+          <div className="text-xs text-emerald-100 flex flex-wrap items-center gap-2">
+            <span>
+              ชุดข้อมูลที่ติ๊กเลือก:{' '}
+              <strong className="text-emerald-300 text-sm">
+                {selectedProjectIds.length}
+              </strong>{' '}
+              โครงการ
+            </span>
+            {selectedProjectIds.length > 0 && (
+              <>
+                <span>•</span>
+                <span>
+                  งบประมาณรวมที่เลือก:{' '}
+                  <strong className="text-amber-300 text-sm">
+                    {projects
+                      .filter((p) => selectedProjectIds.includes(p.id))
+                      .reduce((s, p) => s + p.budgetRequested, 0)
+                      .toLocaleString()}
+                  </strong>{' '}
+                  บาท
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Bulk Actions: Carry-forward to future year + Print Selected + Set Tracking Status */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Bulk Set Tracking Status */}
+          {selectedProjectIds.length > 0 && (
+            <div className="flex items-center gap-1 bg-black/30 px-2.5 py-1 rounded-xl border border-white/10 text-[11px]">
+              <span className="text-slate-300 mr-1">ตั้งค่าที่เลือก:</span>
+              <button
+                type="button"
+                onClick={() => handleBulkSetTracking('completed')}
+                className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg cursor-pointer"
+              >
+                ✓ ดำเนินการแล้ว
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBulkSetTracking('extended')}
+                className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg cursor-pointer"
+              >
+                ⏳ ขอขยายเวลา
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBulkSetTracking('refunded')}
+                className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer"
+              >
+                ↩️ คืนเงิน
+              </button>
+            </div>
+          )}
+
+          {/* Carry-forward selected dataset to future fiscal year */}
+          <div className="flex items-center gap-1.5 bg-indigo-950/90 px-2.5 py-1 rounded-xl border border-indigo-400/40 text-xs">
+            <FolderPlus className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+            <span className="text-indigo-200 font-medium text-[11px]">ดึงชุดที่ติ๊กไปเพิ่มในปีงบ:</span>
+            <select
+              value={targetCarryYear}
+              onChange={(e) => setTargetCarryYear(e.target.value)}
+              className="bg-slate-900 text-white font-bold text-xs px-2 py-1 rounded-lg border border-indigo-400/40"
+            >
+              <option value="2570">ปีงบ 2570</option>
+              <option value="2571">ปีงบ 2571</option>
+              <option value="2572">ปีงบ 2572</option>
+              <option value="2573">ปีงบ 2573</option>
+            </select>
+            <button
+              type="button"
+              disabled={selectedProjectIds.length === 0}
+              onClick={() => handleBulkCarryForwardToYear(targetCarryYear)}
+              className={`px-3 py-1 rounded-lg font-bold text-xs transition-all flex items-center gap-1 ${
+                selectedProjectIds.length > 0
+                  ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow cursor-pointer'
+                  : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+              }`}
+              title="คัดลอกชุดโครงการที่ติ๊กเลือกทั้งหมดไปตั้งเป็นโครงการในปีงบประมาณที่เลือกทันที"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>ดึงไปปี {targetCarryYear} ({selectedProjectIds.length})</span>
+            </button>
+          </div>
+
+          {/* Print / Export Summary Report */}
+          <button
+            type="button"
+            onClick={() => {
+              setPrintingProject(null);
+              setPrintMode('tracking_attachment2');
+              setIsPrintOpen(true);
+            }}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>
+              {selectedProjectIds.length > 0
+                ? `สรุป / พิมพ์ชุดที่เลือก (${selectedProjectIds.length} โครงการ)`
+                : `สรุป / พิมพ์รายงานกรรมการ (เอกสารแนบ 2)`}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* ===================================================================== */}
+      {/* VIEW MODE 1: COLOR-CODED ATTACHMENT 2 TRACKING TABLE (เอกสารแนบ 2)   */}
+      {/* ===================================================================== */}
+      {tableViewMode === 'attachment2_tracking' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-4 sm:p-6 space-y-5">
+          {/* Official Peach Title Banner matching เอกสารแนบ 2 */}
+          <div
+            className="w-full py-3 px-4 rounded-xl text-center border border-[#f4b084] shadow-xs space-y-0.5"
+            style={{ backgroundColor: '#fce4d6' }}
+          >
+            <h2 className="text-base sm:text-lg font-black text-slate-950">
+              สรุปโครงการที่ขอรับการสนับสนุนงบประมาณจากกองทุนหลักประกันสุขภาพเทศบาลตำบลบางเป้า &nbsp;&nbsp;(เอกสารแนบ 2)
+            </h2>
+            <p className="text-sm sm:text-base font-bold text-slate-900">
+              ประจำปีงบประมาณ {selectedYear === 'all' ? 'ทุกปีงบประมาณ' : selectedYear}
+            </p>
+          </div>
+
+          {/* Subheader Bar: Count & Quick Legend */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-3">
+              <span className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100">
+                จำนวน {filteredProjects.length} โครงการ
+              </span>
+              <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
+                งบประมาณรวม {filteredProjects.reduce((s, p) => s + p.budgetRequested, 0).toLocaleString()} บาท
+              </span>
+            </div>
+
+            <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <span>💡 คลิกช่องติ๊กด้านซ้ายเพื่อเลือกชุดข้อมูล หรือคลิกช่อง ☑ ด้านขวาเพื่อบันทึกผลการติดตาม</span>
+            </div>
+          </div>
+
+          {filteredProjects.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 space-y-3">
+              <FileText className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-medium">ไม่พบโครงการตามตัวกรองที่เลือก</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(filteredGroupedByCategory).map(([catNumStr, projectsInCat]) => {
+                const cNum = Number(catNumStr);
+                const catTheme = getCategoryColorTheme(cNum);
+                const catMeta = NHSO_FUND_CATEGORIES.find((c) => c.number === cNum);
+                const subtotal = projectsInCat.reduce((s, p) => s + p.budgetRequested, 0);
+                const compCount = projectsInCat.filter((p) => isProjectTrackingCompleted(p)).length;
+                const extCount = projectsInCat.filter((p) => isProjectTrackingExtended(p)).length;
+                const refCount = projectsInCat.filter((p) => isProjectTrackingRefunded(p)).length;
+                const allCatSelected =
+                  projectsInCat.length > 0 &&
+                  projectsInCat.every((p) => selectedProjectIds.includes(p.id));
+
+                return (
+                  <div key={cNum} className="space-y-2">
+                    {/* Category Colored Banner + Select Category Button */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div
+                        className="inline-flex items-center gap-3 py-1.5 px-3.5 rounded-lg font-black text-slate-950 text-sm shadow-2xs border"
+                        style={{
+                          backgroundColor: catTheme.headerHex,
+                          borderColor: catTheme.borderHex,
+                        }}
+                      >
+                        <span>
+                          ประเภทที่ {cNum} &nbsp;&nbsp;&nbsp; จำนวน &nbsp;{projectsInCat.length}&nbsp; โครงการ
+                        </span>
+                        {catMeta && (
+                          <span className="text-xs font-semibold text-slate-800 hidden md:inline">
+                            ({catMeta.shortTitle})
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectCategory(projectsInCat)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={allCatSelected}
+                          readOnly
+                          className="w-3.5 h-3.5 accent-emerald-600 rounded pointer-events-none"
+                        />
+                        <span>
+                          {allCatSelected
+                            ? `ยกเลิกเลือกประเภทที่ ${cNum}`
+                            : `ติ๊กเลือกทั้งประเภทที่ ${cNum} (${projectsInCat.length})`}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Color-Coded Attachment 2 Table */}
+                    <div className="overflow-x-auto rounded-lg border border-black shadow-xs">
+                      <table className="w-full border-collapse text-xs sm:text-sm text-slate-950 bg-white">
+                        <thead>
+                          <tr
+                            className="font-bold text-center text-slate-950"
+                            style={{ backgroundColor: catTheme.headerHex }}
+                          >
+                            <th
+                              rowSpan={2}
+                              className="border border-black py-2 px-2 w-10 text-center align-middle"
+                              title="ติ๊กเลือกทั้งประเภทนี้"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={allCatSelected}
+                                onChange={() => toggleSelectCategory(projectsInCat)}
+                                className="w-4 h-4 accent-slate-900 rounded cursor-pointer"
+                              />
+                            </th>
+                            <th rowSpan={2} className="border border-black py-2 px-2 w-14 text-center align-middle">
+                              ลำดับที่
+                            </th>
+                            <th rowSpan={2} className="border border-black py-2 px-3 text-center align-middle">
+                              ชื่อโครงการ
+                            </th>
+                            <th rowSpan={2} className="border border-black py-2 px-3 w-48 text-center align-middle">
+                              ผู้ขอรับงบ
+                            </th>
+                            <th rowSpan={2} className="border border-black py-2 px-2 w-28 text-center align-middle leading-tight">
+                              งบประมาณ<br />(บาท)
+                            </th>
+                            <th colSpan={3} className="border border-black py-1.5 px-2 text-center align-middle">
+                              ผลการติดตามโครงการ (คลิกติ๊ก ☑ ได้ทันที)
+                            </th>
+                            <th rowSpan={2} className="border border-black py-2 px-2 w-28 text-center align-middle">
+                              จัดการ / พิมพ์
+                            </th>
+                          </tr>
+                          <tr
+                            className="font-bold text-center text-slate-950 text-xs"
+                            style={{ backgroundColor: catTheme.headerHex }}
+                          >
+                            <th className="border border-black py-1.5 px-2 w-28">ดำเนินการแล้ว</th>
+                            <th className="border border-black py-1.5 px-2 w-28">ขอขยายเวลา</th>
+                            <th className="border border-black py-1.5 px-2 w-28">คืนเงิน</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {projectsInCat.map((p, idx) => {
+                            const orgTheme = getOrgColorTheme(p.proposingOrg);
+                            const isSelected = selectedProjectIds.includes(p.id);
+                            const isComp = isProjectTrackingCompleted(p);
+                            const isExt = isProjectTrackingExtended(p);
+                            const isRef = isProjectTrackingRefunded(p);
+
+                            return (
+                              <tr
+                                key={p.id}
+                                className={`transition-colors ${
+                                  isSelected ? 'bg-emerald-50/90' : 'bg-white hover:bg-slate-50'
+                                }`}
+                              >
+                                {/* Row Selection Checkbox */}
+                                <td
+                                  onClick={() => toggleSelectProject(p.id)}
+                                  className="border border-black py-2 px-2 text-center align-middle cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {}}
+                                    className="w-4 h-4 accent-emerald-600 rounded cursor-pointer pointer-events-none"
+                                  />
+                                </td>
+
+                                {/* Order Number */}
+                                <td className="border border-black py-2 px-2 text-center font-semibold align-middle">
+                                  {p.orderNumber || idx + 1}
+                                </td>
+
+                                {/* Project Name */}
+                                <td className="border border-black py-2 px-3 align-middle">
+                                  <div className="font-semibold text-slate-950 leading-snug">
+                                    {p.projectName}
+                                  </div>
+                                </td>
+
+                                {/* Proposing Organization (Color-coded matching เอกสารแนบ 2) */}
+                                <td
+                                  onClick={() =>
+                                    setSelectedOrgFilter(
+                                      selectedOrgFilter === p.proposingOrg ? 'all' : p.proposingOrg
+                                    )
+                                  }
+                                  style={{ backgroundColor: orgTheme.bgHex }}
+                                  className="border border-black py-2 px-3 font-medium text-slate-950 align-middle cursor-pointer hover:brightness-95 transition-all"
+                                  title="คลิกเพื่อกรองเฉพาะหน่วยงานนี้"
+                                >
+                                  {p.proposingOrg}
+                                </td>
+
+                                {/* Budget Requested */}
+                                <td className="border border-black py-2 px-3 text-right font-bold text-slate-950 align-middle">
+                                  {p.budgetRequested.toLocaleString()}
+                                </td>
+
+                                {/* Tracking Column 1: ดำเนินการแล้ว */}
+                                <td
+                                  onClick={() =>
+                                    handleToggleProjectTracking(p.id, 'trackingCompleted')
+                                  }
+                                  className="border border-black py-2 px-2 text-center align-middle cursor-pointer hover:bg-emerald-50/70 transition-colors select-none"
+                                  title="คลิกเพื่อติ๊ก/ยกเลิก 'ดำเนินการแล้ว'"
+                                >
+                                  {isComp ? (
+                                    <span className="inline-flex items-center justify-center w-5 h-5 bg-[#1e1b18] text-white rounded-[4px] text-xs font-bold shadow-xs">
+                                      ✓
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block w-5 h-5 rounded-[4px] border border-dashed border-slate-300 hover:border-slate-500" />
+                                  )}
+                                </td>
+
+                                {/* Tracking Column 2: ขอขยายเวลา */}
+                                <td
+                                  onClick={() =>
+                                    handleToggleProjectTracking(p.id, 'trackingExtended')
+                                  }
+                                  className="border border-black py-2 px-2 text-center align-middle cursor-pointer hover:bg-amber-50/70 transition-colors select-none"
+                                  title="คลิกเพื่อติ๊ก/ยกเลิก 'ขอขยายเวลา'"
+                                >
+                                  {isExt ? (
+                                    <span className="inline-flex items-center justify-center w-5 h-5 bg-[#1e1b18] text-white rounded-[4px] text-xs font-bold shadow-xs">
+                                      ✓
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block w-5 h-5 rounded-[4px] border border-dashed border-slate-300 hover:border-slate-500" />
+                                  )}
+                                </td>
+
+                                {/* Tracking Column 3: คืนเงิน */}
+                                <td
+                                  onClick={() =>
+                                    handleToggleProjectTracking(p.id, 'trackingRefunded')
+                                  }
+                                  className="border border-black py-2 px-2 text-center align-middle cursor-pointer hover:bg-rose-50/70 transition-colors select-none"
+                                  title="คลิกเพื่อติ๊ก/ยกเลิก 'คืนเงิน'"
+                                >
+                                  {isRef ? (
+                                    <span className="inline-flex items-center justify-center w-5 h-5 bg-[#1e1b18] text-white rounded-[4px] text-xs font-bold shadow-xs">
+                                      ✓
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block w-5 h-5 rounded-[4px] border border-dashed border-slate-300 hover:border-slate-500" />
+                                  )}
+                                </td>
+
+                                {/* Quick Action Buttons */}
+                                <td className="border border-black py-1.5 px-1.5 text-center align-middle">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setPrintingProject(p);
+                                        setPrintMode('single');
+                                        setIsPrintOpen(true);
+                                      }}
+                                      className="p-1 text-slate-700 hover:text-emerald-700 hover:bg-emerald-100 rounded transition-colors cursor-pointer"
+                                      title="พิมพ์แบบเสนอโครงการ 13 ช่อง (A4 แนวนอน)"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingProject(p);
+                                        setIsBuilderOpen(true);
+                                      }}
+                                      className="p-1 text-slate-700 hover:text-amber-700 hover:bg-amber-100 rounded transition-colors cursor-pointer"
+                                      title="แก้ไขรายละเอียดโครงการ"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCloneProject(p, targetCarryYear)}
+                                      className="p-1 text-slate-700 hover:text-indigo-700 hover:bg-indigo-100 rounded transition-colors cursor-pointer"
+                                      title={`คัดลอกโครงการนี้ไปปี ${targetCarryYear}`}
+                                    >
+                                      <Copy className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+
+                          {/* Category Colored Subtotal Row */}
+                          <tr
+                            className="font-black text-slate-950"
+                            style={{ backgroundColor: catTheme.headerHex }}
+                          >
+                            <td className="border border-black py-2 px-2 text-center"></td>
+                            <td className="border border-black py-2 px-2 text-center">รวม</td>
+                            <td className="border border-black py-2 px-3 text-center">
+                              {projectsInCat.length} โครงการ
+                            </td>
+                            <td className="border border-black py-2 px-3"></td>
+                            <td className="border border-black py-2 px-3 text-right">
+                              {subtotal.toLocaleString()}
+                            </td>
+                            <td className="border border-black py-2 px-2 text-center">
+                              {compCount > 0 ? compCount : '-'}
+                            </td>
+                            <td className="border border-black py-2 px-2 text-center">
+                              {extCount > 0 ? extCount : '-'}
+                            </td>
+                            <td className="border border-black py-2 px-2 text-center">
+                              {refCount > 0 ? `${refCount} โครงการ` : '-'}
+                            </td>
+                            <td className="border border-black py-2 px-2"></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Bottom Grand Total Summary Table (Royal Blue #4472c4 & Green #70ad47 matching เอกสารแนบ 2) */}
+              <div className="pt-2 overflow-x-auto">
+                <table className="w-full border-collapse border border-black text-xs sm:text-sm">
+                  <tbody>
+                    <tr
+                      className="font-bold text-white text-center"
+                      style={{ backgroundColor: '#4472c4' }}
+                    >
+                      <td
+                        rowSpan={2}
+                        className="border border-black py-2.5 px-3 w-24 align-middle font-black"
+                      >
+                        รวมทั้งหมด
+                      </td>
+                      <td className="border border-black py-2 px-3 align-middle">
+                        จำนวนโครงการ
+                      </td>
+                      <td className="border border-black py-2 px-3 w-48 align-middle"></td>
+                      <td className="border border-black py-2 px-3 w-28 align-middle">
+                        งบประมาณ
+                      </td>
+                      <td className="border border-black py-2 px-2 w-28 align-middle">
+                        ดำเนินการแล้ว
+                      </td>
+                      <td className="border border-black py-2 px-2 w-28 align-middle">
+                        ขอขยายเวลา
+                      </td>
+                      <td className="border border-black py-2 px-2 w-28 align-middle">
+                        ไม่ได้ดำเนินการ
+                      </td>
+                      <td className="border border-black py-2 px-2 w-28 align-middle">
+                        ที่ติ๊กเลือกไว้
+                      </td>
+                    </tr>
+                    <tr
+                      className="font-black text-white text-center text-sm"
+                      style={{ backgroundColor: '#70ad47' }}
+                    >
+                      <td className="border border-black py-2 px-3 align-middle">
+                        {filteredProjects.length} โครงการ
+                      </td>
+                      <td className="border border-black py-2 px-3 align-middle"></td>
+                      <td className="border border-black py-2 px-3 text-right align-middle">
+                        {filteredProjects
+                          .reduce((s, p) => s + p.budgetRequested, 0)
+                          .toLocaleString()}
+                      </td>
+                      <td className="border border-black py-2 px-2 align-middle">
+                        {filteredProjects.filter((p) => isProjectTrackingCompleted(p)).length}
+                      </td>
+                      <td className="border border-black py-2 px-2 align-middle">
+                        {filteredProjects.filter((p) => isProjectTrackingExtended(p)).length}
+                      </td>
+                      <td className="border border-black py-2 px-2 align-middle">
+                        {
+                          filteredProjects.filter(
+                            (p) =>
+                              !isProjectTrackingCompleted(p) &&
+                              !isProjectTrackingExtended(p) &&
+                              isProjectTrackingRefunded(p)
+                          ).length
+                        }
+                      </td>
+                      <td className="border border-black py-2 px-2 align-middle bg-emerald-800">
+                        {selectedProjectIds.length} โครงการ
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* VIEW MODE 2: DETAILED MANAGEMENT & DISBURSEMENT TABLE                 */}
+      {/* ===================================================================== */}
+      {tableViewMode === 'detailed_management' && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                รายการโครงการ ({filteredProjects.length} โครงการ)
+              </h3>
+              <span className="text-xs text-slate-500">
+                รวมงบที่ขอ:{' '}
+                <strong className="text-emerald-600">
+                  {filteredProjects.reduce((s, p) => s + p.budgetRequested, 0).toLocaleString()}
+                </strong>{' '}
+                บาท
+              </span>
+            </div>
+
+            <div className="text-xs text-slate-500">
+              แสดงข้อมูลปีงบ: <strong>{selectedYear === 'all' ? 'ทุกปี' : selectedYear}</strong>
+            </div>
+          </div>
+
+          {filteredProjects.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 space-y-3">
+              <FileText className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-medium">ไม่พบโครงการตามเงื่อนไขที่เลือก</p>
+              <p className="text-xs text-slate-500">
+                คุณสามารถสร้างโครงการใหม่ หรือคัดลอกจากแม่แบบปี 2569 ได้ทันที
+              </p>
+              <button
+                onClick={() => {
+                  setEditingProject(null);
+                  setIsBuilderOpen(true);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow transition-colors inline-flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> สร้างโครงการใหม่
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-3 px-2 w-10 text-center">เลือก</th>
+                    <th className="py-3 px-2 w-12 text-center">#</th>
+                    <th className="py-3 px-3">ชื่อโครงการ / แผนงาน</th>
+                    <th className="py-3 px-3 w-44">ผู้ขอรับงบ / ผู้รับผิดชอบ</th>
+                    <th className="py-3 px-3 w-28">ประเภท</th>
+                    <th className="py-3 px-3 w-28 text-right">งบที่ขอ (บาท)</th>
+                    <th className="py-3 px-3 w-28 text-right">เบิกจ่ายแล้ว</th>
+                    <th className="py-3 px-3 w-36 text-center">ผลการติดตาม</th>
+                    <th className="py-3 px-3 w-32 text-center">มติกรรมการ</th>
+                    <th className="py-3 px-3 w-40 text-center">เมนูจัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredProjects.map((p, idx) => {
+                    const cat = NHSO_FUND_CATEGORIES.find((c) => c.number === (p.categoryNumber || 1));
+                    const catTheme = getCategoryColorTheme(p.categoryNumber || 1);
+                    const orgTheme = getOrgColorTheme(p.proposingOrg);
+                    const isSelected = selectedProjectIds.includes(p.id);
+                    const approvedAmount =
+                      p.budgetApproved && p.budgetApproved > 0
+                        ? p.budgetApproved
+                        : p.budgetRequested;
+                    const disbursed = p.disbursedAmount || 0;
+                    const percent =
+                      approvedAmount > 0 ? Math.round((disbursed / approvedAmount) * 100) : 0;
+
+                    return (
+                      <tr
+                        key={p.id}
+                        className={`transition-colors ${
+                          isSelected
+                            ? 'bg-emerald-50/70 dark:bg-emerald-950/30'
+                            : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                        }`}
+                      >
+                        <td
+                          onClick={() => toggleSelectProject(p.id)}
+                          className="py-3 px-2 text-center cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-4 h-4 accent-emerald-600 rounded pointer-events-none"
+                          />
+                        </td>
+
+                        <td className="py-3 px-2 text-center font-bold text-slate-400">
+                          {p.orderNumber || idx + 1}
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900 dark:text-slate-100 line-clamp-2">
+                            {p.projectName}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                            <span>{p.projectCode || `กองทุน-${p.fiscalYear.slice(-2)}`}</span>
+                            <span>•</span>
+                            <span>ปีงบ {p.fiscalYear}</span>
+                            {p.activityGroups && p.activityGroups.length > 1 && (
+                              <>
+                                <span>•</span>
+                                <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/60 dark:border-indigo-800/60 text-[10px]">
+                                  📋 {p.activityGroups.length} กิจกรรม
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <span
+                            style={{
+                              backgroundColor:
+                                orgTheme.bgHex !== '#ffffff' ? orgTheme.bgHex : undefined,
+                            }}
+                            className="inline-block px-2 py-0.5 rounded font-semibold text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700"
+                          >
+                            {p.proposingOrg}
+                          </span>
+                          <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                            {p.responsiblePerson}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <span
+                            style={{
+                              backgroundColor: catTheme.headerHex,
+                              borderColor: catTheme.borderHex,
+                            }}
+                            className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-950 border"
+                            title={cat?.title}
+                          >
+                            ประเภทที่ {p.categoryNumber || 1}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-3 text-right font-bold text-slate-900 dark:text-slate-100">
+                          {p.budgetRequested.toLocaleString()}
+                        </td>
+
+                        {/* Disbursed Amount with Interactive Button */}
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setDisbursementProject(p)}
+                            className="group/disb text-right block w-full p-1 -m-1 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors cursor-pointer"
+                            title="คลิกเพื่อบันทึกการเบิกจ่าย / ติดตามผลโครงการนี้"
+                          >
+                            {disbursed > 0 ? (
+                              <div>
+                                <div className="font-bold text-cyan-600 dark:text-cyan-400 group-hover/disb:underline">
+                                  {disbursed.toLocaleString()}
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  {percent}% {disbursed >= approvedAmount && '✓ ครบ'}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-cyan-600 dark:text-cyan-400 font-semibold group-hover/disb:underline flex items-center justify-end gap-1">
+                                <Coins className="w-3 h-3 inline" /> บันทึกเบิก
+                              </span>
+                            )}
+                          </button>
+                        </td>
+
+                        {/* Quick Tracking Pills */}
+                        <td className="py-3 px-2 text-center">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleProjectTracking(p.id, 'trackingCompleted')
+                              }
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
+                                isProjectTrackingCompleted(p)
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-slate-100 text-slate-400 border-slate-200'
+                              }`}
+                              title="ดำเนินการแล้ว"
+                            >
+                              ✓ ดำเนินการ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleProjectTracking(p.id, 'trackingExtended')
+                              }
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
+                                isProjectTrackingExtended(p)
+                                  ? 'bg-amber-500 text-white border-amber-500'
+                                  : 'bg-slate-100 text-slate-400 border-slate-200'
+                              }`}
+                              title="ขอขยายเวลา"
+                            >
+                              ⏳ ขยาย
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleProjectTracking(p.id, 'trackingRefunded')
+                              }
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
+                                isProjectTrackingRefunded(p)
+                                  ? 'bg-rose-600 text-white border-rose-600'
+                                  : 'bg-slate-100 text-slate-400 border-slate-200'
+                              }`}
+                              title="คืนเงิน"
+                            >
+                              ↩️ คืนเงิน
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Committee Resolution / Status */}
+                        <td className="py-3 px-3 text-center">
+                          {p.status === 'completed' && (
+                            <button
+                              onClick={() => openApprovalModal(p)}
+                              className="px-2.5 py-1 bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 hover:bg-purple-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                              <span>อนุมัติ & เสร็จสิ้น</span>
+                            </button>
+                          )}
+                          {p.status === 'approved' && (
+                            <button
+                              onClick={() => openApprovalModal(p)}
+                              className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            >
+                              <Check className="w-3 h-3" /> อนุมัติเต็ม
+                            </button>
+                          )}
+                          {p.status === 'approved_reduced' && (
+                            <button
+                              onClick={() => openApprovalModal(p)}
+                              className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            >
+                              <Check className="w-3 h-3" /> อนุมัติปรับลด
+                            </button>
+                          )}
+                          {p.status === 'rejected' && (
+                            <button
+                              onClick={() => openApprovalModal(p)}
+                              className="px-2.5 py-1 bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 hover:bg-red-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            >
+                              <X className="w-3 h-3" /> ไม่อนุมัติ
+                            </button>
+                          )}
+                          {(p.status === 'submitted' || p.status === 'under_review') && (
+                            <button
+                              onClick={() => openApprovalModal(p)}
+                              className="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
+                            >
+                              <Clock className="w-3 h-3" /> บันทึกมติ กก.
+                            </button>
+                          )}
+                          {p.status === 'draft' && (
+                            <button
+                              onClick={() => openApprovalModal(p)}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-medium text-[10px]"
+                            >
+                              ร่างโครงการ
+                            </button>
+                          )}
+                        </td>
+
+                        {/* Action Menu */}
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => {
+                                setPrintingProject(p);
+                                setPrintMode('single');
+                                setIsPrintOpen(true);
+                              }}
+                              className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              title="พิมพ์แบบ 13 ช่อง (A4 แนวนอน)"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEditingProject(p);
+                                setIsBuilderOpen(true);
+                              }}
+                              className="p-1.5 text-slate-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              title="ตรวจสอบ / แก้ไขโครงการ"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => setDisbursementProject(p)}
+                              className="p-1.5 text-cyan-700 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/60 dark:hover:bg-cyan-900 rounded-lg transition-colors font-bold shadow-xs"
+                              title="บันทึกการเบิกจ่าย & ติดตามผลการดำเนินงาน"
+                            >
+                              <Coins className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => handleCloneProject(p, targetCarryYear)}
+                              className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              title={`คัดลอกเป็นโครงการปี ${targetCarryYear}`}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteProject(p.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                              title="ลบโครงการ"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Committee Approval / Resolution Modal */}
       {approvalModalProject && (
@@ -1398,6 +2455,9 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         allProjects={projects}
         settings={fundSettings}
         defaultMode={printMode}
+        targetFiscalYear={selectedYear}
+        selectedProjectIds={selectedProjectIds}
+        onToggleTracking={handleToggleProjectTracking}
       />
 
       {/* Disbursement & Implementation Tracking Modal */}

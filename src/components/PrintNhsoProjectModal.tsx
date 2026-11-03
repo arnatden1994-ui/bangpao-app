@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -6,9 +6,22 @@ import {
   FileText,
   Table,
   FileSpreadsheet,
+  CheckSquare,
+  ListChecks,
 } from 'lucide-react';
 import { NhsoProject, NhsoFundSettings, NHSO_FUND_CATEGORIES, NhsoActivityGroup, NhsoBudgetLine } from '../types/index.ts';
-import { exportSingleProjectToMasterXlsx, exportSummaryToMasterXlsx } from '../utils/exportNhsoXlsx.ts';
+import {
+  exportSingleProjectToMasterXlsx,
+  exportSummaryToMasterXlsx,
+  exportAttachment2ToMasterXlsx,
+} from '../utils/exportNhsoXlsx.ts';
+import {
+  getCategoryColorTheme,
+  getOrgColorTheme,
+  isProjectTrackingCompleted,
+  isProjectTrackingExtended,
+  isProjectTrackingRefunded,
+} from '../utils/nhsoThemeAndTracking.ts';
 
 interface PrintNhsoProjectModalProps {
   isOpen: boolean;
@@ -16,7 +29,13 @@ interface PrintNhsoProjectModalProps {
   project?: NhsoProject | null;
   allProjects?: NhsoProject[];
   settings: NhsoFundSettings;
-  defaultMode?: 'single' | 'summary';
+  defaultMode?: 'single' | 'summary' | 'tracking_attachment2';
+  targetFiscalYear?: string;
+  selectedProjectIds?: string[];
+  onToggleTracking?: (
+    projectId: string,
+    field: 'trackingCompleted' | 'trackingExtended' | 'trackingRefunded'
+  ) => void;
 }
 
 const escapeHtml = (str?: string) => {
@@ -70,10 +89,25 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
   allProjects = [],
   settings,
   defaultMode = 'single',
+  targetFiscalYear,
+  selectedProjectIds = [],
+  onToggleTracking,
 }) => {
-  const [printMode, setPrintMode] = useState<'single' | 'summary'>(
-    project ? defaultMode : 'summary'
+  const [printMode, setPrintMode] = useState<'single' | 'summary' | 'tracking_attachment2'>(
+    project ? defaultMode : defaultMode === 'single' ? 'tracking_attachment2' : defaultMode
   );
+  const [onlySelectedScope, setOnlySelectedScope] = useState<boolean>(
+    selectedProjectIds.length > 0
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      setPrintMode(
+        project ? defaultMode : defaultMode === 'single' ? 'tracking_attachment2' : defaultMode
+      );
+      setOnlySelectedScope(selectedProjectIds.length > 0);
+    }
+  }, [isOpen, project, defaultMode, selectedProjectIds.length]);
 
   if (!isOpen) return null;
 
@@ -82,10 +116,26 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
   };
 
   const currentProject = project || allProjects[0];
-  const targetYear = currentProject?.fiscalYear || settings.fiscalYear || '2570';
+  const targetYear =
+    targetFiscalYear && targetFiscalYear !== 'all'
+      ? targetFiscalYear
+      : currentProject?.fiscalYear || settings.fiscalYear || '2570';
 
-  const summaryProjects = allProjects.filter((p) => p.fiscalYear === targetYear);
+  const yearMatchedProjects = allProjects
+    .filter((p) => (targetFiscalYear === 'all' ? true : p.fiscalYear === targetYear))
+    .sort((a, b) => (a.orderNumber || 999) - (b.orderNumber || 999));
+
+  const summaryProjects =
+    onlySelectedScope && selectedProjectIds.length > 0
+      ? yearMatchedProjects.filter((p) => selectedProjectIds.includes(p.id))
+      : yearMatchedProjects;
+
   const totalSummaryBudget = summaryProjects.reduce((sum, p) => sum + p.budgetRequested, 0);
+  const grandTotalCompleted = summaryProjects.filter((p) => isProjectTrackingCompleted(p)).length;
+  const grandTotalExtended = summaryProjects.filter((p) => isProjectTrackingExtended(p)).length;
+  const grandTotalNotExecuted = summaryProjects.filter(
+    (p) => !isProjectTrackingCompleted(p) && !isProjectTrackingExtended(p) && isProjectTrackingRefunded(p)
+  ).length;
 
   const groupedByCategory: Record<number, NhsoProject[]> = {};
   for (let c = 1; c <= 8; c++) {
@@ -347,6 +397,109 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
       `;
     }
 
+    if (printMode === 'tracking_attachment2') {
+      return `
+        <div style="background-color:#fce4d6; padding:6px 10px; text-align:center; margin-bottom:10px; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
+          <div style="font-size:16pt; font-weight:bold; color:#000000;">
+            สรุปโครงการที่ขอรับการสนับสนุนงบประมาณจากกองทุนหลักประกันสุขภาพเทศบาลตำบลบางเป้า &nbsp;&nbsp;(เอกสารแนบ 2)
+          </div>
+          <div style="font-size:16pt; font-weight:bold; color:#000000;">
+            ประจำปีงบประมาณ ${targetYear}
+          </div>
+        </div>
+        <div style="text-align:left; font-size:15pt; font-weight:bold; margin-bottom:6px; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
+          จำนวน ${summaryProjects.length} โครงการ
+        </div>
+
+        ${Object.entries(groupedByCategory)
+          .map(([catNumStr, projectsInCat]) => {
+            const cNum = Number(catNumStr);
+            const catTheme = getCategoryColorTheme(cNum);
+            const subtotal = projectsInCat.reduce((s, p) => s + p.budgetRequested, 0);
+            const compCount = projectsInCat.filter((p) => isProjectTrackingCompleted(p)).length;
+            const extCount = projectsInCat.filter((p) => isProjectTrackingExtended(p)).length;
+            const refCount = projectsInCat.filter((p) => isProjectTrackingRefunded(p)).length;
+
+            return `
+              <div style="margin-top:10px; margin-bottom:6px; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
+                <div style="display:inline-block; min-width:60%; background-color:${catTheme.headerHex}; padding:3px 10px; font-size:15pt; font-weight:bold; color:#000000;">
+                  ประเภทที่ ${cNum} &nbsp;&nbsp;&nbsp;&nbsp; จำนวน &nbsp;${projectsInCat.length}&nbsp; โครงการ
+                </div>
+              </div>
+              <table style="border-collapse:collapse; width:100%; font-size:14.5pt; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif; margin-bottom:12px;">
+                <thead>
+                  <tr style="text-align:center; font-weight:bold; background-color:${catTheme.headerHex}; color:#000000;">
+                    <th rowspan="2" style="border:1pt solid #000; padding:4px; width:5.5%;">ลำดับที่</th>
+                    <th rowspan="2" style="border:1pt solid #000; padding:4px; width:44.5%;">ชื่อโครงการ</th>
+                    <th rowspan="2" style="border:1pt solid #000; padding:4px; width:14.0%;">ผู้ขอรับงบ</th>
+                    <th rowspan="2" style="border:1pt solid #000; padding:4px; width:8.5%;">งบประมาณ<br/>(บาท)</th>
+                    <th colspan="3" style="border:1pt solid #000; padding:4px; width:27.5%;">ผลการติดตามโครงการ</th>
+                  </tr>
+                  <tr style="text-align:center; font-weight:bold; background-color:${catTheme.headerHex}; color:#000000;">
+                    <th style="border:1pt solid #000; padding:3px; width:9.2%;">ดำเนินการแล้ว</th>
+                    <th style="border:1pt solid #000; padding:3px; width:9.2%;">ขอขยายเวลา</th>
+                    <th style="border:1pt solid #000; padding:3px; width:9.1%;">คืนเงิน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${projectsInCat
+                    .map((p, idx) => {
+                      const orgTheme = getOrgColorTheme(p.proposingOrg);
+                      const isComp = isProjectTrackingCompleted(p);
+                      const isExt = isProjectTrackingExtended(p);
+                      const isRef = isProjectTrackingRefunded(p);
+                      return `
+                        <tr>
+                          <td style="border:1pt solid #000; padding:3px 4px; text-align:center;">${p.orderNumber || idx + 1}</td>
+                          <td style="border:1pt solid #000; padding:3px 6px;">${escapeHtml(p.projectName)}</td>
+                          <td style="border:1pt solid #000; padding:3px 6px; background-color:${orgTheme.bgHex};">${escapeHtml(p.proposingOrg)}</td>
+                          <td style="border:1pt solid #000; padding:3px 6px; text-align:right;">${p.budgetRequested.toLocaleString()}</td>
+                          <td style="border:1pt solid #000; padding:3px 4px; text-align:center; font-weight:bold; font-size:15pt;">${isComp ? '☑' : ''}</td>
+                          <td style="border:1pt solid #000; padding:3px 4px; text-align:center; font-weight:bold; font-size:15pt;">${isExt ? '☑' : ''}</td>
+                          <td style="border:1pt solid #000; padding:3px 4px; text-align:center; font-weight:bold; font-size:15pt;">${isRef ? '☑' : ''}</td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                  <tr style="font-weight:bold; background-color:${catTheme.headerHex}; color:#000000;">
+                    <td style="border:1pt solid #000; padding:3px 4px; text-align:center;">รวม</td>
+                    <td style="border:1pt solid #000; padding:3px 6px; text-align:center;">${projectsInCat.length} โครงการ</td>
+                    <td style="border:1pt solid #000; padding:3px 4px;"></td>
+                    <td style="border:1pt solid #000; padding:3px 6px; text-align:right;">${subtotal.toLocaleString()}</td>
+                    <td style="border:1pt solid #000; padding:3px 4px; text-align:center;">${compCount > 0 ? compCount : '-'}</td>
+                    <td style="border:1pt solid #000; padding:3px 4px; text-align:center;">${extCount > 0 ? extCount : '-'}</td>
+                    <td style="border:1pt solid #000; padding:3px 4px; text-align:center;">${refCount > 0 ? `${refCount} โครงการ` : '-'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            `;
+          })
+          .join('')}
+
+        <table style="border-collapse:collapse; width:100%; font-size:14.5pt; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif; margin-top:14px;">
+          <thead>
+            <tr style="text-align:center; font-weight:bold; background-color:#4472c4; color:#ffffff;">
+              <th rowspan="2" style="border:1pt solid #000; padding:6px 4px; width:5.5%; vertical-align:middle;">รวมทั้งหมด</th>
+              <th style="border:1pt solid #000; padding:4px; width:44.5%;">จำนวนโครงการ</th>
+              <th style="border:1pt solid #000; padding:4px; width:14.0%;"></th>
+              <th style="border:1pt solid #000; padding:4px; width:8.5%;">งบประมาณ</th>
+              <th style="border:1pt solid #000; padding:4px; width:9.2%;">ดำเนินการแล้ว</th>
+              <th style="border:1pt solid #000; padding:4px; width:9.2%;">ขอขยายเวลา</th>
+              <th style="border:1pt solid #000; padding:4px; width:9.1%;">ไม่ได้ดำเนินการ</th>
+            </tr>
+            <tr style="text-align:center; font-weight:bold; background-color:#70ad47; color:#ffffff;">
+              <td style="border:1pt solid #000; padding:4px;">${summaryProjects.length} โครงการ</td>
+              <td style="border:1pt solid #000; padding:4px;"></td>
+              <td style="border:1pt solid #000; padding:4px;">${totalSummaryBudget.toLocaleString()}</td>
+              <td style="border:1pt solid #000; padding:4px;">${grandTotalCompleted}</td>
+              <td style="border:1pt solid #000; padding:4px;">${grandTotalExtended}</td>
+              <td style="border:1pt solid #000; padding:4px;">${grandTotalNotExecuted}</td>
+            </tr>
+          </thead>
+        </table>
+      `;
+    }
+
     // Summary Mode (Sheet 1 replica)
     return `
       <div style="text-align:center; margin-bottom:10px; font-family:'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
@@ -427,6 +580,8 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
     const isSingle = printMode === 'single';
     const filename = isSingle
       ? `${currentProject.orderNumber || 1}_${(currentProject.projectName || 'โครงการ_สปสช').replace(/[\\/:*?"<>|]/g, '_')}.doc`
+      : printMode === 'tracking_attachment2'
+      ? `สรุปผลการติดตามโครงการ_เอกสารแนบ2_ปี${targetYear}.doc`
       : `แบบสรุปภาพรวม_สปสช_${targetYear}.doc`;
 
     const htmlBody = generateExportHtml(false);
@@ -492,6 +647,15 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
         settings,
         filename,
       });
+    } else if (printMode === 'tracking_attachment2') {
+      const filename = `สรุปผลการติดตามโครงการ_เอกสารแนบ2_ปี${targetYear}.xlsx`;
+      await exportAttachment2ToMasterXlsx({
+        targetYear,
+        summaryProjects,
+        groupedByCategory,
+        totalSummaryBudget,
+        filename,
+      });
     } else {
       const filename = `แบบสรุปภาพรวม_สปสช_${targetYear}.xlsx`;
       await exportSummaryToMasterXlsx({
@@ -533,12 +697,40 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    แบบฟอร์ม 13 ช่องตรงตามประกาศ สปสช. • รองรับการพิมพ์ตรงขนาด A4 และส่งออกไฟล์ Word (.doc) / Excel (.xlsx)
+                    แบบฟอร์ม 13 ช่อง & เอกสารแนบ 2 แยกสีตรงตามต้นฉบับ • รองรับการพิมพ์ตรงขนาด A4 และส่งออกไฟล์ Word (.doc) / Excel (.xlsx)
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
+                {/* Scope Toggle when user selected specific rows */}
+                {printMode !== 'single' && selectedProjectIds.length > 0 && (
+                  <div className="flex bg-slate-800 rounded-xl p-0.5 border border-emerald-500/40 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setOnlySelectedScope(true)}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        onlySelectedScope
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      ☑ เฉพาะที่ติ๊กเลือก ({selectedProjectIds.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOnlySelectedScope(false)}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        !onlySelectedScope
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      ทั้งหมดปี {targetYear} ({yearMatchedProjects.length})
+                    </button>
+                  </div>
+                )}
+
                 {/* Page / Status indicator */}
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/90 border border-slate-700 text-xs font-semibold text-emerald-300 shadow-inner">
                   <span>📄</span>
@@ -547,7 +739,9 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                       ? pages.length === 1
                         ? 'โครงการ 1 แผ่นสมบูรณ์'
                         : `เอกสาร ${pages.length} แผ่น (หน้า 1-${pages.length})`
-                      : `สรุปภาพรวม ${summaryProjects.length} โครงการ`}
+                      : printMode === 'tracking_attachment2'
+                      ? `เอกสารแนบ 2 (${summaryProjects.length} โครงการ • ${totalSummaryBudget.toLocaleString()} บาท)`
+                      : `สรุปภาพรวม (${summaryProjects.length} โครงการ)`}
                   </span>
                 </div>
 
@@ -566,12 +760,12 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             {/* Tier 2: Document Mode Switcher & Export / Print Actions */}
             <div className="px-6 py-2.5 bg-slate-900 flex flex-wrap items-center justify-between gap-3">
               {/* Left: Mode Switcher */}
-              <div className="flex bg-slate-800/90 rounded-xl p-1 border border-slate-700/80 shadow-inner">
+              <div className="flex flex-wrap bg-slate-800/90 rounded-xl p-1 border border-slate-700/80 shadow-inner gap-1">
                 {project && (
                   <button
                     type="button"
                     onClick={() => setPrintMode('single')}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                       printMode === 'single'
                         ? 'bg-emerald-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
@@ -583,15 +777,27 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                 )}
                 <button
                   type="button"
+                  onClick={() => setPrintMode('tracking_attachment2')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    printMode === 'tracking_attachment2'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+                  }`}
+                >
+                  <ListChecks className="w-3.5 h-3.5" />
+                  <span>สรุปและติดตามผล (เอกสารแนบ 2 - แยกสี)</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPrintMode('summary')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                     printMode === 'summary'
                       ? 'bg-emerald-600 text-white shadow-md'
                       : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
                   }`}
                 >
                   <Table className="w-3.5 h-3.5" />
-                  <span>แบบสรุปภาพรวมเสนอ กก.</span>
+                  <span>แบบสรุปเสนอ กก. (อนุมัติ/ไม่อนุมัติ)</span>
                 </button>
               </div>
 
@@ -1125,6 +1331,312 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                   <div className="pt-3 flex items-center gap-12 font-bold text-black" style={{ fontSize: '16pt' }}>
                     <span>รวมทั้งหมด {summaryProjects.length} โครงการ</span>
                     <span>{totalSummaryBudget.toLocaleString()} บาท</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* MODE 3: ATTACHMENT 2 TRACKING TABLE (100% COLOR-CODED REPLICA) */}
+            {/* ============================================================== */}
+            {printMode === 'tracking_attachment2' && (
+              <div className="nhso-print-canvas max-w-[1140px] mx-auto">
+                <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-2 mb-3 px-1 text-slate-300 font-sans text-xs">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="font-bold flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-lg border border-emerald-500/30 shadow-sm">
+                      🎨 แบบสรุปโครงการและผลการติดตาม (เอกสารแนบ 2 - แยกสีประเภท & หน่วยงาน)
+                    </span>
+                    <span className="text-slate-300 font-medium">
+                      รวม {summaryProjects.length} โครงการ • งบประมาณรวม {totalSummaryBudget.toLocaleString()} บาท • ดำเนินการแล้ว {grandTotalCompleted} • ขอขยายเวลา {grandTotalExtended} • ไม่ได้ดำเนินการ {grandTotalNotExecuted}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400 text-[11px]">
+                    {onToggleTracking && (
+                      <span className="px-2.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 font-semibold">
+                        💡 คลิกที่ช่องติ๊ก ☑ ในตารางเพื่อสลับสถานะได้ทันที
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                      A4 Landscape
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                      TH Sarabun PSK 16pt
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className="nhso-page nhso-summary-page bg-white text-black p-6 sm:p-8 shadow-[0_12px_40px_rgba(0,0,0,0.45)] rounded-md border border-slate-200/80 print:border-none print:shadow-none print:p-0 print:m-0 w-full space-y-3"
+                  style={{
+                    fontFamily: "'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif",
+                  }}
+                >
+                  {/* Peach Top Header Banner matching เอกสารแนบ 2 */}
+                  <div
+                    className="w-full py-2 px-4 text-center space-y-0.5"
+                    style={{ backgroundColor: '#fce4d6' }}
+                  >
+                    <h1 className="font-bold text-black leading-snug" style={{ fontSize: '16.5pt' }}>
+                      สรุปโครงการที่ขอรับการสนับสนุนงบประมาณจากกองทุนหลักประกันสุขภาพเทศบาลตำบลบางเป้า &nbsp;&nbsp;(เอกสารแนบ 2)
+                    </h1>
+                    <p className="font-bold text-black leading-snug" style={{ fontSize: '16pt' }}>
+                      ประจำปีงบประมาณ {targetYear}
+                    </p>
+                  </div>
+
+                  <div className="font-bold text-black pt-1" style={{ fontSize: '15pt' }}>
+                    จำนวน {summaryProjects.length} โครงการ
+                  </div>
+
+                  {/* Color-coded Category Sections */}
+                  <div className="space-y-5">
+                    {Object.entries(groupedByCategory).map(([catNumStr, projectsInCat]) => {
+                      const cNum = Number(catNumStr);
+                      const catTheme = getCategoryColorTheme(cNum);
+                      const subtotal = projectsInCat.reduce((s, p) => s + p.budgetRequested, 0);
+                      const compCount = projectsInCat.filter((p) => isProjectTrackingCompleted(p)).length;
+                      const extCount = projectsInCat.filter((p) => isProjectTrackingExtended(p)).length;
+                      const refCount = projectsInCat.filter((p) => isProjectTrackingRefunded(p)).length;
+
+                      return (
+                        <div key={cNum} className="space-y-2">
+                          {/* Category Colored Title Bar (spanning left ~62% width like เอกสารแนบ 2) */}
+                          <div
+                            className="inline-block min-w-[62%] py-1 px-2.5 font-bold text-black"
+                            style={{
+                              backgroundColor: catTheme.headerHex,
+                              fontSize: '15pt',
+                            }}
+                          >
+                            ประเภทที่ {cNum} &nbsp;&nbsp;&nbsp;&nbsp; จำนวน &nbsp;{projectsInCat.length}&nbsp; โครงการ
+                          </div>
+
+                          <table
+                            className="w-full border-collapse border border-black text-black"
+                            style={{ tableLayout: 'fixed', fontSize: '14.5pt', lineHeight: 1.18 }}
+                          >
+                            <colgroup>
+                              <col style={{ width: '5.5%' }} />
+                              <col style={{ width: '44.5%' }} />
+                              <col style={{ width: '14.5%' }} />
+                              <col style={{ width: '8.5%' }} />
+                              <col style={{ width: '9.0%' }} />
+                              <col style={{ width: '9.0%' }} />
+                              <col style={{ width: '9.0%' }} />
+                            </colgroup>
+                            <thead>
+                              <tr
+                                className="text-black font-bold text-center"
+                                style={{
+                                  backgroundColor: catTheme.headerHex,
+                                  fontSize: '14.5pt',
+                                }}
+                              >
+                                <th rowSpan={2} className="border border-black py-1 px-1 align-middle">
+                                  ลำดับที่
+                                </th>
+                                <th rowSpan={2} className="border border-black py-1 px-2 text-center align-middle">
+                                  ชื่อโครงการ
+                                </th>
+                                <th rowSpan={2} className="border border-black py-1 px-1 text-center align-middle">
+                                  ผู้ขอรับงบ
+                                </th>
+                                <th rowSpan={2} className="border border-black py-1 px-1 text-center align-middle leading-tight">
+                                  งบประมาณ<br />(บาท)
+                                </th>
+                                <th colSpan={3} className="border border-black py-1 px-1 text-center align-middle">
+                                  ผลการติดตามโครงการ
+                                </th>
+                              </tr>
+                              <tr
+                                className="text-center font-bold text-black"
+                                style={{
+                                  backgroundColor: catTheme.headerHex,
+                                  fontSize: '14pt',
+                                }}
+                              >
+                                <th className="border border-black py-0.5 px-1">ดำเนินการแล้ว</th>
+                                <th className="border border-black py-0.5 px-1">ขอขยายเวลา</th>
+                                <th className="border border-black py-0.5 px-1">คืนเงิน</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {projectsInCat.map((p, idx) => {
+                                const orgTheme = getOrgColorTheme(p.proposingOrg);
+                                const isComp = isProjectTrackingCompleted(p);
+                                const isExt = isProjectTrackingExtended(p);
+                                const isRef = isProjectTrackingRefunded(p);
+
+                                return (
+                                  <tr key={p.id} className="bg-white">
+                                    <td className="border border-black py-1 px-1 text-center align-middle">
+                                      {p.orderNumber || idx + 1}
+                                    </td>
+                                    <td className="border border-black py-1 px-2 text-black whitespace-pre-line align-middle">
+                                      {p.projectName}
+                                    </td>
+                                    <td
+                                      className="border border-black py-1 px-2 text-left text-black align-middle"
+                                      style={{ backgroundColor: orgTheme.bgHex }}
+                                    >
+                                      {p.proposingOrg}
+                                    </td>
+                                    <td className="border border-black py-1 px-2 text-right text-black align-middle">
+                                      {p.budgetRequested.toLocaleString()}
+                                    </td>
+
+                                    {/* 1. ดำเนินการแล้ว */}
+                                    <td
+                                      onClick={() =>
+                                        onToggleTracking && onToggleTracking(p.id, 'trackingCompleted')
+                                      }
+                                      className={`border border-black py-1 px-1 text-center align-middle ${
+                                        onToggleTracking ? 'cursor-pointer hover:bg-slate-100 print:hover:bg-transparent' : ''
+                                      }`}
+                                      title={onToggleTracking ? 'คลิกเพื่อติ๊ก/ยกเลิก "ดำเนินการแล้ว"' : ''}
+                                    >
+                                      {isComp ? (
+                                        <span className="inline-flex items-center justify-center w-[18px] h-[18px] bg-[#1e1b18] text-white rounded-[3px] text-[12px] font-bold leading-none shadow-2xs">
+                                          ✓
+                                        </span>
+                                      ) : null}
+                                    </td>
+
+                                    {/* 2. ขอขยายเวลา */}
+                                    <td
+                                      onClick={() =>
+                                        onToggleTracking && onToggleTracking(p.id, 'trackingExtended')
+                                      }
+                                      className={`border border-black py-1 px-1 text-center align-middle ${
+                                        onToggleTracking ? 'cursor-pointer hover:bg-slate-100 print:hover:bg-transparent' : ''
+                                      }`}
+                                      title={onToggleTracking ? 'คลิกเพื่อติ๊ก/ยกเลิก "ขอขยายเวลา"' : ''}
+                                    >
+                                      {isExt ? (
+                                        <span className="inline-flex items-center justify-center w-[18px] h-[18px] bg-[#1e1b18] text-white rounded-[3px] text-[12px] font-bold leading-none shadow-2xs">
+                                          ✓
+                                        </span>
+                                      ) : null}
+                                    </td>
+
+                                    {/* 3. คืนเงิน */}
+                                    <td
+                                      onClick={() =>
+                                        onToggleTracking && onToggleTracking(p.id, 'trackingRefunded')
+                                      }
+                                      className={`border border-black py-1 px-1 text-center align-middle ${
+                                        onToggleTracking ? 'cursor-pointer hover:bg-slate-100 print:hover:bg-transparent' : ''
+                                      }`}
+                                      title={onToggleTracking ? 'คลิกเพื่อติ๊ก/ยกเลิก "คืนเงิน"' : ''}
+                                    >
+                                      {isRef ? (
+                                        <span className="inline-flex items-center justify-center w-[18px] h-[18px] bg-[#1e1b18] text-white rounded-[3px] text-[12px] font-bold leading-none shadow-2xs">
+                                          ✓
+                                        </span>
+                                      ) : null}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+
+                              {/* Category Colored Subtotal Row */}
+                              <tr
+                                className="font-bold text-black"
+                                style={{
+                                  backgroundColor: catTheme.headerHex,
+                                  fontSize: '14.5pt',
+                                }}
+                              >
+                                <td className="border border-black py-1 px-1 text-center font-bold">
+                                  รวม
+                                </td>
+                                <td className="border border-black py-1 px-2 text-center font-bold">
+                                  {projectsInCat.length} โครงการ
+                                </td>
+                                <td className="border border-black py-1 px-1"></td>
+                                <td className="border border-black py-1 px-2 text-right font-bold">
+                                  {subtotal.toLocaleString()}
+                                </td>
+                                <td className="border border-black py-1 px-1 text-center font-bold">
+                                  {compCount > 0 ? compCount : '-'}
+                                </td>
+                                <td className="border border-black py-1 px-1 text-center font-bold">
+                                  {extCount > 0 ? extCount : '-'}
+                                </td>
+                                <td className="border border-black py-1 px-1 text-center font-bold">
+                                  {refCount > 0 ? `${refCount} โครงการ` : '-'}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Bottom Grand Total Summary Table (Royal Blue #4472c4 & Green #70ad47) */}
+                  <div className="pt-2">
+                    <table
+                      className="w-full border-collapse border border-black"
+                      style={{ tableLayout: 'fixed', fontSize: '14.5pt', lineHeight: 1.2 }}
+                    >
+                      <colgroup>
+                        <col style={{ width: '5.5%' }} />
+                        <col style={{ width: '44.5%' }} />
+                        <col style={{ width: '14.5%' }} />
+                        <col style={{ width: '8.5%' }} />
+                        <col style={{ width: '9.0%' }} />
+                        <col style={{ width: '9.0%' }} />
+                        <col style={{ width: '9.0%' }} />
+                      </colgroup>
+                      <tbody>
+                        <tr
+                          className="font-bold text-white text-center"
+                          style={{ backgroundColor: '#4472c4' }}
+                        >
+                          <td rowSpan={2} className="border border-black py-1.5 px-1 align-middle leading-tight">
+                            รวมทั้งหมด
+                          </td>
+                          <td className="border border-black py-1 px-2 align-middle">
+                            จำนวนโครงการ
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle"></td>
+                          <td className="border border-black py-1 px-1 align-middle">
+                            งบประมาณ
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle">
+                            ดำเนินการแล้ว
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle">
+                            ขอขยายเวลา
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle">
+                            ไม่ได้ดำเนินการ
+                          </td>
+                        </tr>
+                        <tr
+                          className="font-bold text-white text-center"
+                          style={{ backgroundColor: '#70ad47' }}
+                        >
+                          <td className="border border-black py-1 px-2 align-middle">
+                            {summaryProjects.length} โครงการ
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle"></td>
+                          <td className="border border-black py-1 px-2 text-right align-middle">
+                            {totalSummaryBudget.toLocaleString()}
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle">
+                            {grandTotalCompleted}
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle">
+                            {grandTotalExtended}
+                          </td>
+                          <td className="border border-black py-1 px-1 align-middle">
+                            {grandTotalNotExecuted}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>

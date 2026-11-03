@@ -118,9 +118,17 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
     },
   },
   orgProposerDefaults: {
+    'กองสาธารณสุขฯ': {
+      name: 'นางสาวปฐมาภรณ์  จันทร์แจ่ม',
+      title: 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม',
+    },
     'กองสาธารณสุขและสิ่งแวดล้อม': {
       name: 'นางสาวปฐมาภรณ์  จันทร์แจ่ม',
       title: 'ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม',
+    },
+    'กองการศึกษา': {
+      name: 'นางสาวอรวรรณ  ทองแท่น',
+      title: 'ผู้อำนวยการกองการศึกษา ศาสนาและวัฒนธรรม',
     },
     'กองการศึกษา ศาสนาและวัฒนธรรม': {
       name: 'นางสาวอรวรรณ  ทองแท่น',
@@ -131,8 +139,12 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
       title: 'ผู้อำนวยการ รพ.สต.บางเป้า',
     },
     'โรงพยาบาลกันตัง': {
-      name: 'แพทย์หญิงณัฐริญา  ศรีวสุธากุล',
+      name: 'นายสมเกียรติ  พยุหเสนารักษ์',
       title: 'ผู้อำนวยการโรงพยาบาลกันตัง',
+    },
+    'ชมรมผู้สูงอายุ รพ.กันตัง': {
+      name: 'นางเพียงใจ  ปานาพุฒ',
+      title: 'ประธานชมรมผู้สูงอายุโรงพยาบาลกันตัง',
     },
     'ชมรมผู้สูงอายุโรงพยาบาลกันตัง': {
       name: 'นางเพียงใจ  ปานาพุฒ',
@@ -147,11 +159,11 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
       title: 'ประธาน อสม. หมู่ที่ 1 ตำบลบางเป้า',
     },
     'ชมรม อสม. ม.4': {
-      name: 'นางมาลี  แซ่ภู่',
+      name: 'นางสาวยาจาใจ อ่อนไหว',
       title: 'ประธาน อสม. หมู่ที่ 4 ตำบลบางเป้า',
     },
     'ชมรม อสม. ม.6': {
-      name: 'นางวรรณา  ช่วยแก้ว',
+      name: 'นางสาวชุลี ช่องสมบัติ',
       title: 'ประธาน อสม. หมู่ที่ 6 ตำบลบางเป้า',
     },
     'ชมรม อสม. ม.7': {
@@ -162,8 +174,12 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
       name: 'นายสมเกียรติ  คงแก้ว',
       title: 'ผู้อำนวยการโรงเรียนบ้านป่าเตียว',
     },
+    'รร.วัดสีหราษฎร์ฯ': {
+      name: 'นายฉลอง  ภักดี',
+      title: 'ผู้อำนวยการโรงเรียนวัดสีหราษฎร์ศรัทธา',
+    },
     'รร.วัดสีหราษฎร์ศรัทธา': {
-      name: 'นางสาวสุมิตรา  ทองคำ',
+      name: 'นายฉลอง  ภักดี',
       title: 'ผู้อำนวยการโรงเรียนวัดสีหราษฎร์ศรัทธา',
     },
     'รร.บ้านบางเป้า': {
@@ -175,8 +191,12 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
       title: 'หัวหน้าศูนย์พัฒนาเด็กเล็กมัสยิดบ้านบางเป้า',
     },
     'ศพด.บ้านควนทองสีห์': {
-      name: 'นางเรวดี  แซ่ตัน',
-      title: 'หัวหน้าศูนย์พัฒนาเด็กเล็กบ้านควนทองสีห์',
+      name: 'นางสาววณิชา ผดุงกิจอนันต์',
+      title: 'ครู ศพด.บ้านควนทองสีห์',
+    },
+    'กองทุนสวัสดิการชุมชนฯ': {
+      name: 'นายประเสริฐ  คงทอง',
+      title: 'ประธานกองทุนสวัสดิการชุมชนตำบลบางเป้า',
     },
     'กองทุนสวัสดิการชุมชนตำบลบางเป้า': {
       name: 'นายประเสริฐ  คงทอง',
@@ -354,7 +374,10 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-10-15T09:30:00Z",
-    "updatedAt": "2026-10-15T09:30:00Z"
+    "updatedAt": "2026-10-15T09:30:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": false,
+    "trackingRefunded": false
   },
   {
     "id": "NHSO-69-01",
@@ -362,7 +385,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-001",
-    "projectName": "โครงการขลิบเพื่อสุขภาพปลอดภัยห่างไกลโรค \nประจำปี 2569",
+    "projectName": "โครงการขลิบเพื่อสุขภาพปลอดภัยห่างไกลโรค ประจำปี 2569",
     "categoryNumber": 1,
     "categoryName": "ประเภทที่ 1 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข [ข้อ 10 (1)]",
     "proposingOrg": "กองสาธารณสุขฯ",
@@ -485,7 +508,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetApproved": 42300,
     "status": "approved",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "คืนเงินงบประมาณเข้ากองทุนฯ (ไม่ได้ดำเนินการ)",
     "signers": {
       "proposerName": "นางสาวปฐมาภรณ์  จันทร์แจ่ม",
       "proposerTitle": "ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม",
@@ -495,7 +518,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": false,
+    "trackingRefunded": true,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "not_started",
+    "disbursedAmount": 0
   },
   {
     "id": "NHSO-69-02",
@@ -692,9 +721,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 41975,
     "budgetApproved": 41975,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาวปฐมาภรณ์  จันทร์แจ่ม",
       "proposerTitle": "ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม",
@@ -704,7 +733,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 41975
   },
   {
     "id": "NHSO-69-03",
@@ -869,9 +904,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 37812,
     "budgetApproved": 37812,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาวมนัสญา  ทองเรือง",
       "proposerTitle": "นักวิชาการศึกษา รักษาราชการแทน\n              ผู้อำนวยการกองการศึกษา",
@@ -881,7 +916,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 37812
   },
   {
     "id": "NHSO-69-04",
@@ -889,111 +930,6 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-004",
-    "projectName": "โครงการเคาะประตูบ้านบริการคัดกรองมะเร็งปากมดลูก",
-    "categoryNumber": 1,
-    "categoryName": "ประเภทที่ 1 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข [ข้อ 10 (1)]",
-    "proposingOrg": "โรงพยาบาลกันตัง",
-    "activities": "1.จัดทำทะเบียนสตรีอายุ 30-60 ปีที่ยังไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมาในเขตพื้นที่\n2. ประชาสัมพันธ์ เชิญชวน สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา มารับฟังความรู้เกี่ยวกับมะเร็งปากมดลูกจากวิทยากรของหน่วยบริการและรับสมัครเข้าร่วมโครงการลงทะเบียนและรับคูปองบริการตรวจคัดกรองมะเร็งปากมดลูก\n3.สตรีอายุ 30-60 ปีที่เข้าร่วมโครงการ เข้ารับการตรวจคัดกรองมะเร็งปากมดลูกจากหน่วยบริการในพื้นที่\n4.อมรมให้ความรู้เรื่องการคัดกรองมะเร็งปากมดลูก",
-    "objectives": "1. เพื่อเพิ่มการเข้าถึงการตรวจคัดกรองมะเร็งปากมดลูกในสตรีกลุ่มเสี่ยง\n2. เพื่อส่งต่อสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติเข้ารับการรักษา",
-    "targetGroup": "- แกนนำสุขภาพ 30 คน \n- วิทยากร 1 คน\n- ผู้จัดโครงการ 4 คน\n\nรวม 35 คน \n\n\n\n\n\nสตรีกลุ่มเสี่ยงในพื้นหมู่ที่ 1,4,6 ที่ยังไม่ได้รับการตรวจคัดกรองภายใน5ปีที่ผ่านมาทั้งหมด",
-    "kpi": "1.ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูก\n2. ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูกเปรียบเทียบกับจำนวนสตรีอายุ 30-60 ปี ที่ยังไม่เคยตรวจมะเร็งปากมดลูกใน 5 ปีที่ผ่านมาทั้งหมด (ข้อมูลจากทะเบียนสตรีอายุ 30-60 ปี ที่เข้าร่วมโครงการและทะเบียนสตรีที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกใน 5 ปีที่ผ่านมา )\n3.ร้อยละ100 ของสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติได้รับการส่งต่อกลุ่มเป้าหมาย : สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา",
-    "location": "หมู่ที่ 1,4,6\nตำบลบางเป้า",
-    "duration": "มี.ค. - ก.ค. 69",
-    "responsiblePerson": "นายสิวริศร์ ภูวกรพิพัฒน์  รพ.กันตัง",
-    "activityGroups": [
-      {
-        "id": "act_4_1",
-        "activityName": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
-        "activities": "1.จัดทำทะเบียนสตรีอายุ 30-60 ปีที่ยังไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมาในเขตพื้นที่\n2. ประชาสัมพันธ์ เชิญชวน สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา มารับฟังความรู้เกี่ยวกับมะเร็งปากมดลูกจากวิทยากรของหน่วยบริการและรับสมัครเข้าร่วมโครงการลงทะเบียนและรับคูปองบริการตรวจคัดกรองมะเร็งปากมดลูก\n3.สตรีอายุ 30-60 ปีที่เข้าร่วมโครงการ เข้ารับการตรวจคัดกรองมะเร็งปากมดลูกจากหน่วยบริการในพื้นที่\n4.อมรมให้ความรู้เรื่องการคัดกรองมะเร็งปากมดลูก",
-        "objectives": "1. เพื่อเพิ่มการเข้าถึงการตรวจคัดกรองมะเร็งปากมดลูกในสตรีกลุ่มเสี่ยง\n2. เพื่อส่งต่อสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติเข้ารับการรักษา",
-        "targetGroup": "- แกนนำสุขภาพ 30 คน \n- วิทยากร 1 คน\n- ผู้จัดโครงการ 4 คน\n\nรวม 35 คน \n\n\n\n\n\nสตรีกลุ่มเสี่ยงในพื้นหมู่ที่ 1,4,6 ที่ยังไม่ได้รับการตรวจคัดกรองภายใน5ปีที่ผ่านมาทั้งหมด",
-        "targetParticipants": 30,
-        "kpi": "1.ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูก\n2. ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูกเปรียบเทียบกับจำนวนสตรีอายุ 30-60 ปี ที่ยังไม่เคยตรวจมะเร็งปากมดลูกใน 5 ปีที่ผ่านมาทั้งหมด (ข้อมูลจากทะเบียนสตรีอายุ 30-60 ปี ที่เข้าร่วมโครงการและทะเบียนสตรีที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกใน 5 ปีที่ผ่านมา )\n3.ร้อยละ100 ของสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติได้รับการส่งต่อกลุ่มเป้าหมาย : สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา",
-        "location": "หมู่ที่ 1,4,6\nตำบลบางเป้า",
-        "duration": "มี.ค. - ก.ค. 69",
-        "budgetLines": [
-          {
-            "id": "line_4_7",
-            "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
-            "name": "1.1) ค่าตอบแทนวิทยากร",
-            "quantity": 5,
-            "unit": "ชั่วโมง",
-            "unitPrice": 600,
-            "total": 3000
-          },
-          {
-            "id": "line_4_8",
-            "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
-            "name": "1.2) ค่าอาหารกลางวัน",
-            "quantity": 35,
-            "unit": "ชุด",
-            "unitPrice": 75,
-            "total": 2625
-          },
-          {
-            "id": "line_4_9",
-            "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
-            "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
-            "quantity": 70,
-            "unit": "ชุด",
-            "unitPrice": 25,
-            "total": 1750
-          }
-        ],
-        "subtotal": 7375
-      }
-    ],
-    "budgetLines": [
-      {
-        "id": "line_4_7",
-        "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
-        "name": "1.1) ค่าตอบแทนวิทยากร",
-        "quantity": 5,
-        "unit": "ชั่วโมง",
-        "unitPrice": 600,
-        "total": 3000
-      },
-      {
-        "id": "line_4_8",
-        "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
-        "name": "1.2) ค่าอาหารกลางวัน",
-        "quantity": 35,
-        "unit": "ชุด",
-        "unitPrice": 75,
-        "total": 2625
-      },
-      {
-        "id": "line_4_9",
-        "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
-        "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
-        "quantity": 70,
-        "unit": "ชุด",
-        "unitPrice": 25,
-        "total": 1750
-      }
-    ],
-    "budgetRequested": 8625,
-    "budgetApproved": 8625,
-    "status": "approved",
-    "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
-    "signers": {
-      "proposerName": "นายสมเกียรติ  พยุหเสนารักษ์",
-      "proposerTitle": "ผู้อำนวยการโรงพยาบาลกันตัง",
-      "endorserName": "นายโชคชัย  รอดรักษา",
-      "endorserTitle": "เลขานุการกองทุนฯ ทต.บางเป้า",
-      "approverName": "นายละดม  เชื้อช่วย",
-      "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
-    },
-    "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
-  },
-  {
-    "id": "NHSO-69-05",
-    "orderNumber": 5,
-    "fiscalYear": "2569",
-    "roundNumber": 1,
-    "projectCode": "กองทุน-69-005",
     "projectName": "โครงการเสริมพลัง แกนนำสุขภาพ ดูแลหญิงวัยเจริญพันธุ์ป้องกันภาวะโลหิตจางในชุมชน",
     "categoryNumber": 1,
     "categoryName": "ประเภทที่ 1 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข [ข้อ 10 (1)]",
@@ -1077,11 +1013,11 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "total": 2250
       }
     ],
-    "budgetRequested": 9250,
-    "budgetApproved": 9250,
+    "budgetRequested": 8625,
+    "budgetApproved": 8625,
     "status": "approved",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ได้รับอนุมัติขยายเวลาดำเนินโครงการตามมติที่ประชุมคณะกรรมการกองทุนฯ",
     "signers": {
       "proposerName": "นายสมเกียรติ  พยุหเสนารักษ์",
       "proposerTitle": "ผู้อำนวยการโรงพยาบาลกันตัง",
@@ -1091,14 +1027,20 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": true,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "in_progress",
+    "disbursedAmount": 8625
   },
   {
-    "id": "NHSO-69-06",
-    "orderNumber": 6,
+    "id": "NHSO-69-05",
+    "orderNumber": 5,
     "fiscalYear": "2569",
     "roundNumber": 1,
-    "projectCode": "กองทุน-69-006",
+    "projectCode": "กองทุน-69-005",
     "projectName": "โครงการควบคุมโรคติดต่อหมู่ที่ 1,4,6 ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง",
     "categoryNumber": 1,
     "categoryName": "ประเภทที่ 1 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข [ข้อ 10 (1)]",
@@ -1182,11 +1124,11 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "total": 2500
       }
     ],
-    "budgetRequested": 7375,
-    "budgetApproved": 7375,
+    "budgetRequested": 9250,
+    "budgetApproved": 9250,
     "status": "approved",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ได้รับอนุมัติขยายเวลาดำเนินโครงการตามมติที่ประชุมคณะกรรมการกองทุนฯ",
     "signers": {
       "proposerName": "นายสมเกียรติ  พยุหเสนารักษ์",
       "proposerTitle": "ผู้อำนวยการโรงพยาบาลกันตัง",
@@ -1196,7 +1138,124 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": true,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "in_progress",
+    "disbursedAmount": 9250
+  },
+  {
+    "id": "NHSO-69-06",
+    "orderNumber": 6,
+    "fiscalYear": "2569",
+    "roundNumber": 1,
+    "projectCode": "กองทุน-69-006",
+    "projectName": "โครงการเคาะประตูบ้านบริการคัดกรองมะเร็งปากมดลูก",
+    "categoryNumber": 1,
+    "categoryName": "ประเภทที่ 1 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข [ข้อ 10 (1)]",
+    "proposingOrg": "โรงพยาบาลกันตัง",
+    "activities": "1.จัดทำทะเบียนสตรีอายุ 30-60 ปีที่ยังไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมาในเขตพื้นที่\n2. ประชาสัมพันธ์ เชิญชวน สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา มารับฟังความรู้เกี่ยวกับมะเร็งปากมดลูกจากวิทยากรของหน่วยบริการและรับสมัครเข้าร่วมโครงการลงทะเบียนและรับคูปองบริการตรวจคัดกรองมะเร็งปากมดลูก\n3.สตรีอายุ 30-60 ปีที่เข้าร่วมโครงการ เข้ารับการตรวจคัดกรองมะเร็งปากมดลูกจากหน่วยบริการในพื้นที่\n4.อมรมให้ความรู้เรื่องการคัดกรองมะเร็งปากมดลูก",
+    "objectives": "1. เพื่อเพิ่มการเข้าถึงการตรวจคัดกรองมะเร็งปากมดลูกในสตรีกลุ่มเสี่ยง\n2. เพื่อส่งต่อสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติเข้ารับการรักษา",
+    "targetGroup": "- แกนนำสุขภาพ 30 คน \n- วิทยากร 1 คน\n- ผู้จัดโครงการ 4 คน\n\nรวม 35 คน \n\n\n\n\n\nสตรีกลุ่มเสี่ยงในพื้นหมู่ที่ 1,4,6 ที่ยังไม่ได้รับการตรวจคัดกรองภายใน5ปีที่ผ่านมาทั้งหมด",
+    "kpi": "1.ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูก\n2. ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูกเปรียบเทียบกับจำนวนสตรีอายุ 30-60 ปี ที่ยังไม่เคยตรวจมะเร็งปากมดลูกใน 5 ปีที่ผ่านมาทั้งหมด (ข้อมูลจากทะเบียนสตรีอายุ 30-60 ปี ที่เข้าร่วมโครงการและทะเบียนสตรีที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกใน 5 ปีที่ผ่านมา )\n3.ร้อยละ100 ของสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติได้รับการส่งต่อกลุ่มเป้าหมาย : สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา",
+    "location": "หมู่ที่ 1,4,6\nตำบลบางเป้า",
+    "duration": "มี.ค. - ก.ค. 69",
+    "responsiblePerson": "นายสิวริศร์ ภูวกรพิพัฒน์  รพ.กันตัง",
+    "activityGroups": [
+      {
+        "id": "act_4_1",
+        "activityName": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
+        "activities": "1.จัดทำทะเบียนสตรีอายุ 30-60 ปีที่ยังไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมาในเขตพื้นที่\n2. ประชาสัมพันธ์ เชิญชวน สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา มารับฟังความรู้เกี่ยวกับมะเร็งปากมดลูกจากวิทยากรของหน่วยบริการและรับสมัครเข้าร่วมโครงการลงทะเบียนและรับคูปองบริการตรวจคัดกรองมะเร็งปากมดลูก\n3.สตรีอายุ 30-60 ปีที่เข้าร่วมโครงการ เข้ารับการตรวจคัดกรองมะเร็งปากมดลูกจากหน่วยบริการในพื้นที่\n4.อมรมให้ความรู้เรื่องการคัดกรองมะเร็งปากมดลูก",
+        "objectives": "1. เพื่อเพิ่มการเข้าถึงการตรวจคัดกรองมะเร็งปากมดลูกในสตรีกลุ่มเสี่ยง\n2. เพื่อส่งต่อสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติเข้ารับการรักษา",
+        "targetGroup": "- แกนนำสุขภาพ 30 คน \n- วิทยากร 1 คน\n- ผู้จัดโครงการ 4 คน\n\nรวม 35 คน \n\n\n\n\n\nสตรีกลุ่มเสี่ยงในพื้นหมู่ที่ 1,4,6 ที่ยังไม่ได้รับการตรวจคัดกรองภายใน5ปีที่ผ่านมาทั้งหมด",
+        "targetParticipants": 30,
+        "kpi": "1.ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูก\n2. ร้อยละของสตรีกลุ่มเป้าหมายที่ได้รับตรวจคัดกรองมะเร็งปากมดลูกเปรียบเทียบกับจำนวนสตรีอายุ 30-60 ปี ที่ยังไม่เคยตรวจมะเร็งปากมดลูกใน 5 ปีที่ผ่านมาทั้งหมด (ข้อมูลจากทะเบียนสตรีอายุ 30-60 ปี ที่เข้าร่วมโครงการและทะเบียนสตรีที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกใน 5 ปีที่ผ่านมา )\n3.ร้อยละ100 ของสตรีที่ตรวจพบผลเซลล์ปากมดลูกผิดปกติได้รับการส่งต่อกลุ่มเป้าหมาย : สตรีอายุ 30-60 ปี ที่ไม่เคยตรวจคัดกรองมะเร็งปากมดลูกภายใน 5 ปีที่ผ่านมา",
+        "location": "หมู่ที่ 1,4,6\nตำบลบางเป้า",
+        "duration": "มี.ค. - ก.ค. 69",
+        "budgetLines": [
+          {
+            "id": "line_4_7",
+            "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
+            "name": "1.1) ค่าตอบแทนวิทยากร",
+            "quantity": 5,
+            "unit": "ชั่วโมง",
+            "unitPrice": 600,
+            "total": 3000
+          },
+          {
+            "id": "line_4_8",
+            "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
+            "name": "1.2) ค่าอาหารกลางวัน",
+            "quantity": 35,
+            "unit": "ชุด",
+            "unitPrice": 75,
+            "total": 2625
+          },
+          {
+            "id": "line_4_9",
+            "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
+            "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
+            "quantity": 70,
+            "unit": "ชุด",
+            "unitPrice": 25,
+            "total": 1750
+          }
+        ],
+        "subtotal": 7375
+      }
+    ],
+    "budgetLines": [
+      {
+        "id": "line_4_7",
+        "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
+        "name": "1.1) ค่าตอบแทนวิทยากร",
+        "quantity": 5,
+        "unit": "ชั่วโมง",
+        "unitPrice": 600,
+        "total": 3000
+      },
+      {
+        "id": "line_4_8",
+        "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
+        "name": "1.2) ค่าอาหารกลางวัน",
+        "quantity": 35,
+        "unit": "ชุด",
+        "unitPrice": 75,
+        "total": 2625
+      },
+      {
+        "id": "line_4_9",
+        "activityCategory": "1.กิจกรรมอบรมเชิงปฏิบัติการ",
+        "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
+        "quantity": 70,
+        "unit": "ชุด",
+        "unitPrice": 25,
+        "total": 1750
+      }
+    ],
+    "budgetRequested": 7375,
+    "budgetApproved": 7375,
+    "status": "approved",
+    "committeeDecision": "approve",
+    "committeeComment": "ได้รับอนุมัติขยายเวลาดำเนินโครงการตามมติที่ประชุมคณะกรรมการกองทุนฯ",
+    "signers": {
+      "proposerName": "นายสมเกียรติ  พยุหเสนารักษ์",
+      "proposerTitle": "ผู้อำนวยการโรงพยาบาลกันตัง",
+      "endorserName": "นายโชคชัย  รอดรักษา",
+      "endorserTitle": "เลขานุการกองทุนฯ ทต.บางเป้า",
+      "approverName": "นายละดม  เชื้อช่วย",
+      "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
+    },
+    "createdAt": "2026-03-01T08:00:00Z",
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": true,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "in_progress",
+    "disbursedAmount": 7375
   },
   {
     "id": "NHSO-69-07",
@@ -1327,7 +1386,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetApproved": 14825,
     "status": "approved",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ได้รับอนุมัติขยายเวลาดำเนินโครงการตามมติที่ประชุมคณะกรรมการกองทุนฯ",
     "signers": {
       "proposerName": "นางสาวธนพร  ฉีดเนียม",
       "proposerTitle": "ผู้อำนวยการ รพ.สต.บางเป้า",
@@ -1337,7 +1396,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": true,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "in_progress",
+    "disbursedAmount": 14825
   },
   {
     "id": "NHSO-69-08",
@@ -1468,7 +1533,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetApproved": 16925,
     "status": "approved",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ได้รับอนุมัติขยายเวลาดำเนินโครงการตามมติที่ประชุมคณะกรรมการกองทุนฯ",
     "signers": {
       "proposerName": "นางสาวธนพร  ฉีดเนียม",
       "proposerTitle": "ผู้อำนวยการ รพ.สต.บางเป้า",
@@ -1478,7 +1543,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": true,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "in_progress",
+    "disbursedAmount": 16925
   },
   {
     "id": "NHSO-69-09",
@@ -1486,7 +1557,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-009",
-    "projectName": "โครงการแกนนำสุขภาพใส่ใจเพื่อหญิงตั้งครรภ์ปลอดภัย       \nลูกสุขภาพดี \nตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง",
+    "projectName": "โครงการแกนนำสุขภาพใส่ใจเพื่อหญิงตั้งครรภ์ปลอดภัย ลูกสุขภาพดี ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง",
     "categoryNumber": 1,
     "categoryName": "ประเภทที่ 1 สนับสนุนและส่งเสริมการจัดบริการสาธารณสุขของหน่วยบริการ สถานบริการ หรือหน่วยงานสาธารณสุข [ข้อ 10 (1)]",
     "proposingOrg": "รพ.สต.บางเป้า",
@@ -1627,7 +1698,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetApproved": 19325,
     "status": "approved",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ได้รับอนุมัติขยายเวลาดำเนินโครงการตามมติที่ประชุมคณะกรรมการกองทุนฯ",
     "signers": {
       "proposerName": "นางสาวธนพร  ฉีดเนียม",
       "proposerTitle": "ผู้อำนวยการ รพ.สต.บางเป้า",
@@ -1637,7 +1708,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": true,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "in_progress",
+    "disbursedAmount": 19325
   },
   {
     "id": "NHSO-69-10",
@@ -1750,7 +1827,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetApproved": 15700,
     "status": "approved",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ได้รับอนุมัติขยายเวลาดำเนินโครงการตามมติที่ประชุมคณะกรรมการกองทุนฯ",
     "signers": {
       "proposerName": "นางเพียงใจ  ปานาพุฒ",
       "proposerTitle": "ประธานชมรมผู้สูงอายุโรงพยาบาลกันตัง",
@@ -1760,7 +1837,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": false,
+    "trackingExtended": true,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "in_progress",
+    "disbursedAmount": 15700
   },
   {
     "id": "NHSO-69-11",
@@ -1768,7 +1851,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-011",
-    "projectName": "โครงการ\nส่งเสริมสุขภาพ\nผู้สูงวัยห่างไกลโรค",
+    "projectName": "โครงการส่งเสริมสุขภาพผู้สูงวัยห่างไกลโรค",
     "categoryNumber": 2,
     "categoryName": "ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]",
     "proposingOrg": "กองทุนสวัสดิการชุมชนฯ",
@@ -1925,9 +2008,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 17250,
     "budgetApproved": 17250,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาวศศิธร เกลือกลิ่น",
       "proposerTitle": "ประธานกองทุนสวัสดิการชุมชนเทศบาลตำบลบางเป้า",
@@ -1937,7 +2020,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 17250
   },
   {
     "id": "NHSO-69-12",
@@ -2102,9 +2191,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 20925,
     "budgetApproved": 20925,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางดวงพร  ฤทธิพรพันธ์",
       "proposerTitle": "ประธานชมรมอาสาสมัครสาธารณสุขประจำหมู่บ้าน หมู่ที่ 1",
@@ -2114,7 +2203,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 20925
   },
   {
     "id": "NHSO-69-13",
@@ -2122,7 +2217,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-013",
-    "projectName": "โครงการใส่ใจ ดูแล ปรับเปลี่ยนพฤติกรรม กลุ่มเสี่ยงเบาหวาน ความดันโลหิตสูง",
+    "projectName": "โครงการใส่ใจ ดูแล ปรับเปลี่ยนพฤติกรรม กลุ่มเสี่ยงเบาหวาน ความดันโลหิตสูง หมู่ที่ 4",
     "categoryNumber": 2,
     "categoryName": "ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]",
     "proposingOrg": "ชมรม อสม. ม.4",
@@ -2279,9 +2374,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 21450,
     "budgetApproved": 21450,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาวยาจาใจ อ่อนไหว",
       "proposerTitle": "ประธานชมรมอาสาสมัครสาธารณสุขประจำหมู่บ้าน หมู่ที่ 4",
@@ -2291,7 +2386,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 21450
   },
   {
     "id": "NHSO-69-14",
@@ -2299,7 +2400,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-014",
-    "projectName": "โครงการใส่ใจ ดูแล ปรับเปลี่ยนพฤติกรรม กลุ่มเสี่ยงเบาหวาน ความดันโลหิตสูง",
+    "projectName": "โครงการใส่ใจ ดูแล ปรับเปลี่ยนพฤติกรรม กลุ่มเสี่ยงเบาหวาน ความดันโลหิตสูง หมู่ที่ 6",
     "categoryNumber": 2,
     "categoryName": "ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]",
     "proposingOrg": "ชมรม อสม. ม.6",
@@ -2456,9 +2557,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 21275,
     "budgetApproved": 21275,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาวชุลี ช่องสมบัติ",
       "proposerTitle": "ประธานชมรมอาสาสมัครสาธารณสุขประจำหมู่บ้าน หมู่ที่ 6",
@@ -2468,7 +2569,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 21275
   },
   {
     "id": "NHSO-69-15",
@@ -2476,7 +2583,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-015",
-    "projectName": "โครงการใส่ใจ ดูแล ปรับเปลี่ยนพฤติกรรม กลุ่มเสี่ยงเบาหวาน ความดันโลหิตสูง",
+    "projectName": "โครงการใส่ใจ ดูแล ปรับเปลี่ยนพฤติกรรม กลุ่มเสี่ยงเบาหวาน ความดันโลหิตสูง หมู่ที่ 7",
     "categoryNumber": 2,
     "categoryName": "ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]",
     "proposingOrg": "ชมรม อสม. ม.7",
@@ -2633,9 +2740,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 20400,
     "budgetApproved": 20400,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางศรีพรรณ  ชาตรีวงศ์",
       "proposerTitle": "ประธานชมรมอาสาสมัครสาธารณสุขประจำหมู่บ้าน หมู่ที่ 7",
@@ -2645,7 +2752,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 20400
   },
   {
     "id": "NHSO-69-16",
@@ -2756,9 +2869,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 15100,
     "budgetApproved": 15100,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามแผน และส่งคืนเงินเหลือจ่ายเข้ากองทุนเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายธีระพงษ์  ปานทอง",
       "proposerTitle": "ผู้อำนวยการโรงเรียนบ้านป่าเตียว",
@@ -2768,7 +2881,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": true,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 15100
   },
   {
     "id": "NHSO-69-17",
@@ -2915,9 +3034,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 13290,
     "budgetApproved": 13290,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามแผน และส่งคืนเงินเหลือจ่ายเข้ากองทุนเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายธีระพงษ์  ปานทอง",
       "proposerTitle": "ผู้อำนวยการโรงเรียนบ้านป่าเตียว",
@@ -2927,7 +3046,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": true,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 13290
   },
   {
     "id": "NHSO-69-18",
@@ -3056,9 +3181,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 16150,
     "budgetApproved": 16150,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายธีระพงษ์  ปานทอง",
       "proposerTitle": "ผู้อำนวยการโรงเรียนบ้านป่าเตียว",
@@ -3068,7 +3193,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 16150
   },
   {
     "id": "NHSO-69-19",
@@ -3161,9 +3292,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 16050,
     "budgetApproved": 16050,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายฉลอง  ภักดี",
       "proposerTitle": "ผู้อำนวยการโรงเรียนวัดสีหราษฎร์ศรัทธา",
@@ -3173,7 +3304,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 16050
   },
   {
     "id": "NHSO-69-20",
@@ -3259,7 +3396,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
             "total": 1880
           }
         ],
-        "subtotal": 12180
+        "subtotal": 9120
       }
     ],
     "budgetLines": [
@@ -3318,11 +3455,11 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "total": 1880
       }
     ],
-    "budgetRequested": 12180,
-    "budgetApproved": 12180,
-    "status": "approved",
+    "budgetRequested": 9120,
+    "budgetApproved": 9120,
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายฉลอง  ภักดี",
       "proposerTitle": "ผู้อำนวยการโรงเรียนวัดสีหราษฎร์ศรัทธา",
@@ -3332,7 +3469,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 9120
   },
   {
     "id": "NHSO-69-21",
@@ -3340,7 +3483,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-021",
-    "projectName": "โครงการให้ความรู้การป้องกันภาวะโภชนาการเกิน",
+    "projectName": "โครงการให้ความรู้การป้องกันและส่งเสริมภาวะโภชนาการในนักเรียน",
     "categoryNumber": 2,
     "categoryName": "ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]",
     "proposingOrg": "รร.วัดสีหราษฎร์ฯ",
@@ -3418,7 +3561,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
             "total": 3300
           }
         ],
-        "subtotal": 14010
+        "subtotal": 15810
       }
     ],
     "budgetLines": [
@@ -3477,11 +3620,11 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "total": 3300
       }
     ],
-    "budgetRequested": 14010,
-    "budgetApproved": 14010,
-    "status": "approved",
+    "budgetRequested": 15810,
+    "budgetApproved": 15810,
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายฉลอง  ภักดี",
       "proposerTitle": "ผู้อำนวยการโรงเรียนวัดสีหราษฎร์ศรัทธา",
@@ -3491,7 +3634,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 15810
   },
   {
     "id": "NHSO-69-22",
@@ -3499,7 +3648,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "fiscalYear": "2569",
     "roundNumber": 1,
     "projectCode": "กองทุน-69-022",
-    "projectName": "โครงการฟันสวยยิ้มใส",
+    "projectName": "โครงการแปรงฟันถูกวิธีมีคุณภาพ ปากสะอาด ฟันและเหงือกแข็งแรง",
     "categoryNumber": 2,
     "categoryName": "ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]",
     "proposingOrg": "รร.บ้านบางเป้า",
@@ -3656,9 +3805,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 10620,
     "budgetApproved": 10620,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายฉัตรชัย  จันทโท",
       "proposerTitle": "ผู้อำนวยการโรงเรียนบ้านบางเป้า",
@@ -3668,7 +3817,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 10620
   },
   {
     "id": "NHSO-69-23",
@@ -3833,9 +3988,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 10905,
     "budgetApproved": 10905,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นายฉัตรชัย  จันทโท",
       "proposerTitle": "ผู้อำนวยการโรงเรียนบ้านบางเป้า",
@@ -3845,7 +4000,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 10905
   },
   {
     "id": "NHSO-69-24",
@@ -3992,9 +4153,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 13100,
     "budgetApproved": 13100,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาวอามนะ  ไขสระ",
       "proposerTitle": "รักษาการหัวหน้า ศพด.มัสยิดบ้านบางเป้า",
@@ -4004,7 +4165,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 13100
   },
   {
     "id": "NHSO-69-25",
@@ -4133,9 +4300,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 12532,
     "budgetApproved": 12532,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาววณิชา ผดุงกิจอนันต์",
       "proposerTitle": "ครู ศพด.บ้านควนทองสีห์",
@@ -4145,7 +4312,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 12532
   },
   {
     "id": "NHSO-69-26",
@@ -4236,11 +4409,11 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
             "name": "1.6) ค่าป้ายไวนิล ขนาด 1.2 x 2.4 เมตร",
             "quantity": 1,
             "unit": "ป้าย",
-            "unitPrice": 432,
-            "total": 432
+            "unitPrice": 450,
+            "total": 450
           }
         ],
-        "subtotal": 7732
+        "subtotal": 7750
       }
     ],
     "budgetLines": [
@@ -4304,15 +4477,15 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "name": "1.6) ค่าป้ายไวนิล ขนาด 1.2 x 2.4 เมตร",
         "quantity": 1,
         "unit": "ป้าย",
-        "unitPrice": 432,
-        "total": 432
+        "unitPrice": 450,
+        "total": 450
       }
     ],
-    "budgetRequested": 7732,
-    "budgetApproved": 7732,
-    "status": "approved",
+    "budgetRequested": 7750,
+    "budgetApproved": 7750,
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาววณิชา ผดุงกิจอนันต์",
       "proposerTitle": "ครู ศพด.บ้านควนทองสีห์",
@@ -4322,7 +4495,13 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 7750
   },
   {
     "id": "NHSO-69-27",
@@ -4379,9 +4558,9 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     ],
     "budgetRequested": 135375,
     "budgetApproved": 135375,
-    "status": "approved",
+    "status": "completed",
     "committeeDecision": "approve",
-    "committeeComment": "เห็นชอบอนุมัติตามที่เสนอ",
+    "committeeComment": "ดำเนินการเสร็จสิ้นตามวัตถุประสงค์และส่งรายงานผลการดำเนินงานเรียบร้อยแล้ว",
     "signers": {
       "proposerName": "นางสาวปฐมาภรณ์  จันทร์แจ่ม",
       "proposerTitle": "ผู้อำนวยการกองสาธารณสุขและสิ่งแวดล้อม",
@@ -4391,6 +4570,12 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       "approverTitle": "ประธานกองทุนฯ ทต.บางเป้า"
     },
     "createdAt": "2026-03-01T08:00:00Z",
-    "updatedAt": "2026-03-01T08:00:00Z"
+    "updatedAt": "2026-03-01T08:00:00Z",
+    "trackingCompleted": true,
+    "trackingExtended": false,
+    "trackingRefunded": false,
+    "meetingRound": "ครั้งที่ 1/2569",
+    "implementationStatus": "completed_reported",
+    "disbursedAmount": 135375
   }
 ];

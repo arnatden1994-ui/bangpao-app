@@ -898,29 +898,57 @@ function json(value) { return ContentService.createTextOutput(JSON.stringify(val
 `;
 
 // NHSO Fund Projects (Module 5)
+export function mergeNhsoFundProjectsWithMaster(items: NhsoProject[]): NhsoProject[] {
+  const master2569 = INITIAL_NHSO_FUND_PROJECTS.filter((p) => p.fiscalYear === '2569');
+  const masterMap = new Map(master2569.map((p) => [p.id, p]));
+  const seenMasterIds = new Set<string>();
+
+  const updatedExisting = (items || []).map((p: NhsoProject) => {
+    const master = masterMap.get(p.id);
+    if (master) {
+      seenMasterIds.add(p.id);
+      return {
+        ...master,
+        ...p,
+        orderNumber: master.orderNumber,
+        projectName: master.projectName,
+        categoryNumber: master.categoryNumber,
+        categoryName: master.categoryName,
+        proposingOrg: master.proposingOrg,
+        budgetRequested: master.budgetRequested,
+        budgetApproved: master.budgetApproved,
+        activityGroups: master.activityGroups,
+        budgetLines: master.budgetLines,
+        activities: master.activities,
+        signers: master.signers,
+        trackingCompleted: p.trackingCompleted ?? master.trackingCompleted,
+        trackingExtended: p.trackingExtended ?? master.trackingExtended,
+        trackingRefunded: p.trackingRefunded ?? master.trackingRefunded,
+      };
+    }
+    return p;
+  });
+
+  // Always include any missing 2569 master projects (all 27 historical projects)
+  const missingMaster2569 = master2569.filter((m) => !seenMasterIds.has(m.id));
+  const combined = [...updatedExisting, ...missingMaster2569];
+
+  return combined.sort((a, b) => {
+    if (a.fiscalYear !== b.fiscalYear) {
+      return String(b.fiscalYear || '').localeCompare(String(a.fiscalYear || ''));
+    }
+    return (a.orderNumber || 999) - (b.orderNumber || 999);
+  });
+}
+
 export function getStoredNhsoFundProjects(): NhsoProject[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.NHSO_FUND_PROJECTS);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Sync 2569 master template projects with latest INITIAL_NHSO_FUND_PROJECTS while preserving user 2570 projects
-        const masterMap = new Map(
-          INITIAL_NHSO_FUND_PROJECTS.filter((p) => p.fiscalYear === '2569').map((p) => [p.id, p])
-        );
-        const merged = parsed.map((p: NhsoProject) => {
-          const master = masterMap.get(p.id);
-          if (master) {
-            return {
-              ...p,
-              activityGroups: master.activityGroups,
-              budgetLines: master.budgetLines,
-              activities: master.activities,
-              signers: master.signers,
-            };
-          }
-          return p;
-        });
+        const merged = mergeNhsoFundProjectsWithMaster(parsed);
+        safeSetItem(STORAGE_KEYS.NHSO_FUND_PROJECTS, JSON.stringify(merged));
         return merged;
       }
     }

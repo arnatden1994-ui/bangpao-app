@@ -599,6 +599,10 @@ export interface NhsoProject {
   disbursedAmount?: number;
   disbursementRecords?: NhsoDisbursementRecord[];
   implementationStatus?: NhsoImplementationStatus;
+  // ผลการติดตามโครงการ (เอกสารแนบ 2): ติ๊กเลือกได้อิสระทั้ง 3 ช่อง
+  trackingCompleted?: boolean; // ดำเนินการแล้ว
+  trackingExtended?: boolean; // ขอขยายเวลา
+  trackingRefunded?: boolean; // คืนเงิน / ไม่ได้ดำเนินการ
   meetingRound?: string;
   meetingDate?: string;
   verifiedByOfficer?: string;
