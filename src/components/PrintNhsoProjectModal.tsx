@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { NhsoProject, NhsoFundSettings, NHSO_FUND_CATEGORIES, NhsoActivityGroup, NhsoBudgetLine } from '../types/index.ts';
+import { exportSingleProjectToMasterXlsx, exportSummaryToMasterXlsx } from '../utils/exportNhsoXlsx.ts';
 
 interface PrintNhsoProjectModalProps {
   isOpen: boolean;
@@ -224,7 +225,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
   const categoryTitle = getOfficialCategoryHeader(categoryNum, currentProject?.categoryName);
   const projectOrderNum = currentProject?.orderNumber || 1;
 
-  // Generate HTML for Word / Excel export (matching master_nhso.xlsx 100%)
+  // Generate HTML for Word (.doc) export (matching master_nhso.xlsx 100%)
   const generateExportHtml = (isExcel = false) => {
     const isSingle = printMode === 'single';
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -235,42 +236,37 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
 
       return `
         <div style="margin-bottom:4px;">
-          <table style="width:100%; border:none; margin-bottom:2px;">
+          <table style="width:100%; border:none; margin-bottom:2px; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
             <tr>
-              <td style="border:none; vertical-align:bottom; width:78%; padding-bottom:2px;">
-                <div style="font-size:15.5pt; font-weight:bold; font-family:'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
-                  ${catHeader}
-                </div>
+              <td style="border:none; vertical-align:bottom; width:78%; padding-bottom:2px; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif; font-size:15.5pt; font-weight:bold;">
+                ${catHeader}
               </td>
               <td style="border:none; vertical-align:bottom; width:22%; text-align:right; padding-bottom:2px;">
-                <div style="font-size:15pt; font-weight:bold; margin-bottom:2px; font-family:'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
-                  ${projectOrderNum}
-                </div>
-                <img src="${origin}/Logo_NHSO_MASTER_Thai_2.jpg" style="height:46px; max-width:165px; object-fit:contain;" alt="สปสช." />
+                <img src="${origin}/Logo_NHSO_MASTER_Thai_2.jpg" width="150" height="46" style="height:46px; width:150px; object-fit:contain;" alt="สปสช." />
               </td>
             </tr>
           </table>
         </div>
 
-        <table style="border-collapse:collapse; width:100%; table-layout:fixed; font-size:14pt; font-family:'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
+        <table style="border-collapse:collapse; width:100%; table-layout:fixed; font-size:14pt; font-family:'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif;">
           <thead>
-            <tr style="text-align:center; font-weight:bold; font-size:14.5pt; background-color:#ffffff;">
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:8.3%; vertical-align:middle;">แผนงาน/โครงการ</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:11.5%; vertical-align:middle;">กิจกรรม</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:11.5%; vertical-align:middle;">วัตถุประสงค์</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:8.5%; vertical-align:middle;">กลุ่มเป้าหมาย</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:10.7%; vertical-align:middle;">ตัวชี้วัด (KPI)</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:6.8%; vertical-align:middle;">พื้นที่ดำเนินการ</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:7.2%; vertical-align:middle;">ระยะเวลา<br/>ดำเนินการ</th>
-              <th colspan="5" style="border:1pt solid #000; padding:3px 2px; width:28.2%; vertical-align:middle;">งบประมาณ</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:7.3%; vertical-align:middle;">ผู้รับผิดชอบ</th>
-            </tr>
             <tr style="text-align:center; font-weight:bold; font-size:14pt; background-color:#ffffff;">
-              <th style="border:1pt solid #000; padding:2px; width:11.5%;">รายการค่าใช้จ่าย</th>
-              <th style="border:1pt solid #000; padding:2px; width:3.0%;">จำนวน</th>
-              <th style="border:1pt solid #000; padding:2px; width:3.2%;">หน่วย</th>
-              <th style="border:1pt solid #000; padding:2px; width:5.0%;">ราคาต่อหน่วย</th>
-              <th style="border:1pt solid #000; padding:2px; width:5.5%;">รวมเงิน (บาท)</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:8.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">แผนงาน/โครงการ</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:10.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">กิจกรรม</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:10.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">วัตถุประสงค์</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:8.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">กลุ่มเป้าหมาย</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:9.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ตัวชี้วัด (KPI)</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:7.2%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">พื้นที่ดำเนินการ</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:6.3%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ระยะเวลา<br/>ดำเนินการ</th>
+              <th colspan="5" style="border:1pt solid #000; padding:3px 2px; width:32.0%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">งบประมาณ</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:7.0%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ผู้รับผิดชอบ</th>
+            </tr>
+            <tr style="text-align:center; font-weight:bold; font-size:13.5pt; background-color:#ffffff;">
+              <th style="border:1pt solid #000; padding:2px; width:11.0%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">รายการค่าใช้จ่าย</th>
+              <th style="border:1pt solid #000; padding:2px; width:3.8%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">จำนวน</th>
+              <th style="border:1pt solid #000; padding:2px; width:3.8%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">หน่วย</th>
+              <th style="border:1pt solid #000; padding:2px; width:6.4%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ราคาต่อหน่วย</th>
+              <th style="border:1pt solid #000; padding:2px; width:7.0%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">รวมเงิน (บาท)</th>
             </tr>
           </thead>
           <tbody>
@@ -455,9 +451,11 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             margin: 0.6cm 0.6cm 0.6cm 0.6cm;
           }
           div.Section1 { page: Section1; }
-          body { font-family: 'TH Sarabun PSK', 'TH Sarabun New', sans-serif; font-size: 14pt; }
-          table { border-collapse: collapse; width: 100%; font-family: 'TH Sarabun PSK', 'TH Sarabun New', sans-serif; }
-          th, td { font-family: 'TH Sarabun PSK', 'TH Sarabun New', sans-serif; }
+          body, table, th, td, div, span, p {
+            font-family: 'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', sans-serif;
+            font-size: 14pt;
+          }
+          table { border-collapse: collapse; width: 100%; }
         </style>
       </head>
       <body>
@@ -479,54 +477,31 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // Export to Microsoft Excel (.xls)
-  const handleExportExcel = () => {
+  // Export to native Microsoft Excel (.xlsx) matching master_nhso.xlsx 100%
+  const handleExportExcel = async () => {
     const isSingle = printMode === 'single';
-    const filename = isSingle
-      ? `${currentProject.orderNumber || 1}_${(currentProject.projectName || 'โครงการ_สปสช').replace(/[\\/:*?"<>|]/g, '_')}.xls`
-      : `แบบสรุปภาพรวม_สปสช_${targetYear}.xls`;
-
-    const htmlBody = generateExportHtml(true);
-    const excelTemplate = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta charset="utf-8">
-        <!--[if gte mso 9]>
-        <xml>
-          <x:ExcelWorkbook>
-            <x:ExcelWorksheets>
-              <x:ExcelWorksheet>
-                <x:Name>${isSingle ? 'แบบเสนอโครงการ' : 'สรุปภาพรวม'}</x:Name>
-                <x:WorksheetOptions>
-                  <x:DisplayGridlines/>
-                  <x:Orientation>Landscape</x:Orientation>
-                </x:WorksheetOptions>
-              </x:ExcelWorksheet>
-            </x:ExcelWorksheets>
-          </x:ExcelWorkbook>
-        </xml>
-        <![endif]-->
-        <style>
-          table { border-collapse: collapse; }
-          th, td { border: 0.5pt solid black; font-family: 'TH Sarabun PSK', 'TH Sarabun New', sans-serif; font-size: 14pt; vertical-align: top; }
-          th { font-weight: bold; background-color: #ffffff; text-align: center; font-size: 14.5pt; }
-        </style>
-      </head>
-      <body>
-        ${htmlBody}
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(['\ufeff', excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    if (isSingle && currentProject) {
+      const filename = `${currentProject.orderNumber || 1}_${(
+        currentProject.projectName || 'โครงการ_สปสช'
+      ).replace(/[\\/:*?"<>|\r\n]+/g, '_')}.xlsx`;
+      await exportSingleProjectToMasterXlsx({
+        project: currentProject,
+        categoryTitle,
+        activityGroups,
+        flattenedRows,
+        settings,
+        filename,
+      });
+    } else {
+      const filename = `แบบสรุปภาพรวม_สปสช_${targetYear}.xlsx`;
+      await exportSummaryToMasterXlsx({
+        targetYear,
+        summaryProjects,
+        groupedByCategory,
+        totalSummaryBudget,
+        filename,
+      });
+    }
   };
 
   const modalContent = (
@@ -684,7 +659,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                       >
                         {/* Top Header Layout matching master_nhso.xlsx:
                             - Left: Category Title aligned at bottom (right above table top border)
-                            - Right: Project Order Number (&R1..&R27) at top-right + Logo_NHSO_MASTER_Thai_2.jpg flush right (no extra double border)
+                            - Right: Official NHSO Master Logo flush right (no project order number at top right)
                         */}
                         <div className="flex items-end justify-between mb-1">
                           {/* Left: Category Title */}
@@ -697,15 +672,8 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                             </h2>
                           </div>
 
-                          {/* Right: Project Order Number & Official NHSO Master Logo */}
+                          {/* Right: Official NHSO Master Logo */}
                           <div className="flex flex-col items-end shrink-0">
-                            <span
-                              className="font-bold text-black pr-0.5 mb-0.5 leading-none"
-                              style={{ fontSize: '14.5pt' }}
-                            >
-                              {projectOrderNum}
-                            </span>
-                            {/* Logo_NHSO_MASTER_Thai_2.jpg already contains its own thin black frame */}
                             <img
                               src="/Logo_NHSO_MASTER_Thai_2.jpg"
                               alt="สปสช. สำนักงานหลักประกันสุขภาพแห่งชาติ"
@@ -717,7 +685,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                           </div>
                         </div>
 
-                        {/* 13-Column Table Grid (Exact column width ratios from master_nhso.xlsx) */}
+                        {/* 13-Column Table Grid (Balanced non-overlapping column widths) */}
                         <div className="w-full">
                           <table
                             className="w-full border-collapse border border-black text-black"
@@ -728,70 +696,70 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                             }}
                           >
                             <colgroup>
-                              <col style={{ width: '8.3%' }} />
-                              <col style={{ width: '11.5%' }} />
-                              <col style={{ width: '11.5%' }} />
                               <col style={{ width: '8.5%' }} />
-                              <col style={{ width: '10.7%' }} />
-                              <col style={{ width: '6.8%' }} />
+                              <col style={{ width: '10.5%' }} />
+                              <col style={{ width: '10.5%' }} />
+                              <col style={{ width: '8.5%' }} />
+                              <col style={{ width: '9.5%' }} />
                               <col style={{ width: '7.2%' }} />
-                              <col style={{ width: '11.5%' }} />
-                              <col style={{ width: '3.0%' }} />
-                              <col style={{ width: '3.2%' }} />
-                              <col style={{ width: '5.0%' }} />
-                              <col style={{ width: '5.5%' }} />
-                              <col style={{ width: '7.3%' }} />
+                              <col style={{ width: '6.3%' }} />
+                              <col style={{ width: '11.0%' }} />
+                              <col style={{ width: '3.8%' }} />
+                              <col style={{ width: '3.8%' }} />
+                              <col style={{ width: '6.4%' }} />
+                              <col style={{ width: '7.0%' }} />
+                              <col style={{ width: '7.0%' }} />
                             </colgroup>
                             <thead>
                               <tr
                                 className="text-center font-bold text-black bg-white"
-                                style={{ fontSize: '14pt', lineHeight: 1.05 }}
+                                style={{ fontSize: '13.5pt', lineHeight: 1.05 }}
                               >
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   แผนงาน/โครงการ
                                 </th>
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   กิจกรรม
                                 </th>
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   วัตถุประสงค์
                                 </th>
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   กลุ่มเป้าหมาย
                                 </th>
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   ตัวชี้วัด (KPI)
                                 </th>
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   พื้นที่ดำเนินการ
                                 </th>
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   ระยะเวลา<br />ดำเนินการ
                                 </th>
-                                <th colSpan={5} className="border border-black py-0.5 px-1 align-middle font-bold">
+                                <th colSpan={5} className="border border-black py-0.5 px-1 align-middle font-bold overflow-hidden">
                                   งบประมาณ
                                 </th>
-                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold">
+                                <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   ผู้รับผิดชอบ
                                 </th>
                               </tr>
                               <tr
                                 className="text-center font-bold text-black bg-white"
-                                style={{ fontSize: '13.5pt', lineHeight: 1.05 }}
+                                style={{ fontSize: '13pt', lineHeight: 1.05 }}
                               >
-                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold whitespace-nowrap">
+                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
                                   รายการค่าใช้จ่าย
                                 </th>
-                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold whitespace-nowrap">
+                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
                                   จำนวน
                                 </th>
-                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold whitespace-nowrap">
+                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
                                   หน่วย
                                 </th>
-                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold whitespace-nowrap">
+                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
                                   ราคาต่อหน่วย
                                 </th>
-                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold whitespace-nowrap">
+                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
                                   รวมเงิน (บาท)
                                 </th>
                               </tr>
@@ -1132,20 +1100,20 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
 
         @font-face {
           font-family: 'TH Sarabun PSK';
-          src: local('TH Sarabun PSK'), local('THSarabunPSK'), local('TH Sarabun New'), local('THSarabunNew');
+          src: local('TH SarabunPSK'), local('TH Sarabun PSK'), local('THSarabunPSK'), local('TH Sarabun New'), local('THSarabunNew');
           font-weight: normal;
           font-style: normal;
         }
         @font-face {
           font-family: 'TH Sarabun PSK';
-          src: local('TH Sarabun PSK Bold'), local('THSarabunPSK-Bold'), local('TH Sarabun New Bold'), local('THSarabunNew-Bold');
+          src: local('TH SarabunPSK Bold'), local('TH Sarabun PSK Bold'), local('THSarabunPSK-Bold'), local('TH Sarabun New Bold'), local('THSarabunNew-Bold');
           font-weight: bold;
           font-style: normal;
         }
 
         .nhso-print-canvas,
         .nhso-print-canvas * {
-          font-family: 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
+          font-family: 'TH SarabunPSK', 'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif !important;
         }
 
         @media print {
