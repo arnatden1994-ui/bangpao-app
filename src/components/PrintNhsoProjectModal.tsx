@@ -192,24 +192,24 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
   });
 
   // Pagination split matching master_nhso.xlsx:
-  // - Single-page projects (<= 8 rows): 1 sheet (all rows + Total row + 3-Signer block)
-  // - Multi-page projects (>= 9 rows, e.g. Project #2 Swimming with 10 rows):
-  //     Page 1 takes 9 rows (Activity 1 [6 rows] + Activity 2 header & 2 items [3 rows] = 9 rows)
+  // - Single-page projects (<= 11 rows, e.g. 1_จมน้ำ70 with 10 rows): 1 sheet (all rows + Total row + 3-Signer block)
+  // - Multi-page projects (>= 12 rows):
+  //     Page 1 takes up to 8 rows
   //     Page 2 takes remaining row(s) + Total row + 3-Signer block
   const paginateRows = (rows: FlattenedRow[]): FlattenedRow[][] => {
-    if (rows.length <= 8) {
+    if (rows.length <= 11) {
       return [rows];
     }
     const result: FlattenedRow[][] = [];
     let rem = [...rows];
 
-    // Page 1 gets up to 9 rows, leaving at least 1 row for the final page with Total & Signatures
-    const p1Count = Math.min(9, Math.max(1, rem.length - 1));
+    // Page 1 gets up to 8 rows, leaving breathing room for continuation
+    const p1Count = Math.min(8, Math.max(1, rem.length - 1));
     result.push(rem.slice(0, p1Count));
     rem = rem.slice(p1Count);
 
-    while (rem.length > 8) {
-      const nextCount = Math.min(9, Math.max(1, rem.length - 1));
+    while (rem.length > 9) {
+      const nextCount = Math.min(8, Math.max(1, rem.length - 1));
       result.push(rem.slice(0, nextCount));
       rem = rem.slice(nextCount);
     }
@@ -252,21 +252,21 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
           <thead>
             <tr style="text-align:center; font-weight:bold; font-size:14pt; background-color:#ffffff;">
               <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:8.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">แผนงาน/โครงการ</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:10.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">กิจกรรม</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:10.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">วัตถุประสงค์</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:10.2%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">กิจกรรม</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:10.2%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">วัตถุประสงค์</th>
               <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:8.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">กลุ่มเป้าหมาย</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:9.5%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ตัวชี้วัด (KPI)</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:9.4%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ตัวชี้วัด (KPI)</th>
               <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:7.2%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">พื้นที่ดำเนินการ</th>
-              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:6.3%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ระยะเวลา<br/>ดำเนินการ</th>
-              <th colspan="5" style="border:1pt solid #000; padding:3px 2px; width:32.0%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">งบประมาณ</th>
+              <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:6.2%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ระยะเวลา<br/>ดำเนินการ</th>
+              <th colspan="5" style="border:1pt solid #000; padding:3px 2px; width:32.8%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">งบประมาณ</th>
               <th rowspan="2" style="border:1pt solid #000; padding:3px 2px; width:7.0%; vertical-align:middle; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ผู้รับผิดชอบ</th>
             </tr>
-            <tr style="text-align:center; font-weight:bold; font-size:13.5pt; background-color:#ffffff;">
+            <tr style="text-align:center; font-weight:bold; font-size:13.5pt; background-color:#ffffff; line-height:1.25;">
               <th style="border:1pt solid #000; padding:2px; width:11.0%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">รายการค่าใช้จ่าย</th>
-              <th style="border:1pt solid #000; padding:2px; width:3.8%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">จำนวน</th>
-              <th style="border:1pt solid #000; padding:2px; width:3.8%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">หน่วย</th>
-              <th style="border:1pt solid #000; padding:2px; width:6.4%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ราคาต่อหน่วย</th>
-              <th style="border:1pt solid #000; padding:2px; width:7.0%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">รวมเงิน (บาท)</th>
+              <th style="border:1pt solid #000; padding:2px; width:3.7%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">จำนวน</th>
+              <th style="border:1pt solid #000; padding:2px; width:3.7%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">หน่วย</th>
+              <th style="border:1pt solid #000; padding:2px; width:6.9%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">ราคาต่อหน่วย</th>
+              <th style="border:1pt solid #000; padding:2px; width:7.5%; font-family:'TH SarabunPSK', 'TH Sarabun PSK', sans-serif;">รวมเงิน (บาท)</th>
             </tr>
           </thead>
           <tbody>
@@ -509,106 +509,133 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto font-sarabun nhso-modal-overlay">
         {/* Main Modal Card */}
         <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-[1280px] max-h-[96vh] flex flex-col overflow-hidden nhso-modal-card">
-          {/* Top Control Bar (Hidden when printing) */}
-          <div className="px-6 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3 bg-slate-900 text-white print:hidden font-sans">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
-                <Printer className="w-5 h-5" />
+          {/* Top Control Bar (Hidden when printing) - Tier 1: Header & Status, Tier 2: Modes & Actions */}
+          <div className="print:hidden font-sans border-b border-slate-800">
+            {/* Tier 1: Title & Document Specs */}
+            <div className="px-6 py-3.5 bg-slate-900/95 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-sm shrink-0">
+                  <Printer className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-bold text-white tracking-wide">
+                      ตัวอย่างก่อนพิมพ์และส่งออกเอกสาร
+                    </h2>
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium">
+                      แม่แบบทางการ สปสช.
+                    </span>
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-medium">
+                      TH Sarabun PSK 16pt
+                    </span>
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-medium">
+                      A4 แนวนอน
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    แบบฟอร์ม 13 ช่องตรงตามประกาศ สปสช. • รองรับการพิมพ์ตรงขนาด A4 และส่งออกไฟล์ Word (.doc) / Excel (.xlsx)
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-sm sm:text-base font-bold flex items-center gap-2">
-                  ตัวอย่างก่อนพิมพ์ & ส่งออกเอกสาร (TH Sarabun 16 PSK - A4 แนวนอน)
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-normal">
-                    แม่แบบทางการ สปสช.
+
+              <div className="flex items-center gap-3 shrink-0">
+                {/* Page / Status indicator */}
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/90 border border-slate-700 text-xs font-semibold text-emerald-300 shadow-inner">
+                  <span>📄</span>
+                  <span>
+                    {printMode === 'single'
+                      ? pages.length === 1
+                        ? 'โครงการ 1 แผ่นสมบูรณ์'
+                        : `เอกสาร ${pages.length} แผ่น (หน้า 1-${pages.length})`
+                      : `สรุปภาพรวม ${summaryProjects.length} โครงการ`}
                   </span>
-                </h2>
-                <p className="text-[11px] text-slate-400">
-                  ฟอนต์ราชการ TH Sarabun PSK • โลโก้ทางการ สปสช. MASTER • สัดส่วนตาราง 13 ช่องตรงตามไฟล์แม่แบบ Google Sheets 100%
-                </p>
+                </div>
+
+                {/* Close button */}
+                <button
+                  onClick={onClose}
+                  type="button"
+                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer border border-transparent hover:border-slate-700"
+                  title="ปิดหน้าต่าง (ESC)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Document Pages Indicator Badge */}
-              <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1.5">
-                📄 เอกสาร {printMode === 'single' ? `${pages.length} แผ่น` : 'สรุปภาพรวม'} (A4 แนวนอน)
-              </span>
-
-              {/* Mode Switch */}
-              <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700">
+            {/* Tier 2: Document Mode Switcher & Export / Print Actions */}
+            <div className="px-6 py-2.5 bg-slate-900 flex flex-wrap items-center justify-between gap-3">
+              {/* Left: Mode Switcher */}
+              <div className="flex bg-slate-800/90 rounded-xl p-1 border border-slate-700/80 shadow-inner">
                 {project && (
                   <button
                     type="button"
                     onClick={() => setPrintMode('single')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                       printMode === 'single'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-emerald-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
                     }`}
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    แบบเสนอโครงการ (13 ช่อง)
+                    <span>แบบเสนอโครงการ (13 ช่อง)</span>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setPrintMode('summary')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                     printMode === 'summary'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
                   }`}
                 >
                   <Table className="w-3.5 h-3.5" />
-                  แบบสรุปภาพรวมเสนอ กก.
+                  <span>แบบสรุปภาพรวมเสนอ กก.</span>
                 </button>
               </div>
 
-              {/* Export Word */}
-              <button
-                onClick={handleExportWord}
-                type="button"
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow transition-colors cursor-pointer"
-                title="ส่งออกไฟล์ Word (.doc) ฟอนต์ TH Sarabun PSK นำไปเปิดแก้ไขได้ทันที"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>ส่งออก Word</span>
-              </button>
+              {/* Right: Export & Print Action Buttons */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {/* Export Word */}
+                <button
+                  onClick={handleExportWord}
+                  type="button"
+                  className="px-3.5 py-1.5 bg-blue-600/90 hover:bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 cursor-pointer border border-blue-500/40"
+                  title="ส่งออกไฟล์ Word (.doc) ฟอนต์ TH Sarabun PSK เปิดแก้ไขได้ใน MS Word"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>ส่งออก Word</span>
+                </button>
 
-              {/* Export Excel */}
-              <button
-                onClick={handleExportExcel}
-                type="button"
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow transition-colors cursor-pointer"
-                title="ส่งออกไฟล์ Excel (.xls) ตารางคำนวณ 13 ช่อง"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>ส่งออก Excel</span>
-              </button>
+                {/* Export Excel */}
+                <button
+                  onClick={handleExportExcel}
+                  type="button"
+                  className="px-3.5 py-1.5 bg-emerald-700/90 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow hover:-translate-y-0.5 cursor-pointer border border-emerald-600/40"
+                  title="ส่งออกไฟล์ Excel (.xlsx) รูปแบบแม่แบบทางการ สปสช. พร้อมสูตรคำนวณ"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>ส่งออก Excel</span>
+                </button>
 
-              {/* Print Button */}
-              <button
-                onClick={handlePrint}
-                type="button"
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow transition-transform hover:scale-105 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>พิมพ์ / บันทึก PDF</span>
-              </button>
+                <div className="h-5 w-px bg-slate-700/80 mx-1 hidden sm:block" />
 
-              {/* Close */}
-              <button
-                onClick={onClose}
-                type="button"
-                className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+                {/* Primary Print Button */}
+                <button
+                  onClick={handlePrint}
+                  type="button"
+                  className="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer ring-1 ring-emerald-400/30"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>พิมพ์ / บันทึก PDF</span>
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Printable Canvas Scroll Area */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-800/60 nhso-modal-scroll">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950/80 nhso-modal-scroll">
             {/* ============================================================== */}
             {/* MODE 1: SINGLE PROJECT PROPOSAL (100% REPLICA OF MASTER XLSX) */}
             {/* ============================================================== */}
@@ -628,31 +655,32 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                       className="nhso-screen-sheet-wrapper max-w-[1140px] mx-auto mb-8 print:mb-0 print:max-w-none"
                     >
                       {/* On-screen Page Badge Indicator (Hidden when printing) */}
-                      <div className="nhso-screen-badge print:hidden flex items-center justify-between mb-2 px-2 text-slate-300 font-sans text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold flex items-center gap-1.5 bg-slate-800 text-emerald-400 px-3 py-1 rounded-full border border-slate-700 shadow-sm">
-                            📄 แผ่นที่ {pageNum} จาก {totalPages}{' '}
-                            {totalPages === 1
-                              ? '(โครงการ 1 แผ่นสมบูรณ์)'
-                              : pageIdx === 0
-                              ? '(แผ่นที่ 1: ตารางกิจกรรมหลัก)'
-                              : '(แผ่นที่ 2: รายการต่อเนื่อง + รวมเป็นเงินทั้งสิ้น + ลายมือชื่อ 3 ฝ่าย)'}
+                      <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-2 mb-2 px-1 text-slate-300 font-sans text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-bold flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-lg border border-emerald-500/30 shadow-sm">
+                            📄 แผ่นที่ {pageNum} จาก {totalPages}
                           </span>
-                          <span className="text-slate-400 hidden sm:inline">
-                            ลำดับโครงการที่ {projectOrderNum} •{' '}
-                            {pageIdx === 0
-                              ? `แสดง ${pageRows.length} แถว`
-                              : `แสดง ${pageRows.length} แถวต่อเนื่อง + ยอดรวมสุทธิ + ผู้ลงนาม`}
+                          <span className="text-slate-300 font-medium">
+                            {totalPages === 1
+                              ? 'โครงร่างเอกสารฉบับสมบูรณ์ (ตาราง 13 ช่อง + ยอดงบรวม + ลายมือชื่อ 3 ฝ่าย)'
+                              : pageIdx === 0
+                              ? `แผ่นที่ 1 : ตารางกิจกรรมหลักและรายละเอียดโครงการ (${pageRows.length} รายการ)`
+                              : `แผ่นที่ 2 : ตารางกิจกรรมต่อเนื่อง + ยอดรวมงบประมาณสุทธิ + ผู้มีอำนาจลงนาม 3 ฝ่าย`}
                           </span>
                         </div>
-                        <span className="text-slate-400 text-[11px]">
-                          กระดาษ A4 แนวนอน (Landscape) • TH Sarabun PSK
-                        </span>
+                        <div className="flex items-center gap-2 text-slate-400 text-[11px]">
+                          <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                            A4 Landscape (297 × 210 มม.)
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                            TH Sarabun PSK 16pt
+                          </span>
+                        </div>
                       </div>
 
                       {/* The Printable Page Sheet */}
                       <div
-                        className="nhso-page bg-white text-black px-6 py-5 sm:px-8 sm:py-6 shadow-2xl rounded-sm border border-slate-300 print:border-none print:shadow-none print:p-0 print:m-0 w-full"
+                        className="nhso-page bg-white text-black px-6 py-5 sm:px-8 sm:py-6 shadow-[0_12px_40px_rgba(0,0,0,0.45)] rounded-md border border-slate-200/80 print:border-none print:shadow-none print:p-0 print:m-0 w-full"
                         style={{
                           fontFamily: "'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif",
                         }}
@@ -697,23 +725,23 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                           >
                             <colgroup>
                               <col style={{ width: '8.5%' }} />
-                              <col style={{ width: '10.5%' }} />
-                              <col style={{ width: '10.5%' }} />
+                              <col style={{ width: '10.2%' }} />
+                              <col style={{ width: '10.2%' }} />
                               <col style={{ width: '8.5%' }} />
-                              <col style={{ width: '9.5%' }} />
+                              <col style={{ width: '9.4%' }} />
                               <col style={{ width: '7.2%' }} />
-                              <col style={{ width: '6.3%' }} />
+                              <col style={{ width: '6.2%' }} />
                               <col style={{ width: '11.0%' }} />
-                              <col style={{ width: '3.8%' }} />
-                              <col style={{ width: '3.8%' }} />
-                              <col style={{ width: '6.4%' }} />
-                              <col style={{ width: '7.0%' }} />
+                              <col style={{ width: '3.7%' }} />
+                              <col style={{ width: '3.7%' }} />
+                              <col style={{ width: '6.9%' }} />
+                              <col style={{ width: '7.5%' }} />
                               <col style={{ width: '7.0%' }} />
                             </colgroup>
                             <thead>
                               <tr
                                 className="text-center font-bold text-black bg-white"
-                                style={{ fontSize: '13.5pt', lineHeight: 1.05 }}
+                                style={{ fontSize: '13.5pt', lineHeight: 1.15 }}
                               >
                                 <th rowSpan={2} className="border border-black py-1 px-0.5 align-middle font-bold overflow-hidden">
                                   แผนงาน/โครงการ
@@ -745,7 +773,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                               </tr>
                               <tr
                                 className="text-center font-bold text-black bg-white"
-                                style={{ fontSize: '13pt', lineHeight: 1.05 }}
+                                style={{ fontSize: '13pt', lineHeight: 1.25 }}
                               >
                                 <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
                                   รายการค่าใช้จ่าย
@@ -756,10 +784,10 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                                 <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
                                   หน่วย
                                 </th>
-                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
+                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden leading-tight">
                                   ราคาต่อหน่วย
                                 </th>
-                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden">
+                                <th className="border border-black py-0.5 px-0.5 align-middle font-bold overflow-hidden leading-tight">
                                   รวมเงิน (บาท)
                                 </th>
                               </tr>
@@ -903,7 +931,7 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
                         {/* 3-Signer Signature Block (Only rendered on final page) */}
                         {isLastPage && (
                           <div
-                            className="pt-6 pb-1 grid grid-cols-3 gap-4 text-center text-black nhso-signature-block"
+                            className="pt-4 pb-1 grid grid-cols-3 gap-4 text-center text-black nhso-signature-block"
                             style={{ fontSize: '15pt', lineHeight: 1.25 }}
                           >
                             {/* Proposer */}
@@ -958,17 +986,27 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             {/* ============================================================== */}
             {printMode === 'summary' && (
               <div className="nhso-print-canvas max-w-[1140px] mx-auto">
-                <div className="nhso-screen-badge print:hidden flex items-center justify-between mb-2 px-2 text-slate-300 font-sans text-xs">
-                  <span className="font-bold flex items-center gap-1.5 bg-slate-800 text-emerald-400 px-3 py-1 rounded-full border border-slate-700 shadow-sm">
-                    📄 แบบสรุปภาพรวมเสนอ กก. (แม่แบบ Sheet 1 ภาพรวม)
-                  </span>
-                  <span className="text-slate-400 text-[11px]">
-                    กระดาษ A4 แนวนอน (Landscape) • TH Sarabun PSK
-                  </span>
+                <div className="nhso-screen-badge print:hidden flex flex-wrap items-center justify-between gap-2 mb-3 px-1 text-slate-300 font-sans text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-bold flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-lg border border-emerald-500/30 shadow-sm">
+                      📋 แบบสรุปภาพรวมโครงการ (เสนอคณะกรรมการบริหารกองทุนฯ)
+                    </span>
+                    <span className="text-slate-300 font-medium">
+                      รวมทั้งหมด {summaryProjects.length} โครงการ • งบประมาณรวม {totalSummaryBudget.toLocaleString()} บาท
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400 text-[11px]">
+                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                      A4 Landscape
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/80">
+                      TH Sarabun PSK
+                    </span>
+                  </div>
                 </div>
 
                 <div
-                  className="nhso-page nhso-summary-page bg-white text-black p-6 sm:p-8 shadow-2xl rounded-sm border border-slate-300 print:border-none print:shadow-none print:p-0 print:m-0 w-full space-y-3"
+                  className="nhso-page nhso-summary-page bg-white text-black p-6 sm:p-8 shadow-[0_12px_40px_rgba(0,0,0,0.45)] rounded-md border border-slate-200/80 print:border-none print:shadow-none print:p-0 print:m-0 w-full space-y-3"
                   style={{
                     fontFamily: "'TH Sarabun PSK', 'TH Sarabun New', 'Sarabun', sans-serif",
                   }}
@@ -1224,6 +1262,8 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
             padding: 0 !important;
             margin: 0 !important;
             width: 100% !important;
+            max-height: 198mm !important;
+            box-sizing: border-box !important;
             min-height: 0 !important;
             height: auto !important;
             box-shadow: none !important;
