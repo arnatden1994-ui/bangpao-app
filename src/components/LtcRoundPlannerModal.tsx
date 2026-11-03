@@ -44,6 +44,8 @@ import {
   UserRole,
 } from '../types/index.ts';
 import { PrintLtcRegistrationModal } from './PrintLtcRegistrationModal.tsx';
+import { INITIAL_LTC_PATIENTS } from '../data/mockData.ts';
+import { mergeLtcWithMaster } from '../services/sheetsSync.ts';
 
 // Central Municipality Coordinates (Bangpao HQ) - พิกัดจริงสำนักงานเทศบาลตำบลบางเป้า
 export const BANGPAO_HQ_COORDS = {
@@ -195,6 +197,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   onClonePlanToRound,
 }) => {
   if (!isOpen) return null;
+
+  // Ensure all 14 official patients are present
+  const safePatients = useMemo(() => mergeLtcWithMaster(patients), [patients]);
 
   // Active step / tab in the planner
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -358,7 +363,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       // Reconcile and synchronize stops with registered patient database
       const rawStops = existing.stops || [];
       const reconciled = rawStops.map((stop) => {
-        const matched = patients.find((p) => matchPlanStopWithPatient(stop, p));
+        const matched = safePatients.find((p) => matchPlanStopWithPatient(stop, p));
         if (matched) {
           const mooFallback = BANGPAO_COORDS[matched.moo || '2'] || BANGPAO_HQ_COORDS;
           const realLat = matched.latitude ?? stop.latitude ?? mooFallback.lat;
@@ -390,7 +395,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       const title = `แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ ${planYear} (รอบที่ ${planRound})`;
       setPlanTitle(title);
       // Auto-pull all registered patients with actual registered coordinates
-      const defaultStops: LtcPlanStop[] = patients
+      const defaultStops: LtcPlanStop[] = safePatients
         .filter((p) => p.status !== 'deceased')
         .map((p, idx) => {
           const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
@@ -420,7 +425,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         });
       setPlannedStops(defaultStops);
     }
-  }, [planYear, planRound, existingPlans, patients]);
+  }, [planYear, planRound, existingPlans, safePatients]);
 
   // Total route metrics
   const routeMetrics = useMemo(() => {
@@ -988,7 +993,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
   // Filtered patients for selection in Step 3
   const filteredPatients = useMemo(() => {
-    return patients.filter((p) => {
+    return safePatients.filter((p) => {
       if (p.status === 'deceased') return false;
       if (patientMooFilter !== 'all' && p.moo !== patientMooFilter) return false;
       if (patientAdlFilter !== 'all') {
@@ -1006,7 +1011,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       }
       return true;
     });
-  }, [patients, patientMooFilter, patientAdlFilter, patientSearch]);
+  }, [safePatients, patientMooFilter, patientAdlFilter, patientSearch]);
 
   const selectedPatientIds = new Set(plannedStops.map((s) => s.patientId));
 
@@ -1470,7 +1475,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="px-3 py-1.5 rounded-xl bg-teal-700 text-white font-black text-xs shadow-2xs">
-                    เลือกแล้ว {plannedStops.length} / {patients.length} ราย
+                    เลือกแล้ว {plannedStops.length} / {safePatients.length} ราย
                   </span>
                 </div>
               </div>
@@ -2240,7 +2245,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         isOpen={isPrintRegModalOpen}
         onClose={() => setIsPrintRegModalOpen(false)}
         selectedPatients={plannerPatientsForPrint}
-        allPatients={patients && patients.length > 0 ? patients : plannerPatientsForPrint}
+        allPatients={safePatients}
         fiscalYear={planFiscalYear}
         round={planRound}
         defaultScope="selected"

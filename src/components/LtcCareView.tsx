@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Accessibility,
   Plus,
@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { LtcPatient, UserRole } from '../types/index.ts';
+import { mergeLtcWithMaster } from '../services/sheetsSync.ts';
 
 interface LtcCareViewProps {
   patients: LtcPatient[];
@@ -31,10 +32,11 @@ export const LtcCareView: React.FC<LtcCareViewProps> = ({
   onRecordVisit,
   onPrintCarePlan,
 }) => {
+  const safePatients = useMemo(() => mergeLtcWithMaster(patients), [patients]);
   const [search, setSearch] = useState('');
   const [adlFilter, setAdlFilter] = useState<string>('all');
 
-  const filtered = patients.filter((p) => {
+  const filtered = safePatients.filter((p) => {
     const q = search.toLowerCase().trim();
     const matchSearch =
       !q ||
@@ -101,7 +103,7 @@ export const LtcCareView: React.FC<LtcCareViewProps> = ({
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
-          ทั้งหมด ({patients.length})
+          ทั้งหมด ({safePatients.length})
         </button>
         <button
           onClick={() => setAdlFilter('group_4')}

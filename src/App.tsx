@@ -42,6 +42,7 @@ import {
   saveStoredNhsoFundProjects,
   mergeNhsoFundProjectsWithMaster,
   getStoredLtc,
+  mergeLtcWithMaster,
   getStoredEquipment,
   getStoredEquipmentUnits,
   getStoredLoans,
@@ -262,7 +263,7 @@ export default function App() {
     getStoredNhsoFundProjects()
   );
   const [ltcPatients, setLtcPatients] = useState<LtcPatient[]>(() =>
-    getStoredLtc()
+    mergeLtcWithMaster(getStoredLtc())
   );
   const [equipmentList, setEquipmentList] = useState<MedicalEquipment[]>(() =>
     getStoredEquipment()
@@ -576,8 +577,23 @@ export default function App() {
       }
     });
     const unsubLtc = subscribeCollection<LtcPatient>(COLLECTIONS.LTC, (items) => {
-      if (items && items.length > 0) setLtcPatients(items);
+      if (items && items.length > 0) {
+        const merged = mergeLtcWithMaster(items);
+        setLtcPatients(merged);
+      }
     });
+
+    // Auto-sync all 14 official LTC patients to Firestore so cloud database is guaranteed complete
+    const syncAll14LtcToCloud = async () => {
+      try {
+        for (const pt of INITIAL_LTC_PATIENTS) {
+          await saveToFirestore(COLLECTIONS.LTC, pt, pt.id);
+        }
+      } catch (err) {
+        console.warn('Auto sync 14 LTC to Firestore error:', err);
+      }
+    };
+    syncAll14LtcToCloud();
     const unsubUsers = subscribeCollection<User>(COLLECTIONS.USERS, (items) => {
       if (items && items.length > 0) syncUsersFromRemote(items);
     });
@@ -1344,6 +1360,19 @@ unsubLicenses();
                 gasUrl={config.appsScriptUrl}
                 onShowToast={showToast}
                 patients={ltcPatients}
+                onImportOfficialPatients={async () => {
+                  const merged = mergeLtcWithMaster(INITIAL_LTC_PATIENTS);
+                  setLtcPatients(merged);
+                  saveStoredLtc(merged);
+                  try {
+                    for (const pt of merged) {
+                      await saveToFirestore(COLLECTIONS.LTC, pt, pt.id);
+                    }
+                  } catch (e) {
+                    console.warn(e);
+                  }
+                  showToast('success', 'นำเข้ารายชื่อผู้มีภาวะพึ่งพิง 14 รายตามใบลงทะเบียนอย่างเป็นทางการเรียบร้อยแล้ว');
+                }}
                 userRole={currentUser.role}
                 activeSubTab={nhsoLtcSubTab}
                 onSubTabChange={(st) => setNhsoLtcSubTab(st)}

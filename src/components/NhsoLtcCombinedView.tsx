@@ -37,6 +37,7 @@ import {
   Bell,
   Send,
   Download,
+  RefreshCw,
 } from 'lucide-react';
 import {
   NhsoProject,
@@ -56,6 +57,7 @@ import {
 } from '../services/notificationService.ts';
 import { saveLtcQueueToFirestore } from '../services/firebaseService.ts';
 import { INITIAL_LTC_PATIENTS } from '../data/mockData.ts';
+import { mergeLtcWithMaster } from '../services/sheetsSync.ts';
 import { LtcRoundPlannerModal } from './LtcRoundPlannerModal.tsx';
 import { PrintLtcRegistrationModal } from './PrintLtcRegistrationModal.tsx';
 import { NhsoFundView } from './NhsoFundView.tsx';
@@ -73,6 +75,7 @@ interface NhsoLtcCombinedViewProps {
   onDeletePatient?: (patientId: string) => void;
   onRecordVisit: (patient: LtcPatient) => void;
   onPrintCarePlan: (patient: LtcPatient) => void;
+  onImportOfficialPatients?: () => void;
   activeSubTab?: 'route' | 'register' | 'inventory' | 'nhso';
   onSubTabChange?: (tab: 'route' | 'register' | 'inventory' | 'nhso') => void;
   signerSettings?: SignerSettings;
@@ -415,6 +418,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   onDeletePatient,
   onRecordVisit,
   onPrintCarePlan,
+  onImportOfficialPatients,
   activeSubTab: controlledSubTab,
   onSubTabChange,
   signerSettings,
@@ -433,9 +437,12 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     else setInternalSubTab(tab);
   };
 
-  // Route Stops State
+  // Guaranteed all 14 official patients are present
+  const effectivePatients = useMemo(() => mergeLtcWithMaster(patients), [patients]);
+
+  // Route Stops State (guaranteed all 14 stops)
   const [stops, setStops] = useState<DeliveryStop[]>(() =>
-    patients && patients.length > 0 ? convertPatientsToDeliveryStops(patients) : INITIAL_DELIVERY_STOPS
+    convertPatientsToDeliveryStops(mergeLtcWithMaster(patients))
   );
   const [selectedYearFilter, setSelectedYearFilter] = useState<string>('2569');
   const [selectedRoundFilter, setSelectedRoundFilter] = useState<string>('1');
@@ -464,34 +471,33 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const [isSendingLtcNotify, setIsSendingLtcNotify] = useState<boolean>(false);
   const [ltcNotifyResultLog, setLtcNotifyResultLog] = useState<NotificationLogItem | null>(null);
 
-  // Sync stops when patients prop updates (e.g. added/edited/deleted)
+  // Sync stops when effectivePatients updates (e.g. added/edited/deleted/remote sync)
   useEffect(() => {
-    if (patients && patients.length > 0) {
-      const converted = convertPatientsToDeliveryStops(patients);
-      setStops((prev) => {
-        const prevMap = new Map(prev.map((s) => [s.patientId, s]));
-        const merged = converted.map((item, idx) => {
-          const existing = prevMap.get(item.patientId);
-          return existing
-            ? {
-                ...item,
-                status: existing.status === 'delivered' || item.status === 'delivered' ? 'delivered' : 'pending',
-                deliveredAt: existing.deliveredAt || item.deliveredAt,
-                receiverName: existing.receiverName || item.receiverName,
-                routeOrder: existing.routeOrder || idx + 1,
-              }
-            : { ...item, routeOrder: prev.length + idx + 1 };
-        });
-        return merged
-          .sort((a, b) => a.routeOrder - b.routeOrder)
-          .map((s, i) => ({ ...s, routeOrder: i + 1 }));
+    const converted = convertPatientsToDeliveryStops(effectivePatients);
+    setStops((prev) => {
+      const prevMap = new Map(prev.map((s) => [s.patientId, s]));
+      const merged = converted.map((item, idx) => {
+        const existing = prevMap.get(item.patientId);
+        return existing
+          ? {
+              ...item,
+              status: existing.status === 'delivered' || item.status === 'delivered' ? 'delivered' : 'pending',
+              deliveredAt: existing.deliveredAt || item.deliveredAt,
+              receiverName: existing.receiverName || item.receiverName,
+              routeOrder: existing.routeOrder || idx + 1,
+            }
+          : { ...item, routeOrder: prev.length + idx + 1 };
       });
-      setSelectedStopIds((prevIds) => {
-        const validIds = new Set(converted.map((s) => s.id));
-        return prevIds.filter((id) => validIds.has(id));
-      });
-    }
-  }, [patients]);
+      return merged
+        .sort((a, b) => a.routeOrder - b.routeOrder)
+        .map((s, i) => ({ ...s, routeOrder: i + 1 }));
+    });
+    setSelectedStopIds((prevIds) => {
+      const validIds = new Set(converted.map((s) => s.id));
+      const filtered = prevIds.filter((id) => validIds.has(id));
+      return filtered.length > 0 ? filtered : converted.map((s) => s.id);
+    });
+  }, [effectivePatients]);
 
   // Delivery Route Selection (starts empty until stops are added via "+ ส่งไปจัดรอบ" or loaded from saved period queue)
   const [selectedStopIds, setSelectedStopIds] = useState<string[]>([]);
@@ -655,11 +661,10 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const activePlanKey = `${selectedYearFilter === 'all' ? '2569' : selectedYearFilter}_${selectedRoundFilter === 'all' ? '1' : selectedRoundFilter}`;
   const currentPlan = roundPlans[activePlanKey];
 
-  // Provide robust registered patients fallback for Planner Modal
+  // Provide robust registered patients fallback for Planner Modal (guaranteed 14 patients)
   const availablePatientsForPlanner: LtcPatient[] = useMemo(() => {
-    if (patients && patients.length > 0) return patients;
-    return INITIAL_LTC_PATIENTS;
-  }, [patients]);
+    return effectivePatients;
+  }, [effectivePatients]);
 
   const createDefaultRoundsMap = (): Record<string, LtcRoundItem[]> => {
     const map: Record<string, LtcRoundItem[]> = {};
@@ -1368,16 +1373,23 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   // Sync selectedStopIds when user switches Year or Round filter on the dashboard
   useEffect(() => {
     const pKey = getActivePeriodKey(selectedYearFilter, selectedRoundFilter);
-    if (periodQueues[pKey]) {
+    const existingQueue = periodQueues[pKey];
+    if (existingQueue && existingQueue.length >= stops.length && existingQueue.length > 0) {
       // Filter out any stops that have already been delivered in this period
-      const validPending = periodQueues[pKey].filter((id) => {
+      const validPending = existingQueue.filter((id) => {
         const targetStop = stops.find((s) => s.id === id);
         if (!targetStop) return false;
         return getStopDeliveryStatus(targetStop.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending';
       });
       setSelectedStopIds(validPending);
+    } else if (stops.length > 0) {
+      // Auto-populate all pending stops for this round (all 14 official stops)
+      const allPendingIds = stops
+        .filter((s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending')
+        .map((s) => s.id);
+      setSelectedStopIds(allPendingIds);
+      setPeriodQueues((prev) => ({ ...prev, [pKey]: allPendingIds }));
     } else {
-      // Default: Route Sequencer staging area starts empty until user adds stops via "+ ส่งไปจัดรอบ"
       setSelectedStopIds([]);
     }
   }, [selectedYearFilter, selectedRoundFilter, deliveryRecords, stops]);
@@ -1608,7 +1620,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     const nextQueue = selectedStopIds.filter((id) => id !== deliveryModalStop.id);
     updateSelectedQueueForPeriod(nextQueue, effYear, effRound);
 
-    const matchedPatient = patients.find((p) => p.id === deliveryModalStop.patientId);
+    const matchedPatient = effectivePatients.find((p) => p.id === deliveryModalStop.patientId);
     if (matchedPatient && onRecordVisit) {
       onRecordVisit(matchedPatient);
     }
@@ -1740,7 +1752,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       : '';
 
     const stopLines = orderedSelectedStops.map((s, idx) => {
-      const matchedPt = patients.find((p) => p.id === s.patientId);
+      const matchedPt = effectivePatients.find((p) => p.id === s.patientId);
       const eq =
         matchedPt?.equipmentNeeded ||
         `ผ้าอ้อม Size ${s.diaperSize} (${s.diaperQuantity} ชิ้น)`;
@@ -1838,7 +1850,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       // Aggregate total supply summary across all queued stops
       const itemAggMap: Record<string, { itemName: string; totalQty: number; unit: string }> = {};
       const notifyStops = queueStops.map((s, idx) => {
-        const matchedPt = patients.find((p) => p.id === s.patientId);
+        const matchedPt = effectivePatients.find((p) => p.id === s.patientId);
         const rInfo = getStopRoundInfo(s, selectedRoundFilter, selectedYearFilter);
         const rawItems =
           rInfo.itemsList && rInfo.itemsList.length > 0
@@ -1993,7 +2005,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       : `${newReg.address} หมู่ที่ ${mooNum} ${village}`.trim();
 
     if (editingPatientId) {
-      const existing = patients.find((p) => p.id === editingPatientId);
+      const existing = effectivePatients.find((p) => p.id === editingPatientId);
       const mergedYearRounds: Record<string, Record<string, LtcRoundItem[]>> = {
         ...(existing?.yearRoundItems || {}),
         ...yearRoundItems,
@@ -2219,7 +2231,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     roundKey: string = selectedRoundFilter,
     yearKey: string = selectedYearFilter
   ) => {
-    const matchedPt = patients.find((p) => p.id === stop.patientId);
+    const matchedPt = effectivePatients.find((p) => p.id === stop.patientId);
     const effectiveYear = yearKey === 'all' ? matchedPt?.fiscalYear || '2569' : yearKey;
     const roundMap =
       matchedPt?.yearRoundItems?.[effectiveYear] || matchedPt?.roundItems;
@@ -2390,7 +2402,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
     const getStopCreatedDate = (s: DeliveryStop) => {
       if (s.createdAt) return s.createdAt;
-      const matchedPt = patients.find((p) => p.id === s.patientId);
+      const matchedPt = effectivePatients.find((p) => p.id === s.patientId);
       return matchedPt?.createdAt || matchedPt?.lastVisitDate || '';
     };
 
@@ -2434,7 +2446,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     selectedStopIds,
     orderedSelectedStops,
     deliveryRecords,
-    patients,
+    effectivePatients,
   ]);
 
   // Helper to focus on a specific patient pin on the Overview Map
@@ -2677,7 +2689,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   }, [
     subTab,
     stops,
-    patients,
+    effectivePatients,
     selectedStopIds,
     orderedSelectedStops,
     selectedMooFilter,
@@ -2893,21 +2905,20 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
   // List of patients selected for printing sign-off sheet (or fallback to full round)
   const printSelectedPatients = useMemo(() => {
-    const pList = patients && patients.length > 0 ? patients : INITIAL_LTC_PATIENTS;
     const pMap = new Map<string, LtcPatient>();
-    pList.forEach((p) => pMap.set(p.id, p));
+    effectivePatients.forEach((p) => pMap.set(p.id, p));
 
     if (orderedSelectedStops.length > 0) {
       return orderedSelectedStops
         .map((s) => pMap.get(s.patientId))
         .filter((p): p is LtcPatient => Boolean(p));
     }
-    return pList;
-  }, [orderedSelectedStops, patients]);
+    return effectivePatients;
+  }, [orderedSelectedStops, effectivePatients]);
 
   const printAllPatients = useMemo(() => {
-    return patients && patients.length > 0 ? patients : INITIAL_LTC_PATIENTS;
-  }, [patients]);
+    return effectivePatients;
+  }, [effectivePatients]);
 
   return (
     <div className="space-y-5">
@@ -2960,7 +2971,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
             }`}
           >
             <Users className="w-3.5 h-3.5 shrink-0" />
-            <span>ลงทะเบียนผู้มีภาวะพึ่งพิง ({patients.length})</span>
+            <span>ลงทะเบียนผู้มีภาวะพึ่งพิง ({effectivePatients.length})</span>
           </button>
 
           <button
@@ -3014,6 +3025,29 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     รีเซ็ตตัวกรอง
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onImportOfficialPatients) {
+                      onImportOfficialPatients();
+                    }
+                    const all14Stops = convertPatientsToDeliveryStops(INITIAL_LTC_PATIENTS);
+                    setStops(all14Stops);
+                    const all14Ids = all14Stops.map((s) => s.id);
+                    setSelectedStopIds(all14Ids);
+                    const pKey = getActivePeriodKey(selectedYearFilter, selectedRoundFilter);
+                    setPeriodQueues((prev) => ({ ...prev, [pKey]: all14Ids }));
+                    if (onShowToast) {
+                      onShowToast('success', 'นำเข้ารายชื่อผู้มีภาวะพึ่งพิง 14 รายตามใบลงทะเบียนอย่างเป็นทางการเรียบร้อยแล้ว');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer transition-all hover:scale-[1.02] ring-1 ring-blue-300"
+                  title="นำเข้ารายชื่อผู้มีภาวะพึ่งพิงครบทั้ง 14 รายตามใบลงทะเบียนอย่างเป็นทางการ (จัดเรียง 1-14 ตามใบลงทะเบียน 2)"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-blue-200" />
+                  <span>📥 นำเข้าฐานข้อมูล 14 ราย</span>
+                </button>
 
                 <button
                   type="button"
@@ -3598,7 +3632,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                const matchedPt = patients.find((p) => p.id === activeStop.patientId);
+                                const matchedPt = effectivePatients.find((p) => p.id === activeStop.patientId);
                                 if (matchedPt) {
                                   setIsOverviewMapFullscreen(false);
                                   setSubTab('register');
@@ -4356,7 +4390,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     </tr>
                   ) : (
                     tableStops.map((stop) => {
-                      const matchedPt = patients.find((p) => p.id === stop.patientId);
+                      const matchedPt = effectivePatients.find((p) => p.id === stop.patientId);
                       const isQueued = selectedStopIds.includes(stop.id);
                       const queueNo = isQueued
                         ? orderedSelectedStops.findIndex((s) => s.id === stop.id) + 1
@@ -5435,7 +5469,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
           {/* Bottom Full-Width Table: จัดการรายชื่อผู้ป่วย (แก้ไข/ลบ) */}
           {(() => {
-            const filteredPatients = patients
+            const filteredPatients = effectivePatients
               .filter((p) => {
                 if (!patientSearchQuery.trim()) return true;
                 const q = patientSearchQuery.toLowerCase();
@@ -5448,6 +5482,11 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                 );
               })
               .sort((a, b) => {
+                const idxA = INITIAL_LTC_PATIENTS.findIndex((ip) => ip.id === a.id);
+                const idxB = INITIAL_LTC_PATIENTS.findIndex((ip) => ip.id === b.id);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
                 const dateA = a.createdAt || a.lastVisitDate || '';
                 const dateB = b.createdAt || b.lastVisitDate || '';
                 const cmp = dateB.localeCompare(dateA);
@@ -5513,8 +5552,8 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                         </h3>
                         <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-xs font-extrabold">
                           {patientSearchQuery
-                            ? `พบ ${filteredPatients.length} จาก ${patients.length} ราย`
-                            : `ทั้งหมด ${patients.length} ราย`}
+                            ? `พบ ${filteredPatients.length} จาก ${effectivePatients.length} ราย`
+                            : `ทั้งหมด ${effectivePatients.length} ราย`}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-0.5">
