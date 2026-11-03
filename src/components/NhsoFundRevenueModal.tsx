@@ -21,6 +21,7 @@ import {
   FileText,
   FileCheck,
   TrendingUp,
+  RotateCcw,
 } from 'lucide-react';
 import {
   NhsoFundSettings,
@@ -30,6 +31,11 @@ import {
   NhsoProject,
   NhsoFundBudgetLine,
 } from '../types/index.ts';
+import {
+  getProjectRefundAmount,
+  isProjectTrackingCompleted,
+  isProjectTrackingRefunded,
+} from '../utils/nhsoThemeAndTracking.ts';
 
 interface NhsoFundRevenueModalProps {
   isOpen: boolean;
@@ -85,13 +91,22 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
   const [bankInterestTotal, setBankInterestTotal] = useState<number>(defaultRev.bankInterestTotal || 0);
 
   const [carryOverProjectIds, setCarryOverProjectIds] = useState<string[]>(
-    defaultRev.carryOverProjectIds || []
+    defaultRev.carryOverProjectIds || ['NHSO-69-01', 'NHSO-69-16', 'NHSO-69-17']
   );
-  const [carryOverTotal, setCarryOverTotal] = useState<number>(defaultRev.carryOverTotal || 0);
+  const [carryOverTotal, setCarryOverTotal] = useState<number>(
+    defaultRev.carryOverTotal !== undefined ? defaultRev.carryOverTotal : 42817
+  );
+  const [isManualCarryOver, setIsManualCarryOver] = useState<boolean>(
+    !!defaultRev.isCarryOverManualOverride
+  );
   const [carryOverMeetingRound, setCarryOverMeetingRound] = useState<string>(
     defaultRev.carryOverMeetingRound || ''
   );
   const [carryOverNote, setCarryOverNote] = useState<string>(defaultRev.carryOverNote || '');
+  const [carryOverFilterMode, setCarryOverFilterMode] = useState<'refunded_only' | 'all'>(
+    'refunded_only'
+  );
+  const [sourceCarryYear, setSourceCarryYear] = useState<string>('2569');
 
   // Clause 10(4) State
   const default10_4 = settings.clause10_4_PlansByYear?.[selectedYear] || {
@@ -165,11 +180,47 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
   );
   const [clause10_4_Notes, setClause10_4_Notes] = useState<string>(default10_4.notes || '');
 
-  // Previous year candidate projects for carry-over
+  // Candidate projects for carry-over / refunded budget
   const prevYear = String(Number(selectedYear) - 1);
+  useEffect(() => {
+    const hasPrevYear = projects.some((p) => p.fiscalYear === prevYear);
+    setSourceCarryYear(hasPrevYear ? prevYear : '2569');
+  }, [selectedYear, prevYear, projects]);
+
   const prevYearProjects = useMemo(() => {
-    return projects.filter((p) => p.fiscalYear === prevYear);
-  }, [projects, prevYear]);
+    return projects
+      .filter((p) => p.fiscalYear === sourceCarryYear)
+      .sort((a, b) => (a.orderNumber || 999) - (b.orderNumber || 999));
+  }, [projects, sourceCarryYear]);
+
+  const refundedPrevYearProjects = useMemo(() => {
+    return prevYearProjects.filter(
+      (p) => isProjectTrackingRefunded(p) || getProjectRefundAmount(p) > 0
+    );
+  }, [prevYearProjects]);
+
+  const displayedCarryOverProjects = useMemo(() => {
+    if (carryOverFilterMode === 'refunded_only' && refundedPrevYearProjects.length > 0) {
+      return refundedPrevYearProjects;
+    }
+    return prevYearProjects;
+  }, [carryOverFilterMode, refundedPrevYearProjects, prevYearProjects]);
+
+  const getEffectiveProjectCarryOver = (p: NhsoProject): number => {
+    const refAmt = getProjectRefundAmount(p);
+    if (refAmt > 0) return refAmt;
+    return p.budgetApproved || p.budgetRequested || 0;
+  };
+
+  const calculatedSelectedRefundSum = useMemo(() => {
+    return projects
+      .filter((p) => carryOverProjectIds.includes(p.id))
+      .reduce((sum, p) => sum + getEffectiveProjectCarryOver(p), 0);
+  }, [projects, carryOverProjectIds]);
+
+  const allRefundedSumInSourceYear = useMemo(() => {
+    return refundedPrevYearProjects.reduce((sum, p) => sum + getProjectRefundAmount(p), 0);
+  }, [refundedPrevYearProjects]);
 
   // Synchronize state when switching fiscal year or opening modal
   useEffect(() => {
@@ -177,12 +228,37 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
     if (rev) {
       setNhsoPerCapitaRate(rev.nhsoPerCapitaRate || 45);
       setPopulationCount(rev.populationCount || 9874);
-      setNhsoPerCapitaTotal(rev.nhsoPerCapitaTotal || (rev.populationCount || 9874) * (rev.nhsoPerCapitaRate || 45));
+      setNhsoPerCapitaTotal(
+        rev.nhsoPerCapitaTotal || (rev.populationCount || 9874) * (rev.nhsoPerCapitaRate || 45)
+      );
       setMunicipalMatchingRate(rev.municipalMatchingRate || 50);
       setMunicipalMatchingTotal(rev.municipalMatchingTotal || 0);
       setBankInterestTotal(rev.bankInterestTotal || 0);
-      setCarryOverProjectIds(rev.carryOverProjectIds || []);
-      setCarryOverTotal(rev.carryOverTotal || 0);
+
+      // If no carryOver was set yet and not manually overridden, default to refunded projects from 2569
+      const refunded2569 = projects.filter(
+        (p) => p.fiscalYear === '2569' && (isProjectTrackingRefunded(p) || getProjectRefundAmount(p) > 0)
+      );
+      const defaultRefundIds = refunded2569.map((p) => p.id);
+      const defaultRefundSum = refunded2569.reduce(
+        (s, p) => s + getProjectRefundAmount(p),
+        0
+      );
+
+      if (
+        !rev.isCarryOverManualOverride &&
+        (!rev.carryOverTotal || rev.carryOverTotal === 0) &&
+        (!rev.carryOverProjectIds || rev.carryOverProjectIds.length === 0) &&
+        defaultRefundSum > 0
+      ) {
+        setCarryOverProjectIds(defaultRefundIds);
+        setCarryOverTotal(defaultRefundSum);
+        setIsManualCarryOver(false);
+      } else {
+        setCarryOverProjectIds(rev.carryOverProjectIds || []);
+        setCarryOverTotal(rev.carryOverTotal || 0);
+        setIsManualCarryOver(!!rev.isCarryOverManualOverride);
+      }
       setCarryOverMeetingRound(rev.carryOverMeetingRound || '');
       setCarryOverNote(rev.carryOverNote || '');
     }
@@ -193,7 +269,7 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
       setClause10_4_Items(c10.items || []);
       setClause10_4_Notes(c10.notes || '');
     }
-  }, [selectedYear, settings]);
+  }, [selectedYear, settings, isOpen]);
 
   if (!isOpen) return null;
 
@@ -230,22 +306,61 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
   // Toggle candidate carry-over project from previous year
   const handleToggleCarryOverProject = (p: NhsoProject) => {
     const isSelected = carryOverProjectIds.includes(p.id);
-    let nextIds: string[];
-    let nextTotal: number;
+    const nextIds = isSelected
+      ? carryOverProjectIds.filter((id) => id !== p.id)
+      : [...carryOverProjectIds, p.id];
 
-    if (isSelected) {
-      nextIds = carryOverProjectIds.filter((id) => id !== p.id);
-    } else {
-      nextIds = [...carryOverProjectIds, p.id];
-    }
-
-    // Recalculate carry over total based on selected projects
-    const sumSelected = prevYearProjects
+    // Recalculate carry over total based on selected projects' refund amounts
+    const sumSelected = projects
       .filter((proj) => nextIds.includes(proj.id))
-      .reduce((s, proj) => s + (proj.budgetApproved || proj.budgetRequested || 0), 0);
+      .reduce((s, proj) => s + getEffectiveProjectCarryOver(proj), 0);
 
     setCarryOverProjectIds(nextIds);
     setCarryOverTotal(sumSelected);
+    setIsManualCarryOver(false);
+  };
+
+  // Inline edit refund amount for a project and auto-update carryOverTotal
+  const handleInlineRefundAmountChange = (p: NhsoProject, newAmount: number) => {
+    const cleanAmt = Math.max(0, Number(newAmount) || 0);
+    const approved = p.budgetApproved || p.budgetRequested || 0;
+    const updatedProj: NhsoProject = {
+      ...p,
+      trackingRefunded: cleanAmt > 0 ? true : p.trackingRefunded,
+      refundAmount: cleanAmt,
+      disbursedAmount:
+        cleanAmt >= approved
+          ? 0
+          : isProjectTrackingCompleted(p)
+          ? Math.max(0, approved - cleanAmt)
+          : p.disbursedAmount,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (onUpsertProject) {
+      onUpsertProject(updatedProj);
+    }
+
+    // Ensure it's in carryOverProjectIds if cleanAmt > 0 and recalculate carryOverTotal
+    const nextIds =
+      cleanAmt > 0 && !carryOverProjectIds.includes(p.id)
+        ? [...carryOverProjectIds, p.id]
+        : carryOverProjectIds;
+    setCarryOverProjectIds(nextIds);
+
+    const nextSum = projects
+      .map((item) => (item.id === p.id ? updatedProj : item))
+      .filter((proj) => nextIds.includes(proj.id))
+      .reduce((s, proj) => {
+        const r =
+          proj.id === p.id
+            ? cleanAmt
+            : getEffectiveProjectCarryOver(proj);
+        return s + r;
+      }, 0);
+
+    setCarryOverTotal(nextSum);
+    setIsManualCarryOver(false);
   };
 
   // Clause 10(4) item handlers
@@ -308,6 +423,7 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
       bankInterestTotal,
       carryOverProjectIds,
       carryOverTotal,
+      isCarryOverManualOverride: isManualCarryOver,
       carryOverMeetingRound,
       carryOverNote,
       totalAnnualBudget,
@@ -738,7 +854,7 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
                 </div>
 
                 {/* 4. เงินยกยอดจากปีเก่า (Summary Card in Grid) */}
-                <div className="bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4 shadow-sm">
+                <div className="bg-white dark:bg-slate-800/80 rounded-2xl border-2 border-purple-200 dark:border-purple-800/70 p-5 space-y-4 shadow-sm">
                   <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-bold text-xs flex items-center justify-center">
@@ -748,42 +864,134 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
                         เงินยกยอดจากปีเก่า (ไม่ได้ดำเนินการในปีก่อน)
                       </h3>
                     </div>
-                    <span className="text-[11px] text-purple-600 font-semibold bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded">
+                    <span className="text-[11px] text-purple-700 dark:text-purple-300 font-bold bg-purple-100 dark:bg-purple-950 px-2.5 py-0.5 rounded-full border border-purple-300 dark:border-purple-800">
                       เลือก {carryOverProjectIds.length} โครงการ
                     </span>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      ยอดเงินยกยอดรวมที่ได้รับมติ (บาท)
-                    </label>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        ยอดเงินยกยอดรวมที่ได้รับมติ (บาท) <span className="text-purple-600 font-normal">(แก้ไขได้อิสระ)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const refundedIds = refundedPrevYearProjects.map((p) => p.id);
+                          const idsToUse =
+                            carryOverProjectIds.length > 0 ? carryOverProjectIds : refundedIds;
+                          const sumToUse =
+                            carryOverProjectIds.length > 0
+                              ? calculatedSelectedRefundSum
+                              : allRefundedSumInSourceYear;
+                          setCarryOverProjectIds(idsToUse);
+                          setCarryOverTotal(sumToUse);
+                          setIsManualCarryOver(false);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 dark:bg-purple-950 dark:hover:bg-purple-900 text-purple-800 dark:text-purple-200 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer border border-purple-300 dark:border-purple-700"
+                        title="ดึงผลรวมยอดเงินที่คืนจากตารางโครงการด้านล่าง"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>
+                          ดึงยอดรวมเงินคืน (
+                          {(carryOverProjectIds.length > 0
+                            ? calculatedSelectedRefundSum
+                            : allRefundedSumInSourceYear
+                          ).toLocaleString()}{' '}
+                          บ.)
+                        </span>
+                      </button>
+                    </div>
+
                     <input
                       type="number"
+                      step="any"
                       value={carryOverTotal}
-                      onChange={(e) => setCarryOverTotal(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-lg border-2 border-purple-500 bg-purple-50/50 dark:bg-slate-900 font-black text-slate-900 dark:text-slate-100 text-base"
+                      onChange={(e) => {
+                        setCarryOverTotal(Number(e.target.value));
+                        setIsManualCarryOver(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border-2 border-purple-500 bg-purple-50/50 dark:bg-slate-900 font-black text-slate-900 dark:text-slate-100 text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
                     />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      สามารถเลือกโครงการจากตารางด้านล่างเพื่อคำนวณยอดเงิน หรือกรอกตัวเลขโดยตรงได้
+
+                    {/* Breakdown summary of selected refund amounts */}
+                    {carryOverProjectIds.length > 0 && (
+                      <div className="p-2.5 rounded-xl bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 text-[11px] text-purple-900 dark:text-purple-200 space-y-1">
+                        <div className="font-bold flex items-center justify-between">
+                          <span>รายการเงินคืนที่รวบรวม ({carryOverProjectIds.length} โครงการ):</span>
+                          <span>รวม {calculatedSelectedRefundSum.toLocaleString()} บาท</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {projects
+                            .filter((p) => carryOverProjectIds.includes(p.id))
+                            .map((p) => {
+                              const amt = getEffectiveProjectCarryOver(p);
+                              const approved = p.budgetApproved || p.budgetRequested || 0;
+                              const is100 = amt >= approved && approved > 0;
+                              return (
+                                <span
+                                  key={p.id}
+                                  className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-700 text-slate-700 dark:text-slate-200 font-medium"
+                                >
+                                  #{p.orderNumber || '-'}:{' '}
+                                  <strong className="text-rose-600 dark:text-rose-400">
+                                    {amt.toLocaleString()} บ.
+                                  </strong>
+                                  {is100 ? ' (100%)' : ''}
+                                </span>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[11px] text-slate-400">
+                      สามารถกรอกระบุยอดเงินที่คืนรายโครงการในตารางด้านล่างเพื่อคำนวณอัตโนมัติ หรือพิมพ์แก้ไขตัวเลขในช่องนี้โดยตรงได้เหมือนเดิม
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Section 4 Detail: Project Carry-Over Picker */}
+              {/* Section 4 Detail: Project Carry-Over & Refund Amount Picker */}
               <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
                   <div>
                     <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
                       <FileCheck className="w-4 h-4 text-purple-600" />
-                      เลือกโครงการจากปีก่อน ({prevYear}) ที่ไม่ได้ดำเนินการ เพื่อขอยกยอดมาใช้ในปีนี้
+                      ระบุยอดจำนวนเงินที่คืนรายโครงการ & เลือกรวบรวมเข้า "งบข้อ 4 เงินยกยอดจากปีเก่า"
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      ติ๊กเลือกโครงการที่คณะกรรมการมีมติให้ยกยอดมาเป็นเงินกองทุนในปีงบ {selectedYear}
+                      รองรับทั้งโครงการที่คืนเงิน 100% (ไม่ได้ดำเนินการ เช่น โครงการที่ 1 = 42,300 บ.) และโครงการที่คืนเงินเหลือจ่ายบางส่วน (เช่น โครงการที่ 16 = 400 บ., โครงการที่ 17 = 117 บ.)
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {/* Filter toggle: Only Refunded vs All */}
+                    <div className="flex bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-300 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={() => setCarryOverFilterMode('refunded_only')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          carryOverFilterMode === 'refunded_only'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                        }`}
+                      >
+                        ↩️ โครงการที่คืนเงิน ({refundedPrevYearProjects.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCarryOverFilterMode('all')}
+                        className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          carryOverFilterMode === 'all'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                        }`}
+                      >
+                        ทั้งหมดปี {sourceCarryYear} ({prevYearProjects.length})
+                      </button>
+                    </div>
+
                     <input
                       type="text"
                       value={carryOverMeetingRound}
@@ -794,60 +1002,127 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
                   </div>
                 </div>
 
-                {prevYearProjects.length === 0 ? (
+                {displayedCarryOverProjects.length === 0 ? (
                   <div className="p-4 text-center text-xs text-slate-500 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                    ไม่มีรายการโครงการของปีงบ {prevYear} ในระบบ
+                    ไม่มีรายการโครงการของปีงบ {sourceCarryYear} ในระบบ
                   </div>
                 ) : (
-                  <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900">
+                  <div className="max-h-80 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900">
                     <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold sticky top-0">
+                      <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                         <tr>
-                          <th className="p-2.5 w-10 text-center">เลือก</th>
-                          <th className="p-2.5">ชื่อโครงการ (ปีงบ {prevYear})</th>
-                          <th className="p-2.5">หน่วยงานผู้ขอ</th>
-                          <th className="p-2.5 text-right">งบประมาณที่ขอ</th>
-                          <th className="p-2.5 text-center">สถานะ</th>
+                          <th className="p-2.5 w-12 text-center">เลือก</th>
+                          <th className="p-2.5 w-12 text-center">#</th>
+                          <th className="p-2.5">ชื่อโครงการ (ปีงบ {sourceCarryYear})</th>
+                          <th className="p-2.5 w-36">หน่วยงานผู้ขอ</th>
+                          <th className="p-2.5 w-28 text-right">งบอนุมัติ (บาท)</th>
+                          <th className="p-2.5 w-36 text-center">ประเภทการคืนเงิน</th>
+                          <th className="p-2.5 w-48 text-right">ระบุยอดเงินที่คืน (บาท)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {prevYearProjects.map((p, idx) => {
+                        {displayedCarryOverProjects.map((p, idx) => {
                           const isSelected = carryOverProjectIds.includes(p.id);
+                          const approved = p.budgetApproved || p.budgetRequested || 0;
+                          const currentRefund = getEffectiveProjectCarryOver(p);
+                          const is100Percent = currentRefund >= approved && approved > 0;
+
                           return (
                             <tr
                               key={p.id || idx}
-                              onClick={() => handleToggleCarryOverProject(p)}
-                              className={`cursor-pointer transition-colors ${
+                              className={`transition-colors ${
                                 isSelected
-                                  ? 'bg-purple-50/80 dark:bg-purple-950/40 hover:bg-purple-100/80'
+                                  ? 'bg-purple-50/80 dark:bg-purple-950/35 hover:bg-purple-100/70'
                                   : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                               }`}
                             >
-                              <td className="p-2.5 text-center">
+                              <td
+                                onClick={() => handleToggleCarryOverProject(p)}
+                                className="p-2.5 text-center cursor-pointer"
+                              >
                                 {isSelected ? (
                                   <CheckSquare className="w-4 h-4 text-purple-600 inline" />
                                 ) : (
                                   <Square className="w-4 h-4 text-slate-400 inline" />
                                 )}
                               </td>
-                              <td className="p-2.5 font-medium text-slate-900 dark:text-slate-100">
+                              <td
+                                onClick={() => handleToggleCarryOverProject(p)}
+                                className="p-2.5 text-center font-bold text-slate-500 cursor-pointer"
+                              >
+                                {p.orderNumber || idx + 1}
+                              </td>
+                              <td
+                                onClick={() => handleToggleCarryOverProject(p)}
+                                className="p-2.5 font-semibold text-slate-900 dark:text-slate-100 cursor-pointer"
+                              >
                                 {p.projectName}
                               </td>
-                              <td className="p-2.5 text-slate-600 dark:text-slate-400">
+                              <td
+                                onClick={() => handleToggleCarryOverProject(p)}
+                                className="p-2.5 text-slate-600 dark:text-slate-400 cursor-pointer"
+                              >
                                 {p.proposingOrg}
                               </td>
-                              <td className="p-2.5 text-right font-bold text-slate-900 dark:text-slate-100">
-                                {(p.budgetApproved || p.budgetRequested || 0).toLocaleString()} บ.
+                              <td
+                                onClick={() => handleToggleCarryOverProject(p)}
+                                className="p-2.5 text-right font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                              >
+                                {approved.toLocaleString()}
                               </td>
                               <td className="p-2.5 text-center">
-                                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600">
-                                  {p.status === 'approved' ? 'อนุมัติแล้ว' : 'ฉบับเสนอ'}
-                                </span>
+                                {is100Percent ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                                    คืน 100% (ไม่ได้ทำ)
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                                    คืนเงินเหลือจ่าย
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInlineRefundAmountChange(p, approved)}
+                                    className={`px-1.5 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      is100Percent
+                                        ? 'bg-rose-600 text-white border-rose-600'
+                                        : 'bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border-slate-300'
+                                    }`}
+                                    title={`ตั้งเป็นคืนเต็มจำนวน 100% (${approved.toLocaleString()} บาท)`}
+                                  >
+                                    100%
+                                  </button>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min={0}
+                                    value={currentRefund}
+                                    onChange={(e) =>
+                                      handleInlineRefundAmountChange(p, Number(e.target.value))
+                                    }
+                                    className="w-24 px-2 py-1 text-right rounded-lg border-2 border-purple-400 dark:border-purple-600 bg-white dark:bg-slate-900 font-black text-rose-600 dark:text-rose-400 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    title="กรอกระบุยอดจำนวนเงินที่คืน (บาท)"
+                                  />
+                                  <span className="text-[11px] text-slate-500 font-semibold">บ.</span>
+                                </div>
                               </td>
                             </tr>
                           );
                         })}
                       </tbody>
+                      <tfoot className="bg-purple-50 dark:bg-purple-950/50 font-bold border-t border-purple-200 dark:border-purple-800 text-xs">
+                        <tr>
+                          <td colSpan={6} className="p-2.5 text-right text-purple-900 dark:text-purple-200">
+                            รวมยอดเงินคืนจากโครงการที่ติ๊กเลือก ({carryOverProjectIds.length} โครงการ):
+                          </td>
+                          <td className="p-2.5 text-right font-black text-sm text-rose-600 dark:text-rose-400">
+                            {calculatedSelectedRefundSum.toLocaleString()} บาท
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 )}

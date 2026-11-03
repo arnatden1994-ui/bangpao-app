@@ -27,12 +27,12 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
       municipalMatchingRate: 50,
       municipalMatchingTotal: 222165,
       bankInterestTotal: 2500,
-      carryOverProjectIds: [],
-      carryOverTotal: 0,
-      carryOverMeetingRound: '',
-      carryOverNote: '',
-      totalAnnualBudget: 668995,
-      updatedAt: '2026-11-02T12:00:00.000Z',
+      carryOverProjectIds: ['NHSO-69-01', 'NHSO-69-16', 'NHSO-69-17'],
+      carryOverTotal: 42817,
+      carryOverMeetingRound: 'ครั้งที่ 1/2570',
+      carryOverNote: 'รวมยอดเงินคืนจากปี 2569 จำนวน 3 โครงการ (โครงการที่ 1: 42,300 บ., โครงการที่ 16: 400 บ., โครงการที่ 17: 117 บ.)',
+      totalAnnualBudget: 711812,
+      updatedAt: '2026-11-03T11:35:00.000Z',
     },
     '2569': {
       fiscalYear: '2569',
@@ -42,12 +42,12 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
       municipalMatchingRate: 50,
       municipalMatchingTotal: 222165,
       bankInterestTotal: 1500,
-      carryOverProjectIds: [],
-      carryOverTotal: 0,
+      carryOverProjectIds: ['NHSO-69-01', 'NHSO-69-16', 'NHSO-69-17'],
+      carryOverTotal: 42817,
       carryOverMeetingRound: 'ครั้งที่ 1/2569',
-      carryOverNote: 'รอบปีประวัติศาสตร์ 27 โครงการ',
-      totalAnnualBudget: 592456,
-      updatedAt: '2026-10-01T08:00:00.000Z',
+      carryOverNote: 'รวมยอดเงินคืน 3 โครงการ (โครงการที่ 1: 42,300 บ., โครงการที่ 16: 400 บ., โครงการที่ 17: 117 บ.)',
+      totalAnnualBudget: 710812,
+      updatedAt: '2026-11-03T11:35:00.000Z',
     },
   },
   clause10_4_PlansByYear: {
@@ -522,6 +522,8 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "trackingCompleted": false,
     "trackingExtended": false,
     "trackingRefunded": true,
+    "refundAmount": 42300,
+    "refundNote": "คืนเงินเต็มจำนวน 100% (ไม่ได้ดำเนินการ)",
     "meetingRound": "ครั้งที่ 1/2569",
     "implementationStatus": "not_started",
     "disbursedAmount": 0
@@ -2885,9 +2887,11 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "trackingCompleted": true,
     "trackingExtended": false,
     "trackingRefunded": true,
+    "refundAmount": 400,
+    "refundNote": "คืนเงินเหลือจ่ายเข้ากองทุน 400 บาท",
     "meetingRound": "ครั้งที่ 1/2569",
     "implementationStatus": "completed_reported",
-    "disbursedAmount": 15100
+    "disbursedAmount": 14700
   },
   {
     "id": "NHSO-69-17",
@@ -3050,9 +3054,11 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "trackingCompleted": true,
     "trackingExtended": false,
     "trackingRefunded": true,
+    "refundAmount": 117,
+    "refundNote": "คืนเงินเหลือจ่ายเข้ากองทุน 117 บาท",
     "meetingRound": "ครั้งที่ 1/2569",
     "implementationStatus": "completed_reported",
-    "disbursedAmount": 13290
+    "disbursedAmount": 13173
   },
   {
     "id": "NHSO-69-18",

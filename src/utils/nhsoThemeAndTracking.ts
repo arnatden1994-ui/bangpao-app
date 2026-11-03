@@ -201,5 +201,39 @@ export function isProjectTrackingExtended(p: NhsoProject): boolean {
 
 export function isProjectTrackingRefunded(p: NhsoProject): boolean {
   if (typeof p.trackingRefunded === 'boolean') return p.trackingRefunded;
+  if (typeof p.refundAmount === 'number' && p.refundAmount > 0) return true;
   return false;
+}
+
+/**
+ * คืนค่ายอดจำนวนเงินที่คืนเข้ากองทุนฯ (บาท) ของแต่ละโครงการ
+ * - กรณีระบุ p.refundAmount ไว้ชัดเจน ให้ใช้ค่านั้น
+ * - กรณีฐานข้อมูลปี 2569:
+ *   • โครงการที่ 1 (ขลิบฯ) = คืน 100% (42,300 บาท)
+ *   • โครงการที่ 16 (คีตะมวยไทยฯ) = คืนเงินเหลือจ่าย 400 บาท
+ *   • โครงการที่ 17 (CPR ฯ) = คืนเงินเหลือจ่าย 117 บาท
+ * - กรณีโครงการอื่นที่ติ๊กคืนเงินแต่ยังไม่ระบุตัวเลข:
+ *   • ถ้าไม่ได้ดำเนินการ = คืนเต็ม 100% ของงบอนุมัติ/งบที่ขอ
+ *   • ถ้าดำเนินการแล้ว = คืนส่วนต่างคงเหลือ (งบอนุมัติ - เบิกจ่ายจริง)
+ */
+export function getProjectRefundAmount(p: NhsoProject): number {
+  if (typeof p.refundAmount === 'number' && !Number.isNaN(p.refundAmount)) {
+    return Math.max(0, p.refundAmount);
+  }
+  if (!isProjectTrackingRefunded(p)) {
+    return 0;
+  }
+  if (p.fiscalYear === '2569') {
+    if (p.orderNumber === 1 || p.id === 'NHSO-69-01') return 42300;
+    if (p.orderNumber === 16 || p.id === 'NHSO-69-16') return 400;
+    if (p.orderNumber === 17 || p.id === 'NHSO-69-17') return 117;
+  }
+  const approved = p.budgetApproved && p.budgetApproved > 0 ? p.budgetApproved : p.budgetRequested || 0;
+  if (!isProjectTrackingCompleted(p)) {
+    return approved;
+  }
+  if (typeof p.disbursedAmount === 'number' && p.disbursedAmount < approved) {
+    return Math.max(0, approved - p.disbursedAmount);
+  }
+  return 0;
 }

@@ -907,6 +907,12 @@ export function mergeNhsoFundProjectsWithMaster(items: NhsoProject[]): NhsoProje
     const master = masterMap.get(p.id);
     if (master) {
       seenMasterIds.add(p.id);
+      const effectiveRefund = p.refundAmount ?? master.refundAmount;
+      const shouldSyncMasterDisbursed =
+        p.refundAmount === undefined &&
+        master.refundAmount &&
+        master.refundAmount > 0 &&
+        p.disbursedAmount === master.budgetRequested;
       return {
         ...master,
         ...p,
@@ -924,6 +930,11 @@ export function mergeNhsoFundProjectsWithMaster(items: NhsoProject[]): NhsoProje
         trackingCompleted: p.trackingCompleted ?? master.trackingCompleted,
         trackingExtended: p.trackingExtended ?? master.trackingExtended,
         trackingRefunded: p.trackingRefunded ?? master.trackingRefunded,
+        refundAmount: effectiveRefund,
+        refundNote: p.refundNote ?? master.refundNote,
+        disbursedAmount: shouldSyncMasterDisbursed
+          ? master.disbursedAmount
+          : p.disbursedAmount ?? master.disbursedAmount,
       };
     }
     return p;
@@ -979,13 +990,41 @@ export function getStoredNhsoFundSettings(): NhsoFundSettings {
         if (parsed.defaultApproverName && parsed.defaultApproverName.includes('ละอม')) {
           parsed.defaultApproverName = parsed.defaultApproverName.replace(/ละอม/g, 'ละดม');
         }
+        const mergedRevs = {
+          ...(DEFAULT_NHSO_FUND_SETTINGS.revenueSourcesByYear || {}),
+          ...(parsed.revenueSourcesByYear || {}),
+        };
+        // Auto-populate 2569 refunded amounts (42,300 + 400 + 117 = 42,817) if carryOverTotal was 0 and not manually overridden
+        ['2569', '2570'].forEach((yr) => {
+          const rev = mergedRevs[yr];
+          if (
+            rev &&
+            !rev.isCarryOverManualOverride &&
+            (!rev.carryOverTotal || rev.carryOverTotal === 0) &&
+            (!rev.carryOverProjectIds || rev.carryOverProjectIds.length === 0)
+          ) {
+            const nextCarryOver = 42817;
+            const nextTotal =
+              Number(rev.nhsoPerCapitaTotal || 0) +
+              Number(rev.municipalMatchingTotal || 0) +
+              Number(rev.bankInterestTotal || 0) +
+              nextCarryOver;
+            mergedRevs[yr] = {
+              ...rev,
+              carryOverProjectIds: ['NHSO-69-01', 'NHSO-69-16', 'NHSO-69-17'],
+              carryOverTotal: nextCarryOver,
+              carryOverNote:
+                rev.carryOverNote ||
+                'รวมยอดเงินคืน 3 โครงการ (โครงการที่ 1: 42,300 บ., โครงการที่ 16: 400 บ., โครงการที่ 17: 117 บ.)',
+              totalAnnualBudget: nextTotal,
+            };
+          }
+        });
+
         return {
           ...DEFAULT_NHSO_FUND_SETTINGS,
           ...parsed,
-          revenueSourcesByYear: {
-            ...(DEFAULT_NHSO_FUND_SETTINGS.revenueSourcesByYear || {}),
-            ...(parsed.revenueSourcesByYear || {}),
-          },
+          revenueSourcesByYear: mergedRevs,
           clause10_4_PlansByYear: {
             ...(DEFAULT_NHSO_FUND_SETTINGS.clause10_4_PlansByYear || {}),
             ...(parsed.clause10_4_PlansByYear || {}),

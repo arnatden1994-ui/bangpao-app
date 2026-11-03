@@ -479,9 +479,10 @@ export interface NhsoFundRevenueSource {
   // 3. ดอกเบี้ยจากธนาคารและรายได้อื่นๆ
   bankInterestTotal: number; // ดอกเบี้ยเงินฝากธนาคาร
 
-  // 4. เงินยกยอดจากปีเก่า (โครงการที่ไม่ได้ดำเนินการในปีก่อน)
+  // 4. เงินยกยอดจากปีเก่า (โครงการที่ไม่ได้ดำเนินการในปีก่อน หรือมีเงินเหลือจ่ายส่งคืน)
   carryOverProjectIds: string[]; // รายการ id โครงการปีก่อนที่ได้รับมติให้ยกยอด
-  carryOverTotal: number; // ยอดเงินยกยอดรวม
+  carryOverTotal: number; // ยอดเงินยกยอดรวม (แก้ไขตัวเลขได้อิสระ)
+  isCarryOverManualOverride?: boolean; // กรณีผู้ใช้พิมพ์แก้ไขยอดรวมเองโดยตรง
   carryOverMeetingRound?: string; // มติที่ประชุม เช่น ครั้งที่ 1/2570
   carryOverNote?: string; // รายละเอียด/หมายเหตุการยกยอด
 
@@ -603,6 +604,8 @@ export interface NhsoProject {
   trackingCompleted?: boolean; // ดำเนินการแล้ว
   trackingExtended?: boolean; // ขอขยายเวลา
   trackingRefunded?: boolean; // คืนเงิน / ไม่ได้ดำเนินการ
+  refundAmount?: number; // จำนวนเงินที่ส่งคืนกองทุนฯ (บาท) เช่น คืน 100% (42,300) หรือคืนเงินเหลือจ่าย (400, 117)
+  refundNote?: string; // หมายเหตุการคืนเงิน
   meetingRound?: string;
   meetingDate?: string;
   verifiedByOfficer?: string;

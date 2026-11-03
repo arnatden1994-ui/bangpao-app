@@ -61,6 +61,7 @@ import {
 import {
   getCategoryColorTheme,
   getOrgColorTheme,
+  getProjectRefundAmount,
   isProjectTrackingCompleted,
   isProjectTrackingExtended,
   isProjectTrackingRefunded,
@@ -238,6 +239,49 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     }, 5500);
   };
 
+  // Helper to sync total refunded amounts from projects into Settings Card 4 (เงินยกยอดจากปีเก่า)
+  const syncRefundsIntoSettings = (
+    updatedList: NhsoProject[],
+    forceOverride = false
+  ) => {
+    const refundedList = updatedList.filter(
+      (p) =>
+        (selectedYear === 'all' || p.fiscalYear === selectedYear || p.fiscalYear === '2569') &&
+        (isProjectTrackingRefunded(p) || getProjectRefundAmount(p) > 0)
+    );
+    const refundIds = refundedList.map((p) => p.id);
+    const totalRefund = refundedList.reduce((s, p) => s + getProjectRefundAmount(p), 0);
+
+    const nextRevs = { ...(fundSettings.revenueSourcesByYear || {}) };
+    ['2569', '2570'].forEach((yr) => {
+      const rev = nextRevs[yr];
+      if (!rev) return;
+      if (!forceOverride && rev.isCarryOverManualOverride) return;
+      const nextAnnual =
+        Number(rev.nhsoPerCapitaTotal || 0) +
+        Number(rev.municipalMatchingTotal || 0) +
+        Number(rev.bankInterestTotal || 0) +
+        totalRefund;
+      nextRevs[yr] = {
+        ...rev,
+        carryOverProjectIds: refundIds,
+        carryOverTotal: totalRefund,
+        isCarryOverManualOverride: false,
+        totalAnnualBudget: nextAnnual,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    const targetYr = selectedYear !== 'all' ? selectedYear : fundSettings.fiscalYear || '2570';
+    const nextSettings: NhsoFundSettings = {
+      ...fundSettings,
+      totalFundBudget: nextRevs[targetYr]?.totalAnnualBudget || fundSettings.totalFundBudget,
+      revenueSourcesByYear: nextRevs,
+      updatedAt: new Date().toISOString(),
+    };
+    handleSaveSettings(nextSettings);
+  };
+
   // Interactive 1-click toggle for ผลการติดตามโครงการ (ดำเนินการแล้ว | ขอขยายเวลา | คืนเงิน)
   const handleToggleProjectTracking = (
     projectId: string,
@@ -254,6 +298,18 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         : isProjectTrackingRefunded(target);
 
     const nextVal = !currentVal;
+    const approved = target.budgetApproved || target.budgetRequested || 0;
+    let nextRefundAmount = target.refundAmount;
+    if (field === 'trackingRefunded') {
+      if (nextVal && (nextRefundAmount === undefined || nextRefundAmount === 0)) {
+        nextRefundAmount = !isProjectTrackingCompleted(target)
+          ? approved
+          : getProjectRefundAmount({ ...target, trackingRefunded: true }) || approved;
+      } else if (!nextVal) {
+        nextRefundAmount = 0;
+      }
+    }
+
     const updated: NhsoProject = {
       ...target,
       trackingCompleted:
@@ -262,10 +318,38 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         field === 'trackingExtended' ? nextVal : isProjectTrackingExtended(target),
       trackingRefunded:
         field === 'trackingRefunded' ? nextVal : isProjectTrackingRefunded(target),
+      refundAmount: nextRefundAmount,
       updatedAt: new Date().toISOString(),
     };
 
+    const nextList = projects.map((p) => (p.id === updated.id ? updated : p));
     handleSaveProject(updated);
+    if (field === 'trackingRefunded') {
+      syncRefundsIntoSettings(nextList, false);
+    }
+  };
+
+  // Direct inline update for refund amount (บาท) of a project
+  const handleUpdateProjectRefundAmount = (projectId: string, newAmount: number) => {
+    const target = projects.find((p) => p.id === projectId);
+    if (!target) return;
+    const cleanAmt = Math.max(0, Number(newAmount) || 0);
+    const approved = target.budgetApproved || target.budgetRequested || 0;
+    const updated: NhsoProject = {
+      ...target,
+      trackingRefunded: true,
+      refundAmount: cleanAmt,
+      disbursedAmount:
+        cleanAmt >= approved
+          ? 0
+          : isProjectTrackingCompleted(target)
+          ? Math.max(0, approved - cleanAmt)
+          : target.disbursedAmount,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextList = projects.map((p) => (p.id === updated.id ? updated : p));
+    handleSaveProject(updated);
+    syncRefundsIntoSettings(nextList, false);
   };
 
   // Bulk set tracking status for all selected projects
@@ -491,6 +575,9 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   const yearNotExecutedCount = yearProjects.filter(
     (p) => !isProjectTrackingCompleted(p) && !isProjectTrackingExtended(p) && isProjectTrackingRefunded(p)
   ).length;
+  const totalYearRefundAmount = yearProjects
+    .filter((p) => isProjectTrackingRefunded(p) || getProjectRefundAmount(p) > 0)
+    .reduce((sum, p) => sum + getProjectRefundAmount(p), 0);
 
   const currentRevenueSource = fundSettings.revenueSourcesByYear?.[selectedYear];
   const currentClause10_4_Plan = fundSettings.clause10_4_PlansByYear?.[selectedYear];
@@ -1286,8 +1373,27 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
               }`}
             >
-              <span>↩️ คืนเงิน ({yearRefundedCount} • ไม่ได้ดำเนินการ {yearNotExecutedCount})</span>
+              <span>
+                ↩️ คืนเงิน ({yearRefundedCount} โครงการ • รวม {totalYearRefundAmount.toLocaleString()} บ.)
+              </span>
             </button>
+            {totalYearRefundAmount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  syncRefundsIntoSettings(projects, true);
+                  setIsRevenueModalOpen(true);
+                  showToast(
+                    `รวบรวมยอดเงินคืนรวม ${totalYearRefundAmount.toLocaleString()} บาท เข้าสู่ "งบข้อ 4 เงินยกยอดจากปีเก่า" เรียบร้อยแล้ว!`
+                  );
+                }}
+                className="px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border bg-purple-600 hover:bg-purple-500 text-white border-purple-500 shadow-xs flex items-center gap-1"
+                title="รวบรวมยอดเงินคืนทั้งหมดไปไว้ในงบข้อ 4 เงินยกยอดจากปีเก่า และเปิดหน้าต่างตั้งค่างบ"
+              >
+                <Coins className="w-3.5 h-3.5" />
+                <span>ส่งยอดคืน ({totalYearRefundAmount.toLocaleString()} บ.) ไปงบข้อ 4 เงินยกยอด</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() =>
@@ -1691,18 +1797,42 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                                   )}
                                 </td>
 
-                                {/* Tracking Column 3: คืนเงิน */}
+                                {/* Tracking Column 3: คืนเงิน + ช่องกรอกยอดเงินที่คืน */}
                                 <td
                                   onClick={() =>
                                     handleToggleProjectTracking(p.id, 'trackingRefunded')
                                   }
-                                  className="border border-black py-2 px-2 text-center align-middle cursor-pointer hover:bg-rose-50/70 transition-colors select-none"
-                                  title="คลิกเพื่อติ๊ก/ยกเลิก 'คืนเงิน'"
+                                  className="border border-black py-1.5 px-2 text-center align-middle cursor-pointer hover:bg-rose-50/70 transition-colors select-none"
+                                  title="คลิกเพื่อติ๊ก/ยกเลิก 'คืนเงิน' และกรอกระบุยอดเงินที่คืน (บาท)"
                                 >
                                   {isRef ? (
-                                    <span className="inline-flex items-center justify-center w-5 h-5 bg-[#1e1b18] text-white rounded-[4px] text-xs font-bold shadow-xs">
-                                      ✓
-                                    </span>
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="inline-flex items-center justify-center w-5 h-5 bg-[#1e1b18] text-white rounded-[4px] text-xs font-bold shadow-xs">
+                                        ✓
+                                      </span>
+                                      <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="flex items-center gap-1 bg-rose-50 border border-rose-300 rounded px-1 py-0.5"
+                                      >
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min={0}
+                                          value={getProjectRefundAmount(p)}
+                                          onChange={(e) =>
+                                            handleUpdateProjectRefundAmount(
+                                              p.id,
+                                              Number(e.target.value)
+                                            )
+                                          }
+                                          className="w-16 text-right font-black text-rose-700 bg-white border border-rose-300 rounded px-1 py-0.2 text-[11px] focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                          title="ระบุจำนวนเงินที่คืน (บาท)"
+                                        />
+                                        <span className="text-[10px] font-bold text-rose-800">
+                                          บ.
+                                        </span>
+                                      </div>
+                                    </div>
                                   ) : (
                                     <span className="inline-block w-5 h-5 rounded-[4px] border border-dashed border-slate-300 hover:border-slate-500" />
                                   )}
@@ -1769,7 +1899,20 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                               {extCount > 0 ? extCount : '-'}
                             </td>
                             <td className="border border-black py-2 px-2 text-center">
-                              {refCount > 0 ? `${refCount} โครงการ` : '-'}
+                              {refCount > 0 ? (
+                                <div>
+                                  <div>{refCount} โครงการ</div>
+                                  <div className="text-[11px] text-rose-800 font-bold">
+                                    (คืน{' '}
+                                    {projectsInCat
+                                      .reduce((s, p) => s + getProjectRefundAmount(p), 0)
+                                      .toLocaleString()}{' '}
+                                    บ.)
+                                  </div>
+                                </div>
+                              ) : (
+                                '-'
+                              )}
                             </td>
                             <td className="border border-black py-2 px-2"></td>
                           </tr>
@@ -1860,8 +2003,8 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       {/* ===================================================================== */}
       {tableViewMode === 'detailed_management' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">
                 รายการโครงการ ({filteredProjects.length} โครงการ)
               </h3>
@@ -1872,6 +2015,27 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                 </strong>{' '}
                 บาท
               </span>
+              {filteredProjects.some((p) => isProjectTrackingRefunded(p) || getProjectRefundAmount(p) > 0) && (
+                <div className="flex flex-wrap items-center gap-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 px-3 py-1 rounded-xl text-xs">
+                  <span className="font-bold text-rose-700 dark:text-rose-300">
+                    ↩️ ยอดเงินที่คืนรวม:{' '}
+                    {filteredProjects
+                      .reduce((s, p) => s + getProjectRefundAmount(p), 0)
+                      .toLocaleString()}{' '}
+                    บาท
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      syncRefundsIntoSettings(projects, true);
+                      setIsRevenueModalOpen(true);
+                    }}
+                    className="px-2.5 py-0.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] shadow-xs transition-colors cursor-pointer"
+                  >
+                    📥 รวบรวมเข้า "งบข้อ 4 เงินยกยอดจากปีเก่า"
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="text-xs text-slate-500">
@@ -2009,7 +2173,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                             type="button"
                             onClick={() => setDisbursementProject(p)}
                             className="group/disb text-right block w-full p-1 -m-1 rounded-lg hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors cursor-pointer"
-                            title="คลิกเพื่อบันทึกการเบิกจ่าย / ติดตามผลโครงการนี้"
+                            title="คลิกเพื่อบันทึกการเบิกจ่าย / ระบุยอดเงินคืนเข้ากองทุนฯ"
                           >
                             {disbursed > 0 ? (
                               <div>
@@ -2025,54 +2189,102 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                                 <Coins className="w-3 h-3 inline" /> บันทึกเบิก
                               </span>
                             )}
+                            {isProjectTrackingRefunded(p) && (
+                              <div className="mt-1 inline-block px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold text-[10px] border border-rose-200 dark:border-rose-800">
+                                คืนเงิน {getProjectRefundAmount(p).toLocaleString()} บ.
+                                {getProjectRefundAmount(p) >= approvedAmount ? ' (100%)' : ''}
+                              </div>
+                            )}
                           </button>
                         </td>
 
-                        {/* Quick Tracking Pills */}
+                        {/* Quick Tracking Pills + Inline Refund Amount Input */}
                         <td className="py-3 px-2 text-center">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleToggleProjectTracking(p.id, 'trackingCompleted')
-                              }
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
-                                isProjectTrackingCompleted(p)
-                                  ? 'bg-emerald-600 text-white border-emerald-600'
-                                  : 'bg-slate-100 text-slate-400 border-slate-200'
-                              }`}
-                              title="ดำเนินการแล้ว"
-                            >
-                              ✓ ดำเนินการ
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleToggleProjectTracking(p.id, 'trackingExtended')
-                              }
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
-                                isProjectTrackingExtended(p)
-                                  ? 'bg-amber-500 text-white border-amber-500'
-                                  : 'bg-slate-100 text-slate-400 border-slate-200'
-                              }`}
-                              title="ขอขยายเวลา"
-                            >
-                              ⏳ ขยาย
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleToggleProjectTracking(p.id, 'trackingRefunded')
-                              }
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
-                                isProjectTrackingRefunded(p)
-                                  ? 'bg-rose-600 text-white border-rose-600'
-                                  : 'bg-slate-100 text-slate-400 border-slate-200'
-                              }`}
-                              title="คืนเงิน"
-                            >
-                              ↩️ คืนเงิน
-                            </button>
+                          <div className="flex flex-col items-center gap-1.5">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleToggleProjectTracking(p.id, 'trackingCompleted')
+                                }
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
+                                  isProjectTrackingCompleted(p)
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-slate-100 text-slate-400 border-slate-200'
+                                }`}
+                                title="ดำเนินการแล้ว"
+                              >
+                                ✓ ดำเนินการ
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleToggleProjectTracking(p.id, 'trackingExtended')
+                                }
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
+                                  isProjectTrackingExtended(p)
+                                    ? 'bg-amber-500 text-white border-amber-500'
+                                    : 'bg-slate-100 text-slate-400 border-slate-200'
+                                }`}
+                                title="ขอขยายเวลา"
+                              >
+                                ⏳ ขยาย
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleToggleProjectTracking(p.id, 'trackingRefunded')
+                                }
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border cursor-pointer ${
+                                  isProjectTrackingRefunded(p)
+                                    ? 'bg-rose-600 text-white border-rose-600'
+                                    : 'bg-slate-100 text-slate-400 border-slate-200'
+                                }`}
+                                title="คืนเงิน"
+                              >
+                                ↩️ คืนเงิน
+                              </button>
+                            </div>
+
+                            {/* Inline Refund Amount Input when คืนเงิน is active */}
+                            {isProjectTrackingRefunded(p) && (
+                              <div className="flex items-center justify-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 rounded-lg px-2 py-1 shadow-2xs">
+                                <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 whitespace-nowrap">
+                                  ยอดคืน:
+                                </span>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min={0}
+                                  value={getProjectRefundAmount(p)}
+                                  onChange={(e) =>
+                                    handleUpdateProjectRefundAmount(
+                                      p.id,
+                                      Number(e.target.value)
+                                    )
+                                  }
+                                  className="w-20 px-1.5 py-0.5 text-right rounded border border-rose-400 bg-white dark:bg-slate-900 font-black text-rose-700 dark:text-rose-300 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                  title="กรอกระบุยอดจำนวนเงินที่คืน (บาท)"
+                                />
+                                <span className="text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                                  บ.
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateProjectRefundAmount(p.id, approvedAmount)
+                                  }
+                                  className={`px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border cursor-pointer transition-colors ${
+                                    getProjectRefundAmount(p) >= approvedAmount
+                                      ? 'bg-rose-600 text-white border-rose-600'
+                                      : 'bg-white hover:bg-rose-100 text-rose-700 border-rose-300'
+                                  }`}
+                                  title={`ตั้งเป็นคืนเงิน 100% (${approvedAmount.toLocaleString()} บาท)`}
+                                >
+                                  100%
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </td>
 

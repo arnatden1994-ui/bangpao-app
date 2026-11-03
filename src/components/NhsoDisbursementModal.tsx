@@ -20,6 +20,12 @@ import {
   NhsoDisbursementRecord,
   NhsoImplementationStatus,
 } from '../types/index.ts';
+import {
+  getProjectRefundAmount,
+  isProjectTrackingCompleted,
+  isProjectTrackingExtended,
+  isProjectTrackingRefunded,
+} from '../utils/nhsoThemeAndTracking.ts';
 
 interface NhsoDisbursementModalProps {
   isOpen: boolean;
@@ -48,6 +54,23 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
     project.outcomesSummary || ''
   );
 
+  // Refund & Tracking state
+  const [trackingCompleted, setTrackingCompleted] = useState<boolean>(
+    isProjectTrackingCompleted(project)
+  );
+  const [trackingExtended, setTrackingExtended] = useState<boolean>(
+    isProjectTrackingExtended(project)
+  );
+  const [trackingRefunded, setTrackingRefunded] = useState<boolean>(
+    isProjectTrackingRefunded(project)
+  );
+  const [refundAmount, setRefundAmount] = useState<number>(
+    getProjectRefundAmount(project)
+  );
+  const [refundNote, setRefundNote] = useState<string>(
+    project.refundNote || ''
+  );
+
   // Sync state when project changes or modal opens
   useEffect(() => {
     if (project && isOpen) {
@@ -62,6 +85,11 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
       );
       setOutcomesSummary(project.outcomesSummary || '');
       setDisbursementRound((project.disbursementRecords || []).length + 1);
+      setTrackingCompleted(isProjectTrackingCompleted(project));
+      setTrackingExtended(isProjectTrackingExtended(project));
+      setTrackingRefunded(isProjectTrackingRefunded(project));
+      setRefundAmount(getProjectRefundAmount(project));
+      setRefundNote(project.refundNote || '');
     }
   }, [project, isOpen]);
 
@@ -77,8 +105,17 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
   if (!isOpen) return null;
 
   // Calculate totals
-  const totalDisbursed = records.reduce((sum, r) => sum + (r.amount || 0), 0);
-  const remainingBudget = approvedBudget - totalDisbursed;
+  const recordsSum = records.reduce((sum, r) => sum + (r.amount || 0), 0);
+  const effectiveRefund = trackingRefunded ? Math.max(0, Number(refundAmount) || 0) : 0;
+  const totalDisbursed =
+    records.length > 0
+      ? recordsSum
+      : trackingRefunded && effectiveRefund >= approvedBudget
+      ? 0
+      : trackingCompleted
+      ? Math.max(0, approvedBudget - effectiveRefund)
+      : project.disbursedAmount || 0;
+  const remainingBudget = Math.max(0, approvedBudget - totalDisbursed - effectiveRefund);
   const percentDisbursed =
     approvedBudget > 0 ? Math.min(100, Math.round((totalDisbursed / approvedBudget) * 100)) : 0;
 
@@ -117,6 +154,7 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
   };
 
   const handleSaveAll = () => {
+    const finalRefundAmount = trackingRefunded ? Math.max(0, Number(refundAmount) || 0) : 0;
     const updatedProject: NhsoProject = {
       ...project,
       budgetApproved: project.budgetApproved || project.budgetRequested,
@@ -124,9 +162,14 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
       disbursementRecords: records,
       implementationStatus: implStatus,
       outcomesSummary: outcomesSummary.trim(),
+      trackingCompleted,
+      trackingExtended,
+      trackingRefunded,
+      refundAmount: finalRefundAmount,
+      refundNote: refundNote.trim(),
       // Automatically update main status to completed if reported, or ensure approved if disbursed
       status:
-        implStatus === 'completed_reported'
+        implStatus === 'completed_reported' || trackingCompleted
           ? 'completed'
           : project.status === 'submitted' || project.status === 'under_review' || project.status === 'draft'
           ? 'approved'
@@ -457,6 +500,97 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
                 placeholder="เช่น ดำเนินการจัดอบรมและตรวจคัดกรองเสร็จสิ้นเมื่อวันที่ ... มีผู้เข้าร่วม 125 คน (เป้าหมาย 120 คน) พบกลุ่มเสี่ยง 14 คน ส่งต่อ รพ.สต. เพื่อดูแลต่อเนื่อง เบิกจ่ายงบประมาณครบถ้วนตามแผนงาน"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-emerald-500"
               />
+            </div>
+
+            {/* 5. Refund / Return of Unspent Budget Section */}
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="toggle-refund-checkbox"
+                    type="checkbox"
+                    checked={trackingRefunded}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setTrackingRefunded(next);
+                      if (next && (!refundAmount || refundAmount === 0)) {
+                        setRefundAmount(!trackingCompleted ? approvedBudget : Math.max(0, approvedBudget - totalDisbursed));
+                      }
+                    }}
+                    className="w-4 h-4 accent-rose-600 rounded cursor-pointer"
+                  />
+                  <label
+                    htmlFor="toggle-refund-checkbox"
+                    className="font-bold text-xs sm:text-sm text-rose-700 dark:text-rose-400 cursor-pointer"
+                  >
+                    ↩️ โครงการนี้มีการคืนเงินเข้ากองทุนฯ (คืน 100% หรือคืนเงินเหลือจ่าย)
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrackingRefunded(true);
+                      setTrackingCompleted(false);
+                      setRefundAmount(approvedBudget);
+                      setRefundNote('คืนเงินเต็มจำนวน 100% (ไม่ได้ดำเนินการ)');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold border border-rose-300 cursor-pointer transition-colors"
+                  >
+                    คืน 100% ({approvedBudget.toLocaleString()} บ.)
+                  </button>
+                  {recordsSum > 0 && approvedBudget > recordsSum && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTrackingRefunded(true);
+                        setRefundAmount(approvedBudget - recordsSum);
+                        setRefundNote(`คืนเงินเหลือจ่าย ${(approvedBudget - recordsSum).toLocaleString()} บาท`);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold border border-amber-300 cursor-pointer transition-colors"
+                    >
+                      คืนส่วนต่าง ({(approvedBudget - recordsSum).toLocaleString()} บ.)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {trackingRefunded && (
+                <div className="p-3.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-150">
+                  <div>
+                    <label className="block text-xs font-bold text-rose-900 dark:text-rose-200 mb-1">
+                      ระบุจำนวนเงินที่คืนเข้ากองทุนฯ (บาท) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={refundAmount}
+                      onChange={(e) => setRefundAmount(Math.max(0, Number(e.target.value)))}
+                      placeholder="เช่น 42300 หรือ 400 หรือ 117"
+                      className="w-full px-3 py-2 rounded-lg border-2 border-rose-500 bg-white dark:bg-slate-900 font-black text-rose-700 dark:text-rose-300 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    />
+                    <span className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 block">
+                      {refundAmount >= approvedBudget
+                        ? 'คิดเป็น 100% ของงบอนุมัติ (ไม่ได้ดำเนินการ)'
+                        : `เบิกจ่ายจริง ${(approvedBudget - refundAmount).toLocaleString()} บาท • คืนเงิน ${refundAmount.toLocaleString()} บาท`}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-rose-900 dark:text-rose-200 mb-1">
+                      หมายเหตุการคืนเงิน (นำไปรวมในงบข้อ 4 เงินยกยอด)
+                    </label>
+                    <input
+                      type="text"
+                      value={refundNote}
+                      onChange={(e) => setRefundNote(e.target.value)}
+                      placeholder="เช่น คืนเงินเหลือจ่ายหลังเสร็จสิ้นโครงการ"
+                      className="w-full px-3 py-2 rounded-lg border border-rose-300 dark:border-rose-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
