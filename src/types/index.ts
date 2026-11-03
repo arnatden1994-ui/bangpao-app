@@ -528,6 +528,8 @@ export interface NhsoFundSettings {
   defaultEndorserTitle: string;
   defaultApproverName: string;
   defaultApproverTitle: string;
+  defaultRecorderName?: string;
+  defaultRecorderTitle?: string;
   standardRates: {
     speakerHourly: number; // 600
     lunchPerMeal: number; // 75

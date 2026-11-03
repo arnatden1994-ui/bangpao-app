@@ -216,7 +216,7 @@ export const NhsoFundSettingsModal: React.FC<NhsoFundSettingsModalProps> = ({
                           setFormData({ ...formData, defaultApproverName: e.target.value })
                         }
                         className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                        placeholder="เช่น นายละดม  เชื้อช่วย"
+                        placeholder="เช่น นายละอม  เชื้อช่วย"
                       />
                     </div>
                     <div>
@@ -231,6 +231,46 @@ export const NhsoFundSettingsModal: React.FC<NhsoFundSettingsModalProps> = ({
                         }
                         className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                         placeholder="เช่น ประธานกองทุนฯ ทต.บางเป้า"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* เจ้าหน้าที่ผู้บันทึกข้อมูลกองทุน สปสช. (เริ่มต้น) */}
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5 border border-slate-200 dark:border-slate-800 md:col-span-2">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                    <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-base">
+                      เจ้าหน้าที่ผู้บันทึกข้อมูลกองทุน สปสช. (ค่าเริ่มต้น)
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        ชื่อ-นามสกุล (ผู้บันทึกข้อมูล)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.defaultRecorderName || ''}
+                        onChange={(e) =>
+                          setFormData({ ...formData, defaultRecorderName: e.target.value })
+                        }
+                        className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        placeholder="เช่น พันจ่าเอกอานัส เด็นหมาด"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        ตำแหน่งผู้บันทึกข้อมูล
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.defaultRecorderTitle || ''}
+                        onChange={(e) =>
+                          setFormData({ ...formData, defaultRecorderTitle: e.target.value })
+                        }
+                        className="w-full px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        placeholder="เช่น เจ้าพนักงานสาธารณสุข"
                       />
                     </div>
                   </div>

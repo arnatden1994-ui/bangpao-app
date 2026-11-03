@@ -60,6 +60,7 @@ import { NhsoFundRevenueModal } from './NhsoFundRevenueModal.tsx';
 interface NhsoFundViewProps {
   projects?: NhsoProject[];
   userRole?: UserRole;
+  currentUser?: User | null;
   onAddNew?: () => void;
   onApproveProject?: (id: string, budget: number) => void;
   onUpdateProject?: (project: NhsoProject) => void;
@@ -71,6 +72,7 @@ interface NhsoFundViewProps {
 export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   projects: externalProjects,
   userRole = 'admin',
+  currentUser,
   onAddNew,
   onApproveProject: externalApprove,
   onUpdateProject: externalUpdate,
@@ -122,9 +124,25 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   const [meetingDate, setMeetingDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [officerRecorder, setOfficerRecorder] = useState<string>(
-    'พันจ่าเอกอานัส  เด่นหมัด (เจ้าพนักงานสาธารณสุข)'
-  );
+  const getComputedDefaultRecorder = () => {
+    if (fundSettings.defaultRecorderName?.trim()) {
+      return `${fundSettings.defaultRecorderName.trim()}${
+        fundSettings.defaultRecorderTitle ? ` (${fundSettings.defaultRecorderTitle.trim()})` : ''
+      }`;
+    }
+    if (currentUser?.fullName?.trim()) {
+      const role = currentUser.roleTitle?.split(' ')[0] || 'เจ้าพนักงานสาธารณสุข';
+      return `${currentUser.fullName.trim()} (${role})`;
+    }
+    return 'พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข)';
+  };
+
+  const [officerRecorder, setOfficerRecorder] = useState<string>(getComputedDefaultRecorder);
+
+  // Sync recorder when settings or currentUser changes
+  useEffect(() => {
+    setOfficerRecorder(getComputedDefaultRecorder());
+  }, [fundSettings.defaultRecorderName, fundSettings.defaultRecorderTitle, currentUser?.fullName, currentUser?.roleTitle]);
   const [committeeComment, setCommitteeComment] = useState<string>('');
   const [officerNotes, setOfficerNotes] = useState<string>('');
 
@@ -1285,20 +1303,52 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   value={officerNotes}
                   onChange={(e) => setOfficerNotes(e.target.value)}
                   placeholder="เช่น เจ้าหน้าที่ตรวจสอบเอกสารและแผนงานตามระเบียบเรียบร้อยแล้ว"
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100"
+                />
+              </div>
+
+              {/* Officer Recorder */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                    <span>เจ้าหน้าที่ผู้บันทึกข้อมูล:</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-normal text-[11px]">
+                      (สามารถพิมพ์แก้ไขชื่อ-นามสกุล / ตำแหน่งได้อิสระ)
+                    </span>
+                  </label>
+                  {currentUser?.fullName && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOfficerRecorder(
+                          `${currentUser.fullName} (${currentUser.roleTitle?.split(' ')[0] || 'เจ้าพนักงานสาธารณสุข'})`
+                        )
+                      }
+                      className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-semibold cursor-pointer"
+                    >
+                      ใช้ชื่อฉัน ({currentUser.fullName.split(' ')[0]})
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={officerRecorder}
+                  onChange={(e) => setOfficerRecorder(e.target.value)}
+                  placeholder="เช่น พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข)"
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
             </div>
 
             <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500">
-                ผู้บันทึก: <strong>{officerRecorder}</strong>
+              <span className="text-[11px] text-slate-500 truncate max-w-[280px]">
+                ผู้บันทึก: <strong className="text-slate-700 dark:text-slate-300">{officerRecorder || 'ยังไม่ระบุ'}</strong>
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setApprovalModalProject(null)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
                 >
                   ยกเลิก
                 </button>

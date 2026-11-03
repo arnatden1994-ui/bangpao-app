@@ -5,8 +5,10 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
   totalFundBudget: 668995, // คำนวณจาก สปสช. (444,330) + เทศบาลสมทบ 50% (222,165) + ดอกเบี้ย (2,500)
   defaultEndorserName: 'นายโชคชัย  รอดรักษา',
   defaultEndorserTitle: 'เลขานุการกองทุนฯ ทต.บางเป้า',
-  defaultApproverName: 'นายละดม  เชื้อช่วย',
+  defaultApproverName: 'นายละอม  เชื้อช่วย',
   defaultApproverTitle: 'ประธานกองทุนฯ ทต.บางเป้า',
+  defaultRecorderName: 'พันจ่าเอกอานัส เด็นหมาด',
+  defaultRecorderTitle: 'เจ้าพนักงานสาธารณสุข',
   standardRates: {
     speakerHourly: 600,
     lunchPerMeal: 75,

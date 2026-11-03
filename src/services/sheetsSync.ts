@@ -933,6 +933,9 @@ export function getStoredNhsoFundSettings(): NhsoFundSettings {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.fiscalYear) {
+        if (parsed.defaultRecorderName && (parsed.defaultRecorderName.includes('เด่นหมัด') || parsed.defaultRecorderName.includes('เด่นหมาด'))) {
+          parsed.defaultRecorderName = parsed.defaultRecorderName.replace(/เด่นหมัด|เด่นหมาด/g, 'เด็นหมาด');
+        }
         return {
           ...DEFAULT_NHSO_FUND_SETTINGS,
           ...parsed,

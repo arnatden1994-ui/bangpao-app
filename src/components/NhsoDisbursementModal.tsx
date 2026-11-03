@@ -37,6 +37,7 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
   currentUserFullName = 'เจ้าหน้าที่กองสาธารณสุข',
 }) => {
   const approvedBudget = project.budgetApproved || project.budgetRequested || 0;
+  const [recorderName, setRecorderName] = useState<string>(currentUserFullName);
   const [records, setRecords] = useState<NhsoDisbursementRecord[]>(
     project.disbursementRecords || []
   );
@@ -96,7 +97,7 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
       disbursementRound: Number(disbursementRound) || records.length + 1,
       documentNumber: documentNumber.trim() || `ฎีกาที่ ${records.length + 1}/${project.fiscalYear}`,
       description: description.trim() || `เบิกจ่ายงวดที่ ${records.length + 1}`,
-      recordedBy: currentUserFullName,
+      recordedBy: recorderName.trim() || currentUserFullName,
       createdAt: new Date().toISOString(),
     };
 
@@ -461,9 +462,16 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 flex items-center justify-between">
-          <div className="text-xs text-slate-500">
-            บันทึกโดย: <strong>{currentUserFullName}</strong>
+        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span>บันทึกโดย:</span>
+            <input
+              type="text"
+              value={recorderName}
+              onChange={(e) => setRecorderName(e.target.value)}
+              className="px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              title="คลิกเพื่อพิมพ์แก้ไขชื่อ-นามสกุล / ตำแหน่งผู้บันทึกข้อมูล"
+            />
           </div>
           <div className="flex items-center gap-2.5">
             <button

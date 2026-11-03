@@ -5,6 +5,7 @@ const STORAGE_KEY_SESSION = 'ph_active_session_v3';
 
 const sanitizePersonName = (text?: string): string =>
   (text || '')
+    .replace(/เด่นหมัด/g, 'เด็นหมาด')
     .replace(/เด่นหมาด/g, 'เด็นหมาด')
     .replace(/นางสาวกัญจนณัฏฐ์\s*หริรักษ์/g, 'นางสาวปฐมาภรณ์ จันทร์แจ่ม')
     .replace(/กัญจนณัฏฐ์\s*หริรักษ์/g, 'ปฐมาภรณ์ จันทร์แจ่ม')
@@ -14,7 +15,7 @@ const sanitizePersonName = (text?: string): string =>
 export function sanitizeUserRecord(u: User): User {
   const cleanFullName = sanitizePersonName(u.fullName);
   const cleanRoleTitle = sanitizePersonName(u.roleTitle);
-  const isAnas = cleanFullName.includes('อานัส') && cleanFullName.includes('เด็นหมาด');
+  const isAnas = cleanFullName.includes('อานัส') && (cleanFullName.includes('เด็นหมาด') || cleanFullName.includes('เด่นหมัด') || cleanFullName.includes('เด่นหมาด'));
   return {
     ...u,
     fullName: isAnas ? 'พันจ่าเอกอานัส เด็นหมาด' : cleanFullName,
@@ -222,11 +223,13 @@ export function getActiveSession(): User | null {
         // ตรวจสอบว่าผู้ใช้ยังมีอยู่ในระบบและยังไม่ถูกระงับ
         const users = getAllUsers();
         const found = users.find((u) => u.id === parsed.id);
-        if (found) {
-          if (found.status === 'suspended') return null;
-          return sanitizeUserRecord(found);
+        const resolved = found ? (found.status === 'suspended' ? null : sanitizeUserRecord(found)) : sanitizeUserRecord(parsed);
+        if (resolved && (raw.includes('เด่นหมัด') || raw.includes('เด่นหมาด'))) {
+          try {
+            localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(resolved));
+          } catch (_) {}
         }
-        return sanitizeUserRecord(parsed);
+        return resolved;
       }
     }
   } catch (e) {

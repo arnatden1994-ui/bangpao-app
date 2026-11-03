@@ -1689,6 +1689,7 @@ unsubLicenses();
               <NhsoFundView
                 projects={nhsoProjects}
                 userRole={currentUser.role}
+                currentUser={currentUser}
                 onAddNew={() => {
                   const newProj: NhsoProject = {
                     id: `NHSO-${Date.now()}`,
