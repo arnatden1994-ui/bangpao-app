@@ -25,6 +25,12 @@ import {
   NHSO_FUND_CATEGORIES,
   NhsoActivityGroup,
 } from '../types/index.ts';
+import {
+  generateSmartNhsoProjectDraft,
+  generateNhsoDraftWithFreeGemini,
+  getStoredFreeGeminiKey,
+  saveStoredFreeGeminiKey,
+} from '../utils/nhsoAiAssistant.ts';
 
 interface NhsoProjectBuilderModalProps {
   isOpen: boolean;
@@ -99,7 +105,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
   const [projectName, setProjectName] = useState<string>(initialProject?.projectName || '');
   const [categoryNumber, setCategoryNumber] = useState<number>(initialProject?.categoryNumber || 1);
   const [selectedOrgPreset, setSelectedOrgPreset] = useState<string>(() => {
-    if (!initialProject?.proposingOrg) return PRESET_ORGS[0];
+    if (!initialProject?.proposingOrg) return '';
     return PRESET_ORGS.includes(initialProject.proposingOrg)
       ? initialProject.proposingOrg
       : 'custom';
@@ -116,44 +122,49 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
   );
   const [phone, setPhone] = useState<string>(initialProject?.phone || '');
 
-  // Activity Groups State (Multiple Activities support!)
+  // AI Project Assistant States (100% Free Built-in + Optional Free Gemini Key)
+  const [aiParticipants, setAiParticipants] = useState<number>(30);
+  const [aiObservers, setAiObservers] = useState<number>(6);
+  const [aiSpeakers, setAiSpeakers] = useState<number>(1);
+  const [aiHours, setAiHours] = useState<number>(5);
+  const [aiIncludeLunch, setAiIncludeLunch] = useState<boolean>(true);
+  const [aiSnackMeals, setAiSnackMeals] = useState<number>(2);
+  const [aiIncludeVinyl, setAiIncludeVinyl] = useState<boolean>(true);
+  const [aiIncludeMaterials, setAiIncludeMaterials] = useState<boolean>(true);
+  const [aiActivityCountMode, setAiActivityCountMode] = useState<'auto' | 'single' | 'two'>('auto');
+  const [aiStatusBanner, setAiStatusBanner] = useState<string | null>(null);
+  const [showGeminiKeyBox, setShowGeminiKeyBox] = useState<boolean>(false);
+  const [freeGeminiKey, setFreeGeminiKey] = useState<string>(() => getStoredFreeGeminiKey());
+  const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
+
+  // Activity Groups State (Multiple Activities support - starts BLANK for new project!)
   const [activityGroups, setActivityGroups] = useState<NhsoActivityGroup[]>(() => {
     if (initialProject?.activityGroups && initialProject.activityGroups.length > 0) {
       return initialProject.activityGroups;
     }
-    // Fallback: construct 1 group from initial project fields
     return [
       {
         id: `act_${Date.now()}_1`,
-        activityName: '1. กิจกรรมดำเนินงาน',
+        activityName: '',
         activities: initialProject?.activities || '',
         objectives: initialProject?.objectives || '',
         targetGroup: initialProject?.targetGroup || '',
         targetParticipants: initialProject?.targetParticipants || 0,
         kpi: initialProject?.kpi || '',
-        location: initialProject?.location || 'พื้นที่ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง',
-        duration: initialProject?.duration || 'ต.ค. 2569 - ก.ย. 2570',
+        location: initialProject?.location || '',
+        duration: initialProject?.duration || '',
         budgetLines:
           initialProject?.budgetLines && initialProject.budgetLines.length > 0
             ? initialProject.budgetLines
             : [
                 {
                   id: 'line_1_1',
-                  activityCategory: '1. กิจกรรมดำเนินงาน',
-                  name: '1.1) ค่าตอบแทนวิทยากร',
-                  quantity: 6,
-                  unit: 'ชั่วโมง',
-                  unitPrice: settings.standardRates?.speakerHourly || 600,
-                  total: 6 * (settings.standardRates?.speakerHourly || 600),
-                },
-                {
-                  id: 'line_1_2',
-                  activityCategory: '1. กิจกรรมดำเนินงาน',
-                  name: '1.2) ค่าอาหารกลางวัน',
-                  quantity: 40,
-                  unit: 'มื้อ',
-                  unitPrice: settings.standardRates?.lunchPerMeal || 75,
-                  total: 40 * (settings.standardRates?.lunchPerMeal || 75),
+                  activityCategory: '',
+                  name: '',
+                  quantity: 0,
+                  unit: '',
+                  unitPrice: 0,
+                  total: 0,
                 },
               ],
         subtotal: 0,
@@ -161,17 +172,12 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
     ];
   });
 
-  // Signers State
-  const defaultOrgProposer = settings.orgProposerDefaults?.[effectiveOrg] || {
-    name: responsiblePerson || '',
-    title: 'ผู้เสนอโครงการ',
-  };
-
+  // Signers State (Proposer starts blank for new project until org is selected)
   const [proposerName, setProposerName] = useState<string>(
-    initialProject?.signers?.proposerName || defaultOrgProposer.name
+    initialProject?.signers?.proposerName || ''
   );
   const [proposerTitle, setProposerTitle] = useState<string>(
-    initialProject?.signers?.proposerTitle || defaultOrgProposer.title
+    initialProject?.signers?.proposerTitle || ''
   );
   const [endorserName, setEndorserName] = useState<string>(
     initialProject?.signers?.endorserName || settings.defaultEndorserName
@@ -198,8 +204,11 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       setProjectName(initialProject.projectName || '');
       setCategoryNumber(initialProject.categoryNumber || 1);
 
-      const org = initialProject.proposingOrg || PRESET_ORGS[0];
-      if (PRESET_ORGS.includes(org)) {
+      const org = initialProject.proposingOrg || '';
+      if (!org) {
+        setSelectedOrgPreset('');
+        setCustomOrgText('');
+      } else if (PRESET_ORGS.includes(org)) {
         setSelectedOrgPreset(org);
         setCustomOrgText('');
       } else {
@@ -216,14 +225,14 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
         setActivityGroups([
           {
             id: `act_${Date.now()}_1`,
-            activityName: '1. กิจกรรมดำเนินงาน',
+            activityName: '',
             activities: initialProject.activities || '',
             objectives: initialProject.objectives || '',
             targetGroup: initialProject.targetGroup || '',
             targetParticipants: initialProject.targetParticipants || 0,
             kpi: initialProject.kpi || '',
-            location: initialProject.location || 'พื้นที่ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง',
-            duration: initialProject.duration || 'ต.ค. 2569 - ก.ย. 2570',
+            location: initialProject.location || '',
+            duration: initialProject.duration || '',
             budgetLines: initialProject.budgetLines || [],
             subtotal: initialProject.budgetRequested || 0,
           },
@@ -231,77 +240,59 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       }
 
       setProposerName(initialProject.signers?.proposerName || '');
-      setProposerTitle(initialProject.signers?.proposerTitle || 'ผู้เสนอโครงการ');
+      setProposerTitle(initialProject.signers?.proposerTitle || '');
       setEndorserName(initialProject.signers?.endorserName || settings.defaultEndorserName);
       setEndorserTitle(initialProject.signers?.endorserTitle || settings.defaultEndorserTitle);
       setApproverName(initialProject.signers?.approverName || settings.defaultApproverName);
       setApproverTitle(initialProject.signers?.approverTitle || settings.defaultApproverTitle);
+      setAiStatusBanner(null);
       setActiveStep(1);
     } else {
-      // RESET TO CLEAN BLANK NEW PROJECT!
+      // RESET TO 100% CLEAN BLANK NEW PROJECT (All fields empty, examples shown via placeholders!)
       const targetYear = settings.fiscalYear || '2570';
       const yearCount = existingProjects.filter((p) => p.fiscalYear === targetYear).length;
       setFiscalYear(targetYear);
       setProjectCode(`กองทุน-${targetYear.slice(-2)}-00${yearCount + 1}`);
       setProjectName('');
       setCategoryNumber(1);
-      setSelectedOrgPreset(PRESET_ORGS[0]);
+      setSelectedOrgPreset('');
       setCustomOrgText('');
-
-      const defaultProposer = KNOWN_PROPOSERS[0];
-      setResponsiblePerson(defaultProposer.name);
-      setPhone('075-207038');
+      setResponsiblePerson('');
+      setPhone('');
 
       setActivityGroups([
         {
           id: `act_${Date.now()}_1`,
-          activityName: '1. กิจกรรมดำเนินงาน',
+          activityName: '',
           activities: '',
           objectives: '',
           targetGroup: '',
-          targetParticipants: 30,
+          targetParticipants: 0,
           kpi: '',
-          location: 'พื้นที่ตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง',
-          duration: `ต.ค. ${Number(targetYear) - 1} - ก.ย. ${targetYear}`,
+          location: '',
+          duration: '',
           budgetLines: [
             {
               id: `line_init_1`,
-              activityCategory: '1. กิจกรรมดำเนินงาน',
-              name: '1.1) ค่าตอบแทนวิทยากร',
-              quantity: 5,
-              unit: 'ชั่วโมง',
-              unitPrice: settings.standardRates?.speakerHourly || 600,
-              total: 5 * (settings.standardRates?.speakerHourly || 600),
-            },
-            {
-              id: `line_init_2`,
-              activityCategory: '1. กิจกรรมดำเนินงาน',
-              name: '1.2) ค่าอาหารกลางวัน',
-              quantity: 30,
-              unit: 'มื้อ',
-              unitPrice: settings.standardRates?.lunchPerMeal || 75,
-              total: 30 * (settings.standardRates?.lunchPerMeal || 75),
-            },
-            {
-              id: `line_init_3`,
-              activityCategory: '1. กิจกรรมดำเนินงาน',
-              name: '1.3) ค่าอาหารว่างและเครื่องดื่ม',
-              quantity: 60,
-              unit: 'ชุด',
-              unitPrice: settings.standardRates?.snackPerMeal || 25,
-              total: 60 * (settings.standardRates?.snackPerMeal || 25),
+              activityCategory: '',
+              name: '',
+              quantity: 0,
+              unit: '',
+              unitPrice: 0,
+              total: 0,
             },
           ],
-          subtotal: 5 * 600 + 30 * 75 + 60 * 25,
+          subtotal: 0,
         },
       ]);
 
-      setProposerName(defaultProposer.name);
-      setProposerTitle(defaultProposer.title);
+      setProposerName('');
+      setProposerTitle('');
       setEndorserName(settings.defaultEndorserName || 'นายโชคชัย  รอดรักษา');
       setEndorserTitle(settings.defaultEndorserTitle || 'เลขานุการกองทุนฯ ทต.บางเป้า');
       setApproverName(settings.defaultApproverName || 'นายละดม  เชื้อช่วย');
       setApproverTitle(settings.defaultApproverTitle || 'ประธานกองทุนฯ ทต.บางเป้า');
+      setAiStatusBanner(null);
       setActiveStep(1);
     }
   }, [isOpen, initialProject]);
@@ -314,33 +305,129 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
     return sum + groupSum;
   }, 0);
 
-  // Add new activity group
+  // Add new activity group (starts completely blank with example placeholders)
   const handleAddActivityGroup = () => {
     const newIdx = activityGroups.length + 1;
     const newGroup: NhsoActivityGroup = {
       id: `act_${Date.now()}_${newIdx}`,
-      activityName: `${newIdx}. กิจกรรมใหม่`,
+      activityName: '',
       activities: '',
       objectives: '',
       targetGroup: '',
       targetParticipants: 0,
       kpi: '',
-      location: 'พื้นที่ตำบลบางเป้า',
-      duration: `ต.ค. ${Number(fiscalYear) - 1} - ก.ย. ${fiscalYear}`,
+      location: '',
+      duration: '',
       budgetLines: [
         {
           id: `line_${Date.now()}_1`,
-          activityCategory: `${newIdx}. กิจกรรมใหม่`,
-          name: `${newIdx}.1) ค่าอาหารว่างและเครื่องดื่ม`,
-          quantity: 40,
-          unit: 'ชุด',
-          unitPrice: settings.standardRates?.snackPerMeal || 25,
-          total: 40 * (settings.standardRates?.snackPerMeal || 25),
+          activityCategory: '',
+          name: '',
+          quantity: 0,
+          unit: '',
+          unitPrice: 0,
+          total: 0,
         },
       ],
-      subtotal: 40 * (settings.standardRates?.snackPerMeal || 25),
+      subtotal: 0,
     };
     setActivityGroups([...activityGroups, newGroup]);
+  };
+
+  // Build AI parameters helper
+  const getAiParams = () => ({
+    projectName: projectName.trim() || 'โครงการสร้างเสริมสุขภาพและป้องกันโรคในชุมชน',
+    proposingOrg: effectiveOrg,
+    participantsCount: aiParticipants || 30,
+    observersCount: aiObservers ?? 6,
+    speakersCount: aiSpeakers ?? 1,
+    hoursCount: aiHours || 5,
+    includeLunch: aiIncludeLunch,
+    snackMealsCount: aiSnackMeals,
+    includeVinyl: aiIncludeVinyl,
+    includeMaterials: aiIncludeMaterials,
+    activityCountMode: aiActivityCountMode,
+    fiscalYear: fiscalYear || '2570',
+    settings,
+  });
+
+  // 1-Click AI Full Project Draft Generator (100% Free)
+  const handleRunFullAiDraft = async (goToStep2 = true) => {
+    if (!projectName.trim()) {
+      alert('กรุณาพิมพ์ "ชื่อโครงการ" ก่อน เพื่อให้ AI วิเคราะห์และช่วยคิดกิจกรรม วัตถุประสงค์ กลุ่มเป้าหมาย KPI และงบประมาณที่เหมาะสม');
+      return;
+    }
+    setIsAiGenerating(true);
+    try {
+      const params = getAiParams();
+      const result = freeGeminiKey.trim()
+        ? await generateNhsoDraftWithFreeGemini(params, freeGeminiKey.trim())
+        : generateSmartNhsoProjectDraft(params);
+
+      setCategoryNumber(result.recommendedCategoryNumber);
+      setActivityGroups(result.activityGroups);
+      const totalGen = result.activityGroups.reduce((s, g) => s + (g.subtotal || 0), 0);
+      setAiStatusBanner(
+        `✨ AI วิเคราะห์หัวข้อ "${result.detectedTopicLabel}" สำเร็จ! แนะนำประเภทที่ ${result.recommendedCategoryNumber} (${result.recommendedCategoryReason}) • สร้าง ${result.activityGroups.length} กิจกรรม งบประมาณรวม ${totalGen.toLocaleString()} บาท (แก้ไขปรับแต่งต่อได้ทุกช่อง)`
+      );
+      if (goToStep2) {
+        setActiveStep(2);
+      }
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
+  // Individual Field AI Generator inside an Activity Card
+  const handleAiSuggestSingleField = (
+    groupId: string,
+    field: 'activities' | 'objectives' | 'targetGroup' | 'kpi' | 'location_duration' | 'budgetLines'
+  ) => {
+    const result = generateSmartNhsoProjectDraft(getAiParams());
+    const sampleGroup = result.activityGroups[0];
+    if (!sampleGroup) return;
+
+    setActivityGroups((prev) =>
+      prev.map((g, idx) => {
+        if (g.id !== groupId) return g;
+        const matchedGroup = result.activityGroups[idx] || sampleGroup;
+        if (field === 'activities') {
+          return {
+            ...g,
+            activityName: g.activityName || matchedGroup.activityName,
+            activities: matchedGroup.activities,
+          };
+        }
+        if (field === 'objectives') {
+          return { ...g, objectives: matchedGroup.objectives };
+        }
+        if (field === 'targetGroup') {
+          return {
+            ...g,
+            targetGroup: matchedGroup.targetGroup,
+            targetParticipants: matchedGroup.targetParticipants,
+          };
+        }
+        if (field === 'kpi') {
+          return { ...g, kpi: matchedGroup.kpi };
+        }
+        if (field === 'location_duration') {
+          return {
+            ...g,
+            location: g.location || matchedGroup.location,
+            duration: g.duration || matchedGroup.duration,
+          };
+        }
+        if (field === 'budgetLines') {
+          return {
+            ...g,
+            budgetLines: matchedGroup.budgetLines,
+            subtotal: matchedGroup.subtotal,
+          };
+        }
+        return g;
+      })
+    );
   };
 
   const handleRemoveActivityGroup = (groupId: string) => {
@@ -687,7 +774,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="เช่น 089-xxx-xxxx"
+                    placeholder="ตัวอย่าง: 075-207038 หรือ 089-xxx-xxxx"
                   />
                 </div>
               </div>
@@ -701,9 +788,182 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="เช่น โครงการบางเป้าเฝ้าระวัง ป้องกันเด็กจมน้ำ ประจำปี 2570"
+                  placeholder="ตัวอย่าง: โครงการบางเป้าเฝ้าระวัง ป้องกันเด็กจมน้ำ ประจำปี 2570 หรือ โครงการใส่ใจดูแลกลุ่มเสี่ยงเบาหวาน-ความดันโลหิตสูง"
                   required
                 />
+              </div>
+
+              {/* 100% FREE AI PROJECT ASSISTANT PANEL */}
+              <div className="bg-gradient-to-br from-indigo-50 via-purple-50 to-emerald-50 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-emerald-950/30 border-2 border-indigo-200 dark:border-indigo-800/70 rounded-2xl p-4 space-y-3 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-sm">
+                      <Sparkles className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-extrabold text-indigo-950 dark:text-indigo-200">
+                          AI ผู้ช่วยคิดและร่างโครงการ สปสช. อัตโนมัติ
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+                          ฟรี 100% ไม่มีค่าใช้จ่าย
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        เพียงพิมพ์ <strong>"ชื่อโครงการ"</strong> ด้านบน แล้วกำหนดจำนวนคน ระบบ AI จะช่วยคิดกิจกรรม วัตถุประสงค์ กลุ่มเป้าหมาย ตัวชี้วัด (KPI) และคำนวณรายการค่าใช้จ่ายตามเรต สปสช. ให้ครบทันที
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowGeminiKeyBox((v) => !v)}
+                    className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 hover:underline"
+                  >
+                    {showGeminiKeyBox ? 'ซ่อนตั้งค่า Gemini API' : '⚙️ เชื่อมต่อ Google Gemini ฟรี (ทางเลือกเสริม)'}
+                  </button>
+                </div>
+
+                {showGeminiKeyBox && (
+                  <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-indigo-200 dark:border-indigo-800 text-xs space-y-2">
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      🤖 โหมด AI อัจฉริยะ 2 ระบบ (ฟรี 100% ทั้งคู่):
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
+                      • <strong>ระบบที่ 1 (ทำงานทันทีโดยไม่ต้องใส่คีย์):</strong> NHSO Expert AI ในตัวเครื่อง วิเคราะห์จากคลังความรู้ระเบียบ สปสช. และฐานข้อมูล 27 โครงการจริงของ ทต.บางเป้า ฟรีถาวร 100%<br />
+                      • <strong>ระบบที่ 2 (ทางเลือกเสริม ฟรี):</strong> หากต้องการใช้ Google Gemini 2.5 Flash ช่วยแต่งประโยคเพิ่มเติม สามารถขอ Free API Key ได้ฟรีที่ aistudio.google.com แล้ววางด้านล่าง (ไม่ใส่ก็ใช้งานได้ทันที)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        value={freeGeminiKey}
+                        onChange={(e) => {
+                          setFreeGeminiKey(e.target.value);
+                          saveStoredFreeGeminiKey(e.target.value);
+                        }}
+                        placeholder="วาง Gemini API Key ฟรี (AIza...) หรือเว้นว่างเพื่อใช้ AI ในตัวเครื่องฟรีทันที"
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Parameters for AI Calculation */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1 text-xs">
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-indigo-100 dark:border-slate-700">
+                    <label className="block text-[11px] text-slate-500 font-medium">
+                      กลุ่มเป้าหมาย (คน)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={aiParticipants}
+                      onChange={(e) => setAiParticipants(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-indigo-700 dark:text-indigo-300 text-xs"
+                    />
+                  </div>
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-indigo-100 dark:border-slate-700">
+                    <label className="block text-[11px] text-slate-500 font-medium">
+                      ผู้สังเกตการณ์/จนท. (คน)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={aiObservers}
+                      onChange={(e) => setAiObservers(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-indigo-700 dark:text-indigo-300 text-xs"
+                    />
+                  </div>
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-indigo-100 dark:border-slate-700">
+                    <label className="block text-[11px] text-slate-500 font-medium">
+                      ชั่วโมงวิทยากร (ชม.)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={aiHours}
+                      onChange={(e) => setAiHours(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-indigo-700 dark:text-indigo-300 text-xs"
+                    />
+                  </div>
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-indigo-100 dark:border-slate-700">
+                    <label className="block text-[11px] text-slate-500 font-medium">
+                      อาหารว่าง (มื้อ)
+                    </label>
+                    <select
+                      value={aiSnackMeals}
+                      onChange={(e) => setAiSnackMeals(Number(e.target.value))}
+                      className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-xs bg-white dark:bg-slate-800"
+                    >
+                      <option value={2}>2 มื้อ (เช้า-บ่าย)</option>
+                      <option value={1}>1 มื้อ</option>
+                      <option value={0}>ไม่มีอาหารว่าง</option>
+                    </select>
+                  </div>
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-indigo-100 dark:border-slate-700">
+                    <label className="block text-[11px] text-slate-500 font-medium">
+                      รูปแบบกิจกรรม
+                    </label>
+                    <select
+                      value={aiActivityCountMode}
+                      onChange={(e) => setAiActivityCountMode(e.target.value as any)}
+                      className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-xs bg-white dark:bg-slate-800"
+                    >
+                      <option value="auto">AI วิเคราะห์อัตโนมัติ</option>
+                      <option value="single">1 กิจกรรมหลัก</option>
+                      <option value="two">2 กิจกรรม (อบรม+ติดตาม)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700 dark:text-slate-300">
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={aiIncludeLunch}
+                        onChange={(e) => setAiIncludeLunch(e.target.checked)}
+                        className="rounded text-indigo-600"
+                      />
+                      <span>มีอาหารกลางวัน (75 บ.)</span>
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={aiIncludeVinyl}
+                        onChange={(e) => setAiIncludeVinyl(e.target.checked)}
+                        className="rounded text-indigo-600"
+                      />
+                      <span>มีป้ายไวนิล (450 บ.)</span>
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={aiIncludeMaterials}
+                        onChange={(e) => setAiIncludeMaterials(e.target.checked)}
+                        className="rounded text-indigo-600"
+                      />
+                      <span>มีค่าเอกสาร/วัสดุอบรม (50 บ./ชุด)</span>
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isAiGenerating}
+                    onClick={() => handleRunFullAiDraft(true)}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-600 hover:from-indigo-700 hover:via-purple-700 hover:to-emerald-700 text-white text-xs font-extrabold shadow-md flex items-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {isAiGenerating
+                      ? 'กำลังให้ AI วิเคราะห์และร่างโครงการ...'
+                      : '✨ ให้ AI ช่วยคิดกิจกรรม + วัตถุประสงค์ + กลุ่มเป้าหมาย + KPI + งบประมาณ'}
+                  </button>
+                </div>
+
+                {aiStatusBanner && (
+                  <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 text-xs font-semibold">
+                    {aiStatusBanner}
+                  </div>
+                )}
               </div>
 
               {/* Category Dropdown (All 8 categories) */}
@@ -743,6 +1003,13 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                       onChange={(e) => {
                         const val = e.target.value;
                         setSelectedOrgPreset(val);
+                        if (!val) {
+                          setCustomOrgText('');
+                          setResponsiblePerson('');
+                          setProposerName('');
+                          setProposerTitle('');
+                          return;
+                        }
                         if (val !== 'custom') {
                           setCustomOrgText('');
                           const orgDefault =
@@ -757,6 +1024,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                       }}
                       className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
                     >
+                      <option value="">-- คลิกเพื่อเลือกหน่วยงานผู้ขอรับงบประมาณ --</option>
                       {PRESET_ORGS.map((org) => (
                         <option key={org} value={org}>
                           {org}
@@ -838,19 +1106,51 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
           {/* STEP 2: ACTIVITIES & BUDGET (13 COLUMNS WITH MULTIPLE ACTIVITIES) */}
           {activeStep === 2 && (
             <div className="space-y-6 animate-in fade-in-50 duration-150">
-              <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl p-3.5 text-xs text-blue-900 dark:text-blue-200">
-                <span>
-                  💡 <strong>รองรับหลายกิจกรรม:</strong> โครงการนี้มีทั้งหมด{' '}
-                  <strong>{activityGroups.length}</strong> กิจกรรมหลัก (เช่น กิจกรรมอบรมให้ความรู้ + กิจกรรมฝึกปฏิบัติว่ายน้ำ)
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAddActivityGroup}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap"
-                >
-                  <Plus className="w-3.5 h-3.5" /> เพิ่มกิจกรรมที่ {activityGroups.length + 1}
-                </button>
+              {/* Top Bar: Multi-Activity Info + 1-Click Free AI Draft */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-violet-50 via-fuchsia-50 to-blue-50 dark:from-violet-950/30 dark:via-fuchsia-950/20 dark:to-blue-950/30 border border-violet-200 dark:border-violet-800/60 rounded-xl p-3.5 text-xs text-slate-800 dark:text-slate-200">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-violet-900 dark:text-violet-200 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-violet-600" />
+                    ผู้ช่วย AI อัจฉริยะ (ฟรี 100%): ช่วยคิดรายช่อง หรือร่างครบทั้งโครงการ
+                  </div>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                    โครงการนี้มี <strong>{activityGroups.length}</strong> กิจกรรมหลัก • กดปุ่ม{' '}
+                    <span className="font-bold text-violet-700 dark:text-violet-300">✨ AI ช่วยคิด</span>{' '}
+                    ที่หัวช่องใดก็ได้เพื่อให้ AI เติมเฉพาะช่องนั้น หรือกดร่างทั้งหมดในคลิกเดียว
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRunFullAiDraft}
+                    disabled={aiGenerating}
+                    className="px-3 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-all whitespace-nowrap"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    ✨ ให้ AI ร่างกิจกรรม + งบทั้งหมด
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddActivityGroup}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> เพิ่มกิจกรรมที่ {activityGroups.length + 1}
+                  </button>
+                </div>
               </div>
+
+              {aiStatusBanner && (
+                <div className="px-3.5 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-700 text-xs font-semibold text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2">
+                  <span>{aiStatusBanner}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAiStatusBanner(null)}
+                    className="text-emerald-600 hover:text-emerald-800 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
               {/* Render each activity group card */}
               {activityGroups.map((group, gIdx) => {
@@ -876,7 +1176,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                           onChange={(e) =>
                             handleUpdateActivityGroup(group.id, 'activityName', e.target.value)
                           }
-                          placeholder={`เช่น ${gIdx + 1}. กิจกรรมอบรมให้ความรู้`}
+                          placeholder={`ตัวอย่าง: ${gIdx + 1}. กิจกรรมอบรมให้ความรู้และปรับเปลี่ยนพฤติกรรม`}
                           className="font-bold text-sm px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-1"
                         />
                       </div>
@@ -901,76 +1201,121 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     {/* Columns 2 to 7 Form */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                       <div>
-                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                          กิจกรรม (คอลัมน์ที่ 2) <span className="text-red-500">*</span>
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 dark:text-slate-300">
+                            กิจกรรม (คอลัมน์ที่ 2) <span className="text-red-500">*</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleAiSuggestSingleField(group.id, 'activities')}
+                            className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-800 flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 transition-colors"
+                          >
+                            <Sparkles className="w-3 h-3" /> ✨ AI ช่วยคิดกิจกรรม
+                          </button>
+                        </div>
                         <textarea
                           rows={3}
                           value={group.activities}
                           onChange={(e) =>
                             handleUpdateActivityGroup(group.id, 'activities', e.target.value)
                           }
-                          placeholder="เช่น - อบรมให้ความรู้เรื่องการช่วยเหลือผู้จมน้ำและการปฐมพยาบาลเบื้องต้น จำนวน 1 วัน"
+                          placeholder="ตัวอย่าง: - อบรมให้ความรู้เรื่องการช่วยเหลือผู้จมน้ำและการปฐมพยาบาลเบื้องต้น จำนวน 1 วัน"
                           className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         />
                       </div>
 
                       <div>
-                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                          วัตถุประสงค์ (คอลัมน์ที่ 3) <span className="text-red-500">*</span>
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 dark:text-slate-300">
+                            วัตถุประสงค์ (คอลัมน์ที่ 3) <span className="text-red-500">*</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleAiSuggestSingleField(group.id, 'objectives')}
+                            className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-800 flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 transition-colors"
+                          >
+                            <Sparkles className="w-3 h-3" /> ✨ AI ช่วยคิดวัตถุประสงค์
+                          </button>
+                        </div>
                         <textarea
                           rows={3}
                           value={group.objectives}
                           onChange={(e) =>
                             handleUpdateActivityGroup(group.id, 'objectives', e.target.value)
                           }
-                          placeholder="เช่น 1. เพื่อให้เด็กมีความรู้พื้นฐานในการช่วยเหลือผู้จมน้ำและการปฐมพยาบาล"
+                          placeholder="ตัวอย่าง: 1. เพื่อให้กลุ่มเป้าหมายมีความรู้ความเข้าใจในการดูแลสุขภาพและการป้องกันโรคเพิ่มขึ้น"
                           className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         />
                       </div>
 
                       <div>
-                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                          กลุ่มเป้าหมาย (คอลัมน์ที่ 4)
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 dark:text-slate-300">
+                            กลุ่มเป้าหมาย (คอลัมน์ที่ 4)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleAiSuggestSingleField(group.id, 'targetGroup')}
+                            className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-800 flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 transition-colors"
+                          >
+                            <Sparkles className="w-3 h-3" /> ✨ AI ช่วยคิดกลุ่มเป้าหมาย
+                          </button>
+                        </div>
                         <textarea
                           rows={3}
                           value={group.targetGroup}
                           onChange={(e) =>
                             handleUpdateActivityGroup(group.id, 'targetGroup', e.target.value)
                           }
-                          placeholder="เช่น 1. เด็กและเยาวชน อายุ 6-15 ปี จำนวน 30 คน\n2. วิทยากร 1 คน\nรวม 37 คน"
+                          placeholder="ตัวอย่าง: 1. เด็กและเยาวชน อายุ 6-15 ปี จำนวน 30 คน / 2. วิทยากรและเจ้าหน้าที่ 7 คน (รวม 37 คน)"
                           className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         />
                       </div>
 
                       <div>
-                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                          ตัวชี้วัด (KPI) (คอลัมน์ที่ 5)
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 dark:text-slate-300">
+                            ตัวชี้วัด (KPI) (คอลัมน์ที่ 5)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleAiSuggestSingleField(group.id, 'kpi')}
+                            className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-800 flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 transition-colors"
+                          >
+                            <Sparkles className="w-3 h-3" /> ✨ AI ช่วยคิดตัวชี้วัด (KPI)
+                          </button>
+                        </div>
                         <textarea
                           rows={3}
                           value={group.kpi}
                           onChange={(e) =>
                             handleUpdateActivityGroup(group.id, 'kpi', e.target.value)
                           }
-                          placeholder="เช่น 1. ร้อยละ 80 ของผู้เข้ารับการอบรมมีความรู้พื้นฐานเพิ่มขึ้น"
+                          placeholder="ตัวอย่าง: 1. ร้อยละ 80 ของผู้เข้ารับการอบรมมีความรู้และทักษะการดูแลสุขภาพเพิ่มขึ้น"
                           className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         />
                       </div>
 
                       <div>
-                        <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                          พื้นที่ดำเนินการ (คอลัมน์ที่ 6)
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 dark:text-slate-300">
+                            พื้นที่ดำเนินการ (คอลัมน์ที่ 6)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleAiSuggestSingleField(group.id, 'location_duration')}
+                            className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-800 flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 transition-colors"
+                          >
+                            <Sparkles className="w-3 h-3" /> ✨ AI แนะนำพื้นที่ & ระยะเวลา
+                          </button>
+                        </div>
                         <input
                           type="text"
                           value={group.location}
                           onChange={(e) =>
                             handleUpdateActivityGroup(group.id, 'location', e.target.value)
                           }
-                          placeholder="เช่น ห้องประชุมศาลหลักเมืองท่า หรือ สระว่ายน้ำเทศบาลเมืองกันตัง"
+                          placeholder="ตัวอย่าง: ห้องประชุมศาลหลักเมืองท่า หรือ พื้นที่ตำบลบางเป้า"
                           className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         />
                       </div>
@@ -985,7 +1330,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                           onChange={(e) =>
                             handleUpdateActivityGroup(group.id, 'duration', e.target.value)
                           }
-                          placeholder="เช่น มี.ค. - เม.ย. 69"
+                          placeholder={`ตัวอย่าง: ต.ค. ${Number(fiscalYear) - 1} - ก.ย. ${fiscalYear}`}
                           className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         />
                       </div>
@@ -999,8 +1344,15 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                           รายการค่าใช้จ่ายในกิจกรรมนี้ ({group.budgetLines?.length || 0} รายการ)
                         </span>
 
-                        {/* Quick Presets */}
+                        {/* Quick Presets + AI Budget Button */}
                         <div className="flex flex-wrap gap-1.5 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => handleAiSuggestSingleField(group.id, 'budgetLines')}
+                            className="px-2.5 py-0.5 rounded bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold hover:from-violet-700 hover:to-fuchsia-700 flex items-center gap-1 shadow-sm"
+                          >
+                            <Sparkles className="w-3 h-3" /> ✨ AI ช่วยคิดรายการค่าใช้จ่าย
+                          </button>
                           <button
                             type="button"
                             onClick={() =>
@@ -1066,15 +1418,15 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                             onClick={() =>
                               handleAddBudgetLineToGroup(
                                 group.id,
-                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) รายการใหม่`,
-                                'ชุด',
+                                '',
+                                '',
                                 0,
-                                1
+                                0
                               )
                             }
                             className="px-2.5 py-0.5 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 flex items-center gap-1"
                           >
-                            <Plus className="w-3 h-3" /> เพิ่มแถว
+                            <Plus className="w-3 h-3" /> เพิ่มแถวว่าง
                           </button>
                         </div>
                       </div>
@@ -1093,7 +1445,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {(group.budgetLines || []).map((line) => (
+                            {(group.budgetLines || []).map((line, lIdx) => (
                               <tr key={line.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                                 <td className="p-1.5">
                                   <input
@@ -1107,21 +1459,23 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                                         e.target.value
                                       )
                                     }
+                                    placeholder={`ตัวอย่าง: ${gIdx + 1}.${lIdx + 1}) ค่าตอบแทนวิทยากร`}
                                     className="w-full px-2 py-1 rounded border border-slate-200 dark:border-slate-700 text-xs"
                                   />
                                 </td>
                                 <td className="p-1.5">
                                   <input
                                     type="number"
-                                    value={line.quantity}
+                                    value={line.quantity === 0 ? '' : line.quantity}
                                     onChange={(e) =>
                                       handleUpdateBudgetLineInGroup(
                                         group.id,
                                         line.id,
                                         'quantity',
-                                        e.target.value
+                                        e.target.value === '' ? 0 : e.target.value
                                       )
                                     }
+                                    placeholder="เช่น 5"
                                     className="w-full px-1 py-1 text-center rounded border border-slate-200 dark:border-slate-700 text-xs"
                                   />
                                 </td>
@@ -1137,6 +1491,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                                         e.target.value
                                       )
                                     }
+                                    placeholder="เช่น ชั่วโมง/ชุด"
                                     className="w-full px-1 py-1 text-center rounded border border-slate-200 dark:border-slate-700 text-xs"
                                   />
                                 </td>
@@ -1144,15 +1499,16 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                                   <input
                                     type="number"
                                     step="any"
-                                    value={line.unitPrice}
+                                    value={line.unitPrice === 0 ? '' : line.unitPrice}
                                     onChange={(e) =>
                                       handleUpdateBudgetLineInGroup(
                                         group.id,
                                         line.id,
                                         'unitPrice',
-                                        e.target.value
+                                        e.target.value === '' ? 0 : e.target.value
                                       )
                                     }
+                                    placeholder="เช่น 600"
                                     className="w-full px-2 py-1 text-right rounded border border-slate-200 dark:border-slate-700 text-xs font-semibold"
                                   />
                                 </td>
