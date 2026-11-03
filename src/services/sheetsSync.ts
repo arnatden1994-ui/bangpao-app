@@ -212,17 +212,41 @@ export function getStoredLtc(): LtcPatient[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Ensure standard patients like LTC-6900 (นายเอกชัย สุขเกษม / นายเอ) are always available
-        const existingIds = new Set(parsed.map((p: LtcPatient) => p.id));
-        const missingDefaults = INITIAL_LTC_PATIENTS.filter((p) => !existingIds.has(p.id));
-        const combined = missingDefaults.length > 0 ? [...missingDefaults, ...parsed] : parsed;
-        const normalized = combined.map((p: LtcPatient) => {
-          const matched = INITIAL_LTC_PATIENTS.find((init) => init.id === p.id);
+        const parsedMap = new Map<string, LtcPatient>();
+        for (const p of parsed) {
+          if (p && p.id) parsedMap.set(p.id, p);
+        }
+
+        // Ensure all 14 official patients in INITIAL_LTC_PATIENTS are present in exact 1–14 order
+        // and upgraded with authentic names, allocationText, projectEndDateNote, shortAddress, and roundItems
+        const officialIds = new Set(INITIAL_LTC_PATIENTS.map((p) => p.id));
+        const officialMerged: LtcPatient[] = INITIAL_LTC_PATIENTS.map((init) => {
+          const existing = parsedMap.get(init.id);
+          if (!existing) return init;
+          const isLegacyName =
+            existing.fullName?.includes('นายยี แซ่จุ้ย') ||
+            existing.fullName?.includes('นายสุนทร ลาพิมพ์') ||
+            !existing.allocationText;
           return {
-            ...p,
-            createdAt: p.createdAt || matched?.createdAt || p.lastVisitDate || '2026-10-01',
+            ...init,
+            ...existing,
+            fullName: init.fullName,
+            age: init.age,
+            adlGroup: init.adlGroup,
+            adlCategory: init.adlCategory || existing.adlCategory,
+            shortAddress: existing.shortAddress || init.shortAddress,
+            allocationText: existing.allocationText || init.allocationText,
+            projectEndDateNote: existing.projectEndDateNote || init.projectEndDateNote,
+            equipmentNeeded: isLegacyName ? init.equipmentNeeded : (existing.equipmentNeeded || init.equipmentNeeded),
+            roundItems: isLegacyName ? init.roundItems : (existing.roundItems || init.roundItems),
+            yearRoundItems: isLegacyName ? init.yearRoundItems : (existing.yearRoundItems || init.yearRoundItems),
+            createdAt: existing.createdAt || init.createdAt || existing.lastVisitDate || '2026-10-01',
           };
         });
+
+        // Keep any custom user-added patients after the 14 official ones
+        const customPatients = parsed.filter((p: LtcPatient) => p && p.id && !officialIds.has(p.id));
+        const normalized = [...officialMerged, ...customPatients];
         safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(normalized));
         return normalized;
       }

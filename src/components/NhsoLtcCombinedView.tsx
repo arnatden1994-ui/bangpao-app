@@ -55,7 +55,9 @@ import {
   NotificationLogItem,
 } from '../services/notificationService.ts';
 import { saveLtcQueueToFirestore } from '../services/firebaseService.ts';
+import { INITIAL_LTC_PATIENTS } from '../data/mockData.ts';
 import { LtcRoundPlannerModal } from './LtcRoundPlannerModal.tsx';
+import { PrintLtcRegistrationModal } from './PrintLtcRegistrationModal.tsx';
 import { NhsoFundView } from './NhsoFundView.tsx';
 import { LtcCareView } from './LtcCareView.tsx';
 
@@ -89,7 +91,7 @@ export interface DeliveryStop {
   lat: number;
   lng: number;
   adlCategory: 'ติดเตียง' | 'ติดบ้าน';
-  diaperSize: 'M' | 'L' | 'XL';
+  diaperSize: 'M' | 'L' | 'XL' | '2XL' | 'XXL';
   diaperQuantity: number;
   underpadQuantity: number;
   airMattressNeeded: boolean;
@@ -99,6 +101,7 @@ export interface DeliveryStop {
   routeOrder: number;
   notes?: string;
   createdAt?: string;
+  phone?: string;
 }
 
 export const formatThaiDate = (dateStr?: string, includeTime: boolean = false): string => {
@@ -156,7 +159,20 @@ const convertPatientsToDeliveryStops = (pts: LtcPatient[]): DeliveryStop[] => {
     const mooNum = p.moo || '1';
     const village = BANGPAO_VILLAGES[mooNum] || `หมู่ ${mooNum}`;
     const base = BANGPAO_COORDS[mooNum] || { lat: 7.395, lng: 99.500 };
-    const diaperSize = (p.equipmentNeeded?.includes('XL') ? 'XL' : p.equipmentNeeded?.includes('M') ? 'M' : 'L') as 'M' | 'L' | 'XL';
+    const diaperSize = (
+      p.equipmentNeeded?.includes('2XL') || p.equipmentNeeded?.includes('XXL')
+        ? '2XL'
+        : p.equipmentNeeded?.includes('XL')
+        ? 'XL'
+        : p.equipmentNeeded?.includes('M')
+        ? 'M'
+        : 'L'
+    ) as 'M' | 'L' | 'XL' | '2XL' | 'XXL';
+
+    const r1Items = p.yearRoundItems?.['2569']?.['1'] || p.roundItems?.['1'] || [];
+    const r1DiaperQty = r1Items
+      .filter((it) => it.itemName.includes('ผ้าอ้อม'))
+      .reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
 
     return {
       id: `STOP-${String(idx + 1).padStart(2, '0')}`,
@@ -169,118 +185,21 @@ const convertPatientsToDeliveryStops = (pts: LtcPatient[]): DeliveryStop[] => {
       lng: p.longitude ?? (base.lng + (((idx * 2) % 3) * 0.002 - 0.002)),
       adlCategory: (p.adlCategory === 'ติดบ้าน' ? 'ติดบ้าน' : 'ติดเตียง') as 'ติดเตียง' | 'ติดบ้าน',
       diaperSize,
-      diaperQuantity: p.monthlyDiaperAllowance || 90,
-      underpadQuantity: 60,
+      diaperQuantity: r1DiaperQty || p.monthlyDiaperAllowance || 0,
+      underpadQuantity: 0,
       airMattressNeeded: p.equipmentNeeded?.includes('ที่นอนลม') ?? false,
       status: p.receivedCarePack ? 'delivered' : 'pending',
       deliveredAt: p.receivedCarePack ? `${p.lastVisitDate} 10:00` : undefined,
       receiverName: p.receivedCarePack ? p.caregiverName : undefined,
       routeOrder: idx + 1,
-      notes: p.diagnosis,
+      notes: p.equipmentNeeded || p.diagnosis,
       createdAt: p.createdAt || p.lastVisitDate || '2026-10-01',
+      phone: p.phone,
     };
   });
 };
 
-const INITIAL_DELIVERY_STOPS: DeliveryStop[] = [
-  {
-    id: 'STOP-01',
-    patientId: 'LTC-6901',
-    patientName: 'นายสุนทร ลาพิมพ์',
-    moo: '2',
-    village: 'บ้านเกาะปอม',
-    address: '115 หมู่ที่ 2 บ้านเกาะปอม',
-    lat: 7.4191,
-    lng: 99.5292,
-    adlCategory: 'ติดเตียง',
-    diaperSize: 'M',
-    diaperQuantity: 0,
-    underpadQuantity: 0,
-    airMattressNeeded: false,
-    status: 'delivered',
-    deliveredAt: '2026-11-15 09:25',
-    receiverName: 'ญาติผู้ดูแล',
-    routeOrder: 1,
-    createdAt: '2026-10-01',
-    notes: 'นมผงสุขภาพ 3 กระป๋อง',
-  },
-  {
-    id: 'STOP-02',
-    patientId: 'LTC-6902',
-    patientName: 'นายเลียบ ทองหนัก',
-    moo: '2',
-    village: 'บ้านเกาะปอม',
-    address: '111 หมู่ที่ 2 บ้านเกาะปอม',
-    lat: 7.4248,
-    lng: 99.5415,
-    adlCategory: 'ติดเตียง',
-    diaperSize: 'M',
-    diaperQuantity: 0,
-    underpadQuantity: 0,
-    airMattressNeeded: false,
-    status: 'pending',
-    routeOrder: 2,
-    createdAt: '2026-10-01',
-    notes: 'นมผงสุขภาพ 3 กระป๋อง',
-  },
-  {
-    id: 'STOP-03',
-    patientId: 'LTC-6903',
-    patientName: 'นายยี แซ่จุ้ย',
-    moo: '5',
-    village: 'บ้านป่าเตียว',
-    address: '35/5 หมู่ที่ 5 บ้านป่าเตียว',
-    lat: 7.4412,
-    lng: 99.5513,
-    adlCategory: 'ติดเตียง',
-    diaperSize: 'M',
-    diaperQuantity: 390,
-    underpadQuantity: 60,
-    airMattressNeeded: false,
-    status: 'pending',
-    routeOrder: 3,
-    createdAt: '2026-10-01',
-    notes: 'ผ้าอ้อม Size M 390 ชิ้น, นมผงสุขภาพ 2 กระป๋อง',
-  },
-  {
-    id: 'STOP-04',
-    patientId: 'LTC-6904',
-    patientName: 'นางผึ้ง ดำหนูอินทร์',
-    moo: '2',
-    village: 'บ้านเกาะปอม',
-    address: '122/11 หมู่ที่ 2 บ้านเกาะปอม',
-    lat: 7.4263,
-    lng: 99.5419,
-    adlCategory: 'ติดบ้าน',
-    diaperSize: 'L',
-    diaperQuantity: 180,
-    underpadQuantity: 0,
-    airMattressNeeded: false,
-    status: 'pending',
-    routeOrder: 4,
-    createdAt: '2026-10-01',
-    notes: 'ผ้าอ้อม Size L 180 ชิ้น',
-  },
-  {
-    id: 'STOP-05',
-    patientId: 'LTC-6905',
-    patientName: 'นางแดง อัตตศุภนาพันธ์',
-    moo: '2',
-    village: 'บ้านเกาะปอม',
-    address: '72 หมู่ที่ 2 บ้านเกาะปอม',
-    lat: 7.4215,
-    lng: 99.5291,
-    adlCategory: 'ติดเตียง',
-    diaperSize: 'M',
-    diaperQuantity: 300,
-    underpadQuantity: 0,
-    airMattressNeeded: false,
-    status: 'pending',
-    routeOrder: 5,
-    createdAt: '2026-10-01',
-    notes: 'ผ้าอ้อม Size M 300 ชิ้น, นมผงสุขภาพ 1 กระป๋อง',
-  },
-];
+const INITIAL_DELIVERY_STOPS: DeliveryStop[] = convertPatientsToDeliveryStops(INITIAL_LTC_PATIENTS);
 
 interface LtcInventoryItem {
   id: string;
@@ -312,10 +231,10 @@ const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
     name: 'ผ้าอ้อมผู้ใหญ่ (M)',
     specification: 'รอบสะโพก 29-46 นิ้ว ซึมซับดีเยี่ยมสำหรับผู้ป่วยติดเตียง',
     totalStock: 5000,
-    allocatedStock: 1,
-    remainingStock: 4999,
+    allocatedStock: 1380,
+    remainingStock: 3620,
     unit: 'ชิ้น',
-    monthlyRequirement: 540,
+    monthlyRequirement: 1380,
     lotNo: 'LOT-NHSO-6901',
     expireDate: '2028-06-30',
     status: 'sufficient',
@@ -326,10 +245,10 @@ const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
     name: 'ผ้าอ้อมผู้ใหญ่ (XL)',
     specification: 'รอบสะโพก 50-65 นิ้ว สำหรับรูปร่างใหญ่พิเศษ',
     totalStock: 5000,
-    allocatedStock: 0,
-    remainingStock: 5000,
+    allocatedStock: 350,
+    remainingStock: 4650,
     unit: 'ชิ้น',
-    monthlyRequirement: 270,
+    monthlyRequirement: 350,
     lotNo: 'LOT-NHSO-6903',
     expireDate: '2028-05-15',
     status: 'sufficient',
@@ -339,11 +258,11 @@ const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
     code: '1',
     name: 'ผ้าอ้อมผู้ใหญ่ (L)',
     specification: 'รอบสะโพก 40-55 นิ้ว มีแถบวัดความเปียกชื้น',
-    totalStock: 4000,
-    allocatedStock: 0,
-    remainingStock: 4000,
+    totalStock: 5000,
+    allocatedStock: 2070,
+    remainingStock: 2930,
     unit: 'ชิ้น',
-    monthlyRequirement: 900,
+    monthlyRequirement: 2070,
     lotNo: 'LOT-NHSO-6902',
     expireDate: '2028-08-31',
     status: 'sufficient',
@@ -352,12 +271,12 @@ const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
     id: 'INV-LTC-04',
     code: '4',
     name: 'ผ้าอ้อมผู้ใหญ่ (XXL)',
-    specification: 'ขนาดใหญ่พิเศษ รอบสะโพก 60 นิ้วขึ้นไป',
+    specification: 'ขนาดใหญ่พิเศษ (2XL) รอบสะโพก 60 นิ้วขึ้นไป',
     totalStock: 3000,
-    allocatedStock: 0,
-    remainingStock: 3000,
+    allocatedStock: 350,
+    remainingStock: 2650,
     unit: 'ชิ้น',
-    monthlyRequirement: 180,
+    monthlyRequirement: 350,
     lotNo: 'LOT-NHSO-6904',
     expireDate: '2029-01-31',
     status: 'sufficient',
@@ -367,9 +286,9 @@ const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
     code: '5',
     name: 'นมผงสุขภาพ',
     specification: 'อาหารเสริมทางการแพทย์สูตรครบถ้วนสำหรับผู้สูงอายุ',
-    totalStock: 50,
-    allocatedStock: 0,
-    remainingStock: 50,
+    totalStock: 100,
+    allocatedStock: 14,
+    remainingStock: 86,
     unit: 'กระป๋อง',
     monthlyRequirement: 20,
     lotNo: 'LOT-NHSO-6905',
@@ -406,37 +325,39 @@ const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
   },
 ];
 
-export const INITIAL_DELIVERY_RECORDS: Record<string, RoundDeliveryRecord> = {
-  // Pre-seed delivery records for 2569 Round 1
-  'LTC-6901_2569_1': {
-    patientId: 'LTC-6901',
-    year: '2569',
-    round: '1',
-    status: 'delivered',
-    deliveredAt: '2026-10-06 09:30',
-    receiverName: 'นางสาวสมศรี (ลูกสาว/CG)',
-    deliveryNote: 'ส่งมอบเรียบร้อย แผลกดทับดีขึ้น',
-    itemsDelivered: [
-      { itemId: 'INV-LTC-02', itemName: 'ผ้าอ้อมผู้ใหญ่ (L)', quantity: 90, unit: 'ชิ้น' },
-      { itemId: 'INV-LTC-06', itemName: 'แผ่นรองซับสิ่งขับถ่าย (Underpads)', quantity: 60, unit: 'แผ่น' },
-    ],
-  },
-  'LTC-6903_2569_1': {
-    patientId: 'LTC-6903',
-    year: '2569',
-    round: '1',
-    status: 'delivered',
-    deliveredAt: '2026-10-04 10:15',
-    receiverName: 'นางอำไพ ชัยมงคล (ลูกสาว/CG)',
-    deliveryNote: 'ส่งมอบพร้อมยาประจำตัว',
-    itemsDelivered: [
-      { itemId: 'INV-LTC-01', itemName: 'ผ้าอ้อมผู้ใหญ่ (M)', quantity: 90, unit: 'ชิ้น' },
-      { itemId: 'INV-LTC-06', itemName: 'แผ่นรองซับสิ่งขับถ่าย (Underpads)', quantity: 60, unit: 'แผ่น' },
-    ],
-  },
-};
+export const INITIAL_DELIVERY_RECORDS: Record<string, RoundDeliveryRecord> = {};
 
-// Initial LTC Round Delivery Plan (Pre-seeded with official 2569 Round 1 data matching municipality distribution)
+const buildPlanStopsFromInitialPatients = (roundKey: string, fiscalYear: string) =>
+  INITIAL_LTC_PATIENTS.map((p, idx) => ({
+    patientId: p.id,
+    queueOrder: idx + 1,
+    fullName: p.fullName,
+    idCard: p.idCard,
+    age: p.age,
+    gender: p.gender,
+    phone: p.phone,
+    caregiverName: p.caregiverName,
+    caregiverPhone: p.caregiverPhone || p.phone,
+    address: p.address,
+    shortAddress: p.shortAddress,
+    allocationText: p.allocationText,
+    projectEndDateNote: p.projectEndDateNote,
+    moo: p.moo || '2',
+    latitude: p.latitude || 7.4215,
+    longitude: p.longitude || 99.5291,
+    adlScore: p.adlScore,
+    adlCategory: p.adlCategory || 'ติดบ้าน',
+    items:
+      p.yearRoundItems?.[fiscalYear]?.[roundKey] ||
+      p.roundItems?.[roundKey] ||
+      p.roundItems?.['1'] ||
+      [],
+    scheduledTime: `${String(9 + Math.floor(idx / 3)).padStart(2, '0')}:${String((idx % 3) * 20).padStart(2, '0')} น.`,
+    deliveryStatus: 'pending' as const,
+    notes: p.carePlanSummary || p.equipmentNeeded || '',
+  }));
+
+// Initial LTC Round Delivery Plan (Pre-seeded with all 14 recipients from ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง 2)
 export const INITIAL_LTC_ROUND_PLANS: Record<string, LtcRoundPlan> = {
   '2569_1': {
     id: 'PLAN-2569-R1-BANGPAO',
@@ -450,129 +371,25 @@ export const INITIAL_LTC_ROUND_PLANS: Record<string, LtcRoundPlan> = {
     vehiclePlate: 'ผก-4512 ตรัง (รถกระบะ ทต.บางเป้า)',
     status: 'scheduled',
     createdAt: '2026-10-01T08:00:00.000Z',
-    updatedAt: '2026-10-28T09:00:00.000Z',
-    notes: 'รอบจัดส่งที่ 1 ประจำปีงบประมาณ 2569 - แจกผ้าอ้อมผู้ใหญ่และอาหารเสริมโภชนาการ (นมผงสุขภาพ) ในเขตตำบลบางเป้า',
-    stops: [
-      {
-        patientId: 'LTC-6901',
-        queueOrder: 1,
-        fullName: 'นายสุนทร ลาพิมพ์',
-        idCard: '3-9201-00123-45-1',
-        age: 75,
-        gender: 'ชาย',
-        phone: '081-234-5671',
-        caregiverName: 'ญาติผู้ดูแล',
-        caregiverPhone: '-',
-        address: '115 หมู่ที่ 2 บ้านเกาะปอม',
-        moo: '2',
-        latitude: 7.4191,
-        longitude: 99.5292,
-        adlScore: 4,
-        adlCategory: 'ติดเตียง',
-        items: [
-          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 3, unit: 'กระป๋อง' },
-        ],
-        scheduledTime: '09:00 น.',
-        deliveryStatus: 'delivered',
-        deliveredAt: '2026-11-15 09:25',
-        receiverName: 'ญาติผู้ดูแล',
-        notes: 'ผู้ป่วยติดเตียง ส่งมอบนมผงสุขภาพ 3 กระป๋อง',
-      },
-      {
-        patientId: 'LTC-6902',
-        queueOrder: 2,
-        fullName: 'นายเลียบ ทองหนัก',
-        idCard: '3-9201-00567-89-5',
-        age: 75,
-        gender: 'ชาย',
-        phone: '082-999-8877',
-        caregiverName: 'ญาติผู้ดูแล',
-        caregiverPhone: '-',
-        address: '111 หมู่ที่ 2 บ้านเกาะปอม',
-        moo: '2',
-        latitude: 7.4248,
-        longitude: 99.5415,
-        adlScore: 4,
-        adlCategory: 'ติดเตียง',
-        items: [
-          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 3, unit: 'กระป๋อง' },
-        ],
-        scheduledTime: '09:45 น.',
-        deliveryStatus: 'pending',
-        notes: 'ผู้ป่วยติดเตียง ส่งมอบนมผงสุขภาพ 3 กระป๋อง',
-      },
-      {
-        patientId: 'LTC-6903',
-        queueOrder: 3,
-        fullName: 'นายยี แซ่จุ้ย',
-        idCard: '3-9201-00234-56-2',
-        age: 84,
-        gender: 'ชาย',
-        phone: '081-332-1144',
-        caregiverName: 'นางสาวสมศรี อินทร์แก้ว (ลูกสาว/CG)',
-        caregiverPhone: '081-332-1144',
-        address: '35/5 หมู่ที่ 5 บ้านป่าเตียว',
-        moo: '5',
-        latitude: 7.4412,
-        longitude: 99.5513,
-        adlScore: 3,
-        adlCategory: 'ติดเตียง',
-        items: [
-          { itemId: 'INV-LTC-DIA-M', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size M)', quantity: 390, unit: 'ชิ้น' },
-          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 2, unit: 'กระป๋อง' },
-        ],
-        scheduledTime: '10:30 น.',
-        deliveryStatus: 'pending',
-        notes: 'บ้านอยู่ริมคลอง ระวังทางแคบ ส่งมอบผ้าอ้อม Size M 390 ชิ้น และนมผงสุขภาพ 2 กระป๋อง',
-      },
-      {
-        patientId: 'LTC-6904',
-        queueOrder: 4,
-        fullName: 'นางผึ้ง ดำหนูอินทร์',
-        idCard: '3-9201-00345-67-3',
-        age: 78,
-        gender: 'หญิง',
-        phone: '086-222-7711',
-        caregiverName: 'นายสุวิทย์ สุวรรณรัตน์ (บุตรชาย/CG)',
-        caregiverPhone: '086-222-7711',
-        address: '122/11 หมู่ที่ 2 บ้านเกาะปอม',
-        moo: '2',
-        latitude: 7.4263,
-        longitude: 99.5419,
-        adlScore: 6,
-        adlCategory: 'ติดบ้าน',
-        items: [
-          { itemId: 'INV-LTC-DIA-L', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size L)', quantity: 180, unit: 'ชิ้น' },
-        ],
-        scheduledTime: '11:15 น.',
-        deliveryStatus: 'pending',
-        notes: 'ผู้ป่วยติดบ้าน ส่งมอบผ้าอ้อม Size L 180 ชิ้น',
-      },
-      {
-        patientId: 'LTC-6905',
-        queueOrder: 5,
-        fullName: 'นางแดง อัตตศุภนาพันธ์',
-        idCard: '3-9201-00456-78-4',
-        age: 79,
-        gender: 'หญิง',
-        phone: '084-222-3344',
-        caregiverName: 'นายอนุชา ทวีสุข (บุตรชาย/CG)',
-        caregiverPhone: '084-222-3344',
-        address: '72 หมู่ที่ 2 บ้านเกาะปอม',
-        moo: '2',
-        latitude: 7.4215,
-        longitude: 99.5291,
-        adlScore: 3,
-        adlCategory: 'ติดเตียง',
-        items: [
-          { itemId: 'INV-LTC-DIA-M', itemName: 'ผ้าอ้อมผู้ใหญ่ (Size M)', quantity: 300, unit: 'ชิ้น' },
-          { itemId: 'INV-LTC-08', itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ', quantity: 1, unit: 'กระป๋อง' },
-        ],
-        scheduledTime: '13:00 น.',
-        deliveryStatus: 'pending',
-        notes: 'ผู้ป่วยติดเตียง ส่งมอบผ้าอ้อม Size M 300 ชิ้น และนมผงสุขภาพ 1 กระป๋อง',
-      },
-    ],
+    updatedAt: '2026-11-01T09:00:00.000Z',
+    notes: 'รอบจัดส่งที่ 1 ประจำปีงบประมาณ 2569 - แจกผ้าอ้อมผู้ใหญ่และอาหารเสริมโภชนาการ (นมผงสุขภาพ) ครบทั้ง 14 ราย',
+    stops: buildPlanStopsFromInitialPatients('1', '2569'),
+  },
+  '2569_2': {
+    id: 'PLAN-2569-R2-BANGPAO',
+    fiscalYear: '2569',
+    round: '2',
+    planTitle: 'แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ 2569 (รอบที่ 2)',
+    deliveryDate: '2026-12-15',
+    deliveryTimeWindow: '09:00 - 15:30 น.',
+    driverName: 'นายชนะ สุขด้วง (พนักงานขับรถ)',
+    staffNames: 'พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข), นางสาวสุดา (CG)',
+    vehiclePlate: 'ผก-4512 ตรัง (รถกระบะ ทต.บางเป้า)',
+    status: 'scheduled',
+    createdAt: '2026-11-01T08:00:00.000Z',
+    updatedAt: '2026-11-03T09:00:00.000Z',
+    notes: 'รอบจัดส่งที่ 2 ประจำปีงบประมาณ 2569 - ตามใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง รอบ 2 ประจำปี 2569 (14 ราย)',
+    stops: buildPlanStopsFromInitialPatients('2', '2569'),
   },
 };
 
@@ -807,13 +624,17 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
   const configuredYears = ['2569', '2570'];
 
+  // 100% Exact Print LTC Registration Modal State (ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง)
+  const [isPrintRegModalOpen, setIsPrintRegModalOpen] = useState<boolean>(false);
+  const [printRegDefaultScope, setPrintRegDefaultScope] = useState<'selected' | 'all'>('selected');
+
   // 5-Step Interactive LTC Round Planner State
   const [isRoundPlannerOpen, setIsRoundPlannerOpen] = useState<boolean>(false);
   const [plannerInitialYear, setPlannerInitialYear] = useState<string>('2569');
   const [plannerInitialRound, setPlannerInitialRound] = useState<string>('1');
   const [roundPlans, setRoundPlans] = useState<Record<string, LtcRoundPlan>>(() => {
     try {
-      const saved = localStorage.getItem('bangpao_ltc_round_plans_v1');
+      const saved = localStorage.getItem('bangpao_ltc_round_plans_v2_14pts');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
@@ -827,7 +648,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   // Sync roundPlans to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('bangpao_ltc_round_plans_v1', JSON.stringify(roundPlans));
+      localStorage.setItem('bangpao_ltc_round_plans_v2_14pts', JSON.stringify(roundPlans));
     } catch {}
   }, [roundPlans]);
 
@@ -837,24 +658,8 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   // Provide robust registered patients fallback for Planner Modal
   const availablePatientsForPlanner: LtcPatient[] = useMemo(() => {
     if (patients && patients.length > 0) return patients;
-    return stops.map((s, idx) => ({
-      id: s.patientId,
-      fullName: s.patientName,
-      idCard: `3-9201-00000-0${idx + 1}-0`,
-      age: 70 + idx,
-      gender: (idx % 2 === 0 ? 'ชาย' : 'หญิง') as 'ชาย' | 'หญิง',
-      phone: s.phone || '081-000-0000',
-      caregiverName: 'ญาติผู้ดูแล',
-      caregiverPhone: s.phone || '081-000-0000',
-      address: s.address,
-      moo: s.moo,
-      latitude: s.lat,
-      longitude: s.lng,
-      adlScore: s.adlCategory === 'ติดเตียง' ? 3 : 7,
-      adlCategory: (s.adlCategory || 'ติดเตียง') as 'ติดเตียง' | 'ติดบ้าน',
-      status: 'active',
-    }));
-  }, [patients, stops]);
+    return INITIAL_LTC_PATIENTS;
+  }, [patients]);
 
   const createDefaultRoundsMap = (): Record<string, LtcRoundItem[]> => {
     const map: Record<string, LtcRoundItem[]> = {};
@@ -918,7 +723,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   // Per-(Patient, Year, Round) Delivery Handover Records & Tracking
   const [deliveryRecords, setDeliveryRecords] = useState<Record<string, RoundDeliveryRecord>>(() => {
     try {
-      const saved = localStorage.getItem('bangpao_ltc_round_deliveries_v1');
+      const saved = localStorage.getItem('bangpao_ltc_round_deliveries_v2');
       if (saved) return JSON.parse(saved);
     } catch {}
     return INITIAL_DELIVERY_RECORDS;
@@ -926,14 +731,14 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
   useEffect(() => {
     try {
-      localStorage.setItem('bangpao_ltc_round_deliveries_v1', JSON.stringify(deliveryRecords));
+      localStorage.setItem('bangpao_ltc_round_deliveries_v2', JSON.stringify(deliveryRecords));
     } catch {}
   }, [deliveryRecords]);
 
   // Tab filter inside the Round Recipient Table: 'all' | 'pending' | 'delivered'
   const [roundRecipientFilter, setRoundRecipientFilter] = useState<'all' | 'pending' | 'delivered'>('all');
-  // Sort order inside Round Recipient Table: 'created_desc' (default - newest import date first) | 'queue_asc' | 'moo_asc' | 'name_asc'
-  const [recipientSortOrder, setRecipientSortOrder] = useState<'created_desc' | 'queue_asc' | 'moo_asc' | 'name_asc'>('created_desc');
+  // Sort order inside Round Recipient Table: 'queue_asc' (default - official registration sequence 1..14) | 'created_desc' | 'moo_asc' | 'name_asc'
+  const [recipientSortOrder, setRecipientSortOrder] = useState<'created_desc' | 'queue_asc' | 'moo_asc' | 'name_asc'>('queue_asc');
 
   // Helper to get delivery status for any patient in any year & round
   const getStopDeliveryStatus = (
@@ -3086,6 +2891,24 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     return () => timers.forEach(clearTimeout);
   }, [isOverviewMapFullscreen, subTab]);
 
+  // List of patients selected for printing sign-off sheet (or fallback to full round)
+  const printSelectedPatients = useMemo(() => {
+    const pList = patients && patients.length > 0 ? patients : INITIAL_LTC_PATIENTS;
+    const pMap = new Map<string, LtcPatient>();
+    pList.forEach((p) => pMap.set(p.id, p));
+
+    if (orderedSelectedStops.length > 0) {
+      return orderedSelectedStops
+        .map((s) => pMap.get(s.patientId))
+        .filter((p): p is LtcPatient => Boolean(p));
+    }
+    return pList;
+  }, [orderedSelectedStops, patients]);
+
+  const printAllPatients = useMemo(() => {
+    return patients && patients.length > 0 ? patients : INITIAL_LTC_PATIENTS;
+  }, [patients]);
+
   return (
     <div className="space-y-5">
       {/* Module Header Bar */}
@@ -3191,6 +3014,19 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     รีเซ็ตตัวกรอง
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintRegDefaultScope(orderedSelectedStops.length > 0 ? 'selected' : 'all');
+                    setIsPrintRegModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs cursor-pointer transition-all hover:scale-[1.02] ring-1 ring-emerald-300"
+                  title="พิมพ์ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง (แบบ 100% ตามไฟล์ตัวอย่าง สำหรับให้ผู้รับของเซ็นรับ)"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>🖨️ พิมพ์ใบลงทะเบียนผู้รับของ (เซ็นรับ 100%)</span>
+                </button>
 
                 <button
                   type="button"
@@ -3971,7 +3807,27 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                   </button>
                 </div>
 
-                {/* Row 3: Prominent Send Complete Queue Notification to LINE Group & Official Email (All Stops + Multi-Stop Map + A4 Manifest) */}
+                {/* Row 3: Prominent Print Official Sign-Off Sheet (ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง แบบ 100%) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintRegDefaultScope(orderedSelectedStops.length > 0 ? 'selected' : 'all');
+                    setIsPrintRegModalOpen(true);
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 hover:from-emerald-800 hover:via-teal-800 hover:to-emerald-900 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all ring-2 ring-emerald-200"
+                  title="พิมพ์ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง (แบบ 100% ตามไฟล์ตัวอย่าง ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง 2) สำหรับให้ผู้รับของเซ็นชื่อรับของ"
+                >
+                  <Printer className="w-4 h-4 shrink-0 text-emerald-200" />
+                  <span className="truncate">
+                    🖨️ พิมพ์รายงานใบลงทะเบียนผู้รับของ (ให้ผู้รับเซ็นชื่อแบบ 100% •{' '}
+                    {orderedSelectedStops.length > 0
+                      ? `คิวที่เลือก ${orderedSelectedStops.length} ราย / ทั้งรอบ ${stops.length} ราย`
+                      : `ครบทั้งรอบ ${stops.length} ราย`}
+                    )
+                  </span>
+                </button>
+
+                {/* Row 4: Prominent Send Complete Queue Notification to LINE Group & Official Email (All Stops + Multi-Stop Map + A4 Manifest) */}
                 <button
                   type="button"
                   disabled={isSendingLtcNotify}
@@ -4384,6 +4240,19 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ ส่งรอส่งไปจัดรอบ ({pendingCount})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintRegDefaultScope(orderedSelectedStops.length > 0 ? 'selected' : 'all');
+                    setIsPrintRegModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all cursor-pointer ring-1 ring-emerald-300"
+                  title="พิมพ์ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง (แบบ 100% ตามไฟล์ตัวอย่าง ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง 2)"
+                >
+                  <Printer className="w-3.5 h-3.5 shrink-0" />
+                  <span>🖨️ พิมพ์ใบลงทะเบียนผู้รับของ (เซ็นรับ 100%)</span>
                 </button>
 
                 <button
@@ -5654,25 +5523,40 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="relative w-full sm:w-80">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={patientSearchQuery}
-                      onChange={(e) => setPatientSearchQuery(e.target.value)}
-                      placeholder="ค้นหารายชื่อ, หมู่บ้าน, เลขบัตร..."
-                      className="w-full pl-9 pr-8 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-teal-500 outline-none"
-                    />
-                    {patientSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setPatientSearchQuery('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
-                        title="ล้างคำค้นหา"
-                      >
-                        ✕
-                      </button>
-                    )}
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-72">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={patientSearchQuery}
+                        onChange={(e) => setPatientSearchQuery(e.target.value)}
+                        placeholder="ค้นหารายชื่อ, หมู่บ้าน, เลขบัตร..."
+                        className="w-full pl-9 pr-8 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-teal-500 outline-none"
+                      />
+                      {patientSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setPatientSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+                          title="ล้างคำค้นหา"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrintRegDefaultScope('all');
+                        setIsPrintRegModalOpen(true);
+                      }}
+                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer transition-colors"
+                      title="พิมพ์ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง (เซ็นรับ 100%)"
+                    >
+                      <Printer className="w-4 h-4 text-emerald-200" />
+                      <span>พิมพ์ใบลงทะเบียนผู้รับของ</span>
+                    </button>
                   </div>
                 </div>
 
@@ -6475,6 +6359,17 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         onSavePlan={handleSaveRoundPlan}
         onClonePlanToRound={handleCloneRoundPlan}
         userRole={userRole}
+      />
+
+      {/* 100% Exact LTC Recipient Registration Sign-off Modal (ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง 2) */}
+      <PrintLtcRegistrationModal
+        isOpen={isPrintRegModalOpen}
+        onClose={() => setIsPrintRegModalOpen(false)}
+        selectedPatients={printSelectedPatients}
+        allPatients={printAllPatients}
+        fiscalYear={selectedYearFilter === 'all' ? '2569' : selectedYearFilter}
+        round={selectedRoundFilter === 'all' ? '2' : selectedRoundFilter}
+        defaultScope={printRegDefaultScope}
       />
     </div>
   );

@@ -43,6 +43,7 @@ import {
   LtcRoundItem,
   UserRole,
 } from '../types/index.ts';
+import { PrintLtcRegistrationModal } from './PrintLtcRegistrationModal.tsx';
 
 // Central Municipality Coordinates (Bangpao HQ) - พิกัดจริงสำนักงานเทศบาลตำบลบางเป้า
 export const BANGPAO_HQ_COORDS = {
@@ -237,6 +238,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
   // Clone Modal State
   const [isCloneModalOpen, setIsCloneModalOpen] = useState<boolean>(false);
+  const [isPrintRegModalOpen, setIsPrintRegModalOpen] = useState<boolean>(false);
   const [cloneTargetYear, setCloneTargetYear] = useState<string>(initialYear);
   const [cloneTargetRound, setCloneTargetRound] = useState<string>('2');
   const [cloneDeliveryDate, setCloneDeliveryDate] = useState<string>(() => {
@@ -247,6 +249,36 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
   // Success toast message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Convert planned stops to LtcPatient format for 100% exact registration print
+  const plannerPatientsForPrint: LtcPatient[] = useMemo(() => {
+    return plannedStops.map((s) => ({
+      id: s.patientId,
+      hn: `HN-${s.patientId}`,
+      idCard: s.idCard || '-',
+      fullName: s.fullName,
+      gender: s.gender,
+      age: s.age,
+      adlScore: s.adlScore || 5,
+      adlGroup: 'group_2',
+      adlCategory: s.adlCategory,
+      careManagerName: 'พันจ่าเอกอานัส เด็นหมาด (CM)',
+      caregiverName: s.caregiverName,
+      phone: s.phone,
+      address: s.address,
+      shortAddress: s.shortAddress,
+      allocationText: s.allocationText,
+      projectEndDateNote: s.projectEndDateNote,
+      moo: s.moo,
+      subdistrict: 'บางเป้า',
+      carePlanSummary: s.notes || '',
+      lastVisitDate: '2026-10-15',
+      nextVisitDate: '2026-11-15',
+      status: 'active',
+      roundItems: { [planRound]: s.items },
+      yearRoundItems: { [planFiscalYear]: { [planRound]: s.items } },
+    }));
+  }, [plannedStops, planFiscalYear, planRound]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -1929,6 +1961,16 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
                   <button
                     type="button"
+                    onClick={() => setIsPrintRegModalOpen(true)}
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs cursor-pointer ring-1 ring-emerald-300"
+                    title="พิมพ์ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง (เซ็นรับ 100% ตามต้นฉบับ สำหรับให้ผู้รับของเซ็นรับ)"
+                  >
+                    <Printer className="w-4 h-4 text-emerald-200" />
+                    <span>🖨️ พิมพ์ใบลงทะเบียนผู้รับของ (เซ็นรับ 100%)</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handlePrintDeliverySheet}
                     className="flex-1 sm:flex-initial px-4 py-2.5 bg-white hover:bg-slate-100 text-teal-900 border border-teal-300 rounded-xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                   >
@@ -2192,6 +2234,17 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             </div>
           </div>
         )}
+
+      {/* Modal: Print LTC Registration Sign-Off Sheet 100% */}
+      <PrintLtcRegistrationModal
+        isOpen={isPrintRegModalOpen}
+        onClose={() => setIsPrintRegModalOpen(false)}
+        selectedPatients={plannerPatientsForPrint}
+        allPatients={patients && patients.length > 0 ? patients : plannerPatientsForPrint}
+        fiscalYear={planFiscalYear}
+        round={planRound}
+        defaultScope="selected"
+      />
     </div>
   );
 };

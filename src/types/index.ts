@@ -675,22 +675,26 @@ export interface LtcPlanStop {
   deliveredAt?: string;
   receiverName?: string;
   notes?: string;
+  shortAddress?: string; // ที่อยู่ย่อสำหรับใบลงทะเบียน เช่น "35/5 ม.5"
+  allocationText?: string; // จำนวน ผ้าอ้อม/นม สำหรับใบลงทะเบียน เช่น "M 390 ชิ้น", "L 310 / นม", "นม 3"
+  projectEndDateNote?: string; // หมายเหตุ สิ้นสุดโครงการ เช่น "30 ธ.ค.", "18 ธ.ค.", "-", "21 ม.ค."
 }
 
 export interface LtcRoundPlan {
   id: string; // e.g. "PLAN-2569-1"
   fiscalYear: string; // "2569"
   round: string; // "1", "2", "3", "urgent"
-  roundName: string; // "งวดรอบที่ 1 (ต.ค. - มี.ค.)"
+  roundName?: string; // "งวดรอบที่ 1 (ต.ค. - มี.ค.)"
   planTitle: string; // "แผนจัดรอบส่งมอบพัสดุ LTC งวดที่ 1 ปีงบ 2569"
   deliveryDate: string; // "2026-11-15" (กำหนดวันแจก)
   deliveryTimeWindow: string; // "09:00 - 16:30 น."
   driverName: string; // "นายชนะ สุขด้วง (พนักงานขับรถ)"
   staffNames: string; // "พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข), CG"
   vehiclePlate: string; // "ผก-4512 ตรัง"
+  status?: string;
   stops: LtcPlanStop[];
-  totalDistanceKm: number;
-  totalDurationMin: number;
+  totalDistanceKm?: number;
+  totalDurationMin?: number;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -720,6 +724,9 @@ export interface LtcPatient {
   caregiverName: string;
   phone: string;
   address: string;
+  shortAddress?: string; // ที่อยู่ย่อสำหรับใบลงทะเบียน เช่น "35/5 ม.5"
+  allocationText?: string; // จำนวน ผ้าอ้อม/นม สำหรับใบลงทะเบียน เช่น "M 390 ชิ้น", "L 310 / นม", "นม 3"
+  projectEndDateNote?: string; // หมายเหตุ สิ้นสุดโครงการ เช่น "30 ธ.ค.", "18 ธ.ค.", "-", "21 ม.ค."
   subdistrict: string;
   carePlanSummary: string;
   lastVisitDate: string;
