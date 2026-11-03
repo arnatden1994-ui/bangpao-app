@@ -1122,12 +1122,14 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleRunFullAiDraft}
-                    disabled={aiGenerating}
-                    className="px-3 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-all whitespace-nowrap"
+                    onClick={() => handleRunFullAiDraft(false)}
+                    disabled={isAiGenerating}
+                    className="px-3 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 disabled:opacity-60 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-all whitespace-nowrap"
                   >
-                    <Wand2 className="w-3.5 h-3.5" />
-                    ✨ ให้ AI ร่างกิจกรรม + งบทั้งหมด
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {isAiGenerating
+                      ? 'กำลังประมวลผล...'
+                      : '✨ ให้ AI ร่างกิจกรรม + งบทั้งหมด'}
                   </button>
                   <button
                     type="button"
