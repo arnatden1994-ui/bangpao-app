@@ -904,12 +904,24 @@ export function getStoredNhsoFundProjects(): NhsoProject[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Ensure data is upgraded to multi-activity structure (e.g. project 2 has 2 activities and 41,975 THB)
-        const p2 = parsed.find((p: any) => p.orderNumber === 2 || p.projectName?.includes('เด็กจมน้ำ'));
-        const isUpToDate = p2 && p2.activityGroups && p2.activityGroups.length >= 2 && p2.budgetRequested === 41975;
-        if (isUpToDate) {
-          return parsed;
-        }
+        // Sync 2569 master template projects with latest INITIAL_NHSO_FUND_PROJECTS while preserving user 2570 projects
+        const masterMap = new Map(
+          INITIAL_NHSO_FUND_PROJECTS.filter((p) => p.fiscalYear === '2569').map((p) => [p.id, p])
+        );
+        const merged = parsed.map((p: NhsoProject) => {
+          const master = masterMap.get(p.id);
+          if (master) {
+            return {
+              ...p,
+              activityGroups: master.activityGroups,
+              budgetLines: master.budgetLines,
+              activities: master.activities,
+              signers: master.signers,
+            };
+          }
+          return p;
+        });
+        return merged;
       }
     }
   } catch (e) {
@@ -935,6 +947,9 @@ export function getStoredNhsoFundSettings(): NhsoFundSettings {
       if (parsed && parsed.fiscalYear) {
         if (parsed.defaultRecorderName && (parsed.defaultRecorderName.includes('เด่นหมัด') || parsed.defaultRecorderName.includes('เด่นหมาด'))) {
           parsed.defaultRecorderName = parsed.defaultRecorderName.replace(/เด่นหมัด|เด่นหมาด/g, 'เด็นหมาด');
+        }
+        if (parsed.defaultApproverName && parsed.defaultApproverName.includes('ละอม')) {
+          parsed.defaultApproverName = parsed.defaultApproverName.replace(/ละอม/g, 'ละดม');
         }
         return {
           ...DEFAULT_NHSO_FUND_SETTINGS,

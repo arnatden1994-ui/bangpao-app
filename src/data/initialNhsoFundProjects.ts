@@ -5,7 +5,7 @@ export const DEFAULT_NHSO_FUND_SETTINGS: NhsoFundSettings = {
   totalFundBudget: 668995, // คำนวณจาก สปสช. (444,330) + เทศบาลสมทบ 50% (222,165) + ดอกเบี้ย (2,500)
   defaultEndorserName: 'นายโชคชัย  รอดรักษา',
   defaultEndorserTitle: 'เลขานุการกองทุนฯ ทต.บางเป้า',
-  defaultApproverName: 'นายละอม  เชื้อช่วย',
+  defaultApproverName: 'นายละดม  เชื้อช่วย',
   defaultApproverTitle: 'ประธานกองทุนฯ ทต.บางเป้า',
   defaultRecorderName: 'พันจ่าเอกอานัส เด็นหมาด',
   defaultRecorderTitle: 'เจ้าพนักงานสาธารณสุข',
@@ -414,7 +414,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_1_11",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมการทำหัตถการ",
             "name": "2.1) ค่าจัดจ้างเหมาบริการแพทย์วิชาชีพ ในการให้บริการขลิบ  ปลายอวัยวะเพศเด็กและเยาวชน",
             "quantity": 30,
             "unit": "คน",
@@ -423,7 +423,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_1_12",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมการทำหัตถการ",
             "name": "2.2) ค่าผ้าขาวม้าในการจัดกิจกรรม",
             "quantity": 30,
             "unit": "ผืน",
@@ -464,7 +464,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_1_11",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมการทำหัตถการ",
         "name": "2.1) ค่าจัดจ้างเหมาบริการแพทย์วิชาชีพ ในการให้บริการขลิบ  ปลายอวัยวะเพศเด็กและเยาวชน",
         "quantity": 30,
         "unit": "คน",
@@ -473,7 +473,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_1_12",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมการทำหัตถการ",
         "name": "2.2) ค่าผ้าขาวม้าในการจัดกิจกรรม",
         "quantity": 30,
         "unit": "ผืน",
@@ -764,7 +764,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_3_11",
-            "activityCategory": "๑. กิจกรรมฝึกอบรม",
+            "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
             "name": "1.1) ค่าตอบแทนวิทยากรฝึกซ้อม 2 คนๆ ละ 300 บาท/ชม. จำนวน 19 วัน วันละ 2 ชม.",
             "quantity": 38,
             "unit": "ชั่วโมง",
@@ -773,7 +773,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_3_12",
-            "activityCategory": "๑. กิจกรรมฝึกอบรม",
+            "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
             "name": "1.2) ค่าลูกฟุตบอล",
             "quantity": 20,
             "unit": "ลูก",
@@ -782,7 +782,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_3_13",
-            "activityCategory": "๑. กิจกรรมฝึกอบรม",
+            "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
             "name": "1.3) ค่่าเสื้อเอี๊ยม",
             "quantity": 12,
             "unit": "ตัว",
@@ -791,7 +791,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_3_14",
-            "activityCategory": "๑. กิจกรรมฝึกอบรม",
+            "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
             "name": "1.3) ค่่านกหวีด",
             "quantity": 2,
             "unit": "อัน",
@@ -832,7 +832,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_3_11",
-        "activityCategory": "๑. กิจกรรมฝึกอบรม",
+        "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
         "name": "1.1) ค่าตอบแทนวิทยากรฝึกซ้อม 2 คนๆ ละ 300 บาท/ชม. จำนวน 19 วัน วันละ 2 ชม.",
         "quantity": 38,
         "unit": "ชั่วโมง",
@@ -841,7 +841,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_3_12",
-        "activityCategory": "๑. กิจกรรมฝึกอบรม",
+        "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
         "name": "1.2) ค่าลูกฟุตบอล",
         "quantity": 20,
         "unit": "ลูก",
@@ -850,7 +850,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_3_13",
-        "activityCategory": "๑. กิจกรรมฝึกอบรม",
+        "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
         "name": "1.3) ค่่าเสื้อเอี๊ยม",
         "quantity": 12,
         "unit": "ตัว",
@@ -859,7 +859,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_3_14",
-        "activityCategory": "๑. กิจกรรมฝึกอบรม",
+        "activityCategory": "1.กิจกรรมฝึกปฏิบัติ",
         "name": "1.3) ค่่านกหวีด",
         "quantity": 2,
         "unit": "อัน",
@@ -1008,7 +1008,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "activityGroups": [
       {
         "id": "act_5_1",
-        "activityName": "1.1) ค่าตอบแทนวิทยากร",
+        "activityName": "",
         "activities": "1.จัดอบรมเชิงปฏิบัติการให้แก่แกนนำสุขภาพ เรื่อง\n•  ความรู้พื้นฐานเกี่ยวกับภาวะโลหิตจาง\n•  วิธีประเมินสัญญาณเสี่ยง\n•  การให้คำแนะนำด้านโภชนาการ\n•  วิธีสื่อสารสุขภาพในชุมชนอย่างมีประสิทธิภาพ\n2.แกนนำสุขภาพออกเคาะประตูบ้าน เพื่อประเมินปัจจัยเสี่ยงภาวะโลหิตจางในหญิงวัยเจริญพันธุ์ และให้คำแนะนำตามหลักโภชนาการที่ถูกต้อง\n3.สรุปผลการดำเนินโครงการ",
         "objectives": "1.เพื่อเพิ่มความรู้และทักษะของ   \nแกนนำสุขภาพในการประเมินและป้องกันภาวะโลหิตจางในหญิงวัยเจริญพันธุ์\n2.เพื่อให้หญิงวัยเจริญพันธุ์ในพื้นที่ได้รับการดูแลเชิงรุกผ่านแกนนำสุขภาพในชุมชน\n3.เพื่อลดความเสี่ยงการเกิดภาวะโลหิตจางในหญิงวัยเจริญพันธุ์ในพื้นที่ ม.1,4 และ 6 อย่างเป็นรูปธรรม\n4.เพื่อส่งต่อกลุ่มเสี่ยงเข้าสู่ระบบบริการสุขภาพอย่างเหมาะสมและรวดเร็ว",
         "targetGroup": "- แกนนำชุมชนและประชาชน \nหมู่ 1,4,6 \nตำบลบางเป้า จำนวน 40 คน\nวิทยากร 1 คน\nผู้จัดอบรม 4 คน\nรวม 45 คน",
@@ -1019,7 +1019,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "budgetLines": [
           {
             "id": "line_5_6",
-            "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+            "activityCategory": "",
             "name": "1.1) ค่าตอบแทนวิทยากร",
             "quantity": 5,
             "unit": "ชั่วโมง",
@@ -1028,7 +1028,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_5_8",
-            "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+            "activityCategory": "",
             "name": "1.2) ค่าอาหารกลางวัน",
             "quantity": 45,
             "unit": "ชุด",
@@ -1037,7 +1037,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_5_9",
-            "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+            "activityCategory": "",
             "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
             "quantity": 90,
             "unit": "ชุด",
@@ -1051,7 +1051,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetLines": [
       {
         "id": "line_5_6",
-        "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+        "activityCategory": "",
         "name": "1.1) ค่าตอบแทนวิทยากร",
         "quantity": 5,
         "unit": "ชั่วโมง",
@@ -1060,7 +1060,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_5_8",
-        "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+        "activityCategory": "",
         "name": "1.2) ค่าอาหารกลางวัน",
         "quantity": 45,
         "unit": "ชุด",
@@ -1069,7 +1069,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_5_9",
-        "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+        "activityCategory": "",
         "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
         "quantity": 90,
         "unit": "ชุด",
@@ -1113,7 +1113,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "activityGroups": [
       {
         "id": "act_6_1",
-        "activityName": "กิจกรรมที่ 1",
+        "activityName": "",
         "activities": "กิจกรรมที่ 1 \n1.1 ชี้แจงสถานการณ์  การระบาดของโรคติดต่อในพื้นที่ \n1.2 กิจกรรมให้ความรู้เรื่องโรคอุบัติใหม่ อุบัติซ้ำและโรคติดต่อตามฤดูกาล\n\nกิจกรรมที่ 2 \n2.1 ภาคทฤษฏี\nกิจกรรมให้ความรู้ด้านการควบคุมป้องกันโรคติดต่อ\n2.2 ภาคปฏิบัติ\nแบ่งกลุ่มเรียนรู้ขั้นตอนการควบคุมป้องกันโรคติดต่อ",
         "objectives": "1.เพื่อป้องกันและควบคุมการแพร่ระบาดของโรคอุบัติใหม่อุบัติซ้ำและโรคติดต่อตามฤดูกาล\n2.เพื่อพัฒนาศักยภาพ ทักษะส่วนบุคคลและชุมชนให้เกิดความพร้อมในการเฝ้าระวังและควบคุมป้องกันโรคอย่างเป็นระบบ\n3.เพื่อสร้างความร่วมมือของภาคีเครือข่ายและพฤติกรรมที่ถูกต้องในการดำเนินการป้องกันและ ควบคุมโรคติดต่อ",
         "targetGroup": "-แกนนำชุมชนและประชาชน หมู่ 1,4,6 ตำบลบางเป้าจำนวน 45 คน\n\nวิทยากร 1 คน\nผู้จัดอบรม 4 คน \nรวม 50 คน",
@@ -1124,7 +1124,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "budgetLines": [
           {
             "id": "line_6_7",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.1) ค่าตอบแทนวิทยากร",
             "quantity": 5,
             "unit": "ชั่วโมง",
@@ -1133,7 +1133,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_6_8",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.2) ค่าอาหารกลางวัน",
             "quantity": 50,
             "unit": "ชุด",
@@ -1142,7 +1142,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_6_9",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
             "quantity": 100,
             "unit": "ชุด",
@@ -1156,7 +1156,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetLines": [
       {
         "id": "line_6_7",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.1) ค่าตอบแทนวิทยากร",
         "quantity": 5,
         "unit": "ชั่วโมง",
@@ -1165,7 +1165,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_6_8",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.2) ค่าอาหารกลางวัน",
         "quantity": 50,
         "unit": "ชุด",
@@ -1174,7 +1174,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_6_9",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
         "quantity": 100,
         "unit": "ชุด",
@@ -1218,7 +1218,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "activityGroups": [
       {
         "id": "act_7_1",
-        "activityName": "กิจกรรมที่ 1",
+        "activityName": "",
         "activities": "1.คัดกรองภาวะซึมเศร้าและความเสี่ยงต่อการฆ่าตัวตายในผู้สูงอายุ (2Q Plus)\n2.ทำแบบประเมินก่อนอบรม\n3.อบรมให้ความรู้ด้านสุขภาพจิต ภาวะโรคซึมเศร้าและความเสี่ยงต่อการฆ่าตัวตายให้แก่ผู้สูงอายุ\n4. ทำแบบประเมินหลังอบรม\n5.แกนนำสุขภาพนำความรู้ที่ได้ ถ่ายทอดให้แก่ผู้สูงอายุที่ติดเตียงในหมู่ที่ 2,3,5,7\n6.ติดตามและประเมินผล",
         "objectives": "1. เพื่อเสริมสร้างความรู้ความเข้าใจโรคซึมเศร้าในผู้สูงอายุ\n2. เพื่อให้กลุ่มเป้าหมายสามารถรับมือและจัดการความเครียด  วิตกกังวลของตนเองได้",
         "targetGroup": "- ผู้สูงอายุจำนวน 50 คน\n- แกนนำสุขภาพ จำนวน 15 คน\n\nรวม 65 คน",
@@ -1229,7 +1229,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "budgetLines": [
           {
             "id": "line_7_7",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.1) ค่าตอบแทนวิทยากร",
             "quantity": 5,
             "unit": "ชั่วโมง",
@@ -1238,7 +1238,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_7_8",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.2) ค่าอาหารกลางวัน",
             "quantity": 65,
             "unit": "ชุด",
@@ -1247,7 +1247,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_7_9",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
             "quantity": 130,
             "unit": "ชุด",
@@ -1256,7 +1256,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_7_14",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.4) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.5 เมตร",
             "quantity": 1,
             "unit": "ป้าย",
@@ -1265,7 +1265,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_7_15",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.5) ค่าวัสดุอุปกรณ์และเอกสารในการอบรม",
             "quantity": 65,
             "unit": "ชุด",
@@ -1279,7 +1279,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetLines": [
       {
         "id": "line_7_7",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.1) ค่าตอบแทนวิทยากร",
         "quantity": 5,
         "unit": "ชั่วโมง",
@@ -1288,7 +1288,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_7_8",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.2) ค่าอาหารกลางวัน",
         "quantity": 65,
         "unit": "ชุด",
@@ -1297,7 +1297,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_7_9",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
         "quantity": 130,
         "unit": "ชุด",
@@ -1306,7 +1306,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_7_14",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.4) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.5 เมตร",
         "quantity": 1,
         "unit": "ป้าย",
@@ -1315,7 +1315,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_7_15",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.5) ค่าวัสดุอุปกรณ์และเอกสารในการอบรม",
         "quantity": 65,
         "unit": "ชุด",
@@ -1359,7 +1359,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "activityGroups": [
       {
         "id": "act_8_1",
-        "activityName": "กิจกรรมที่ 1",
+        "activityName": "",
         "activities": "อบรมให้ความรู้เรื่องโรคติดต่อที่สำคัญในพื้นที่ ได้แก่ โรคไข้เลือดออก,โรคไข้หวัดใหญ่,โรคอุจจาระร่วง,โรคฉี่หนู และโรคมือ เท้า ปาก การปรับปรุงสุขาภิบาลอาหาร อนามัยสิ่งแวดล้อม และการลดพฤติกรรมเสี่ยงต่อการติดเชื้อ",
         "objectives": "1. เพื่อส่งเสริมให้แกนนำสุขภาพประจำบ้านมีความรู้ มีส่วนร่วมในการดูแลสุขภาพและป้องกันตนเองไม่ให้ป่วยด้วยโรคติดต่อที่ป้องกันได้\n2. เพื่อจัดตั้งทีมควบคุมโรคติดต่อพื้นที่และดำเนินการเฝ้าระวังและป้องกันโรคติดต่อก่อนเกิดโรค ขณะเกิดโรคและหลังเกิดโรค ตามหลักการเฝ้าระวังทางระบาดวิทยา\n3. เพื่อพัฒนาศักยภาพ ทักษะส่วนบุคคลและชุมชนให้เกิดความพร้อมในการเฝ้าระวังและควบคุมป้องกันโรค",
         "targetGroup": "- แกนนำสุขภาพด้านการเฝ้าระวังและควบคุมโรคติดต่อ หมู่ที่ 2,3,5,7 ตำบลบางเป้า จำนวน 77 คน\n\nรวม จำนวน 77 คน",
@@ -1370,7 +1370,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "budgetLines": [
           {
             "id": "line_8_7",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.1) ค่าตอบแทนวิทยากร",
             "quantity": 5,
             "unit": "ชั่วโมง",
@@ -1379,7 +1379,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_8_8",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.2) ค่าอาหารกลางวัน",
             "quantity": 77,
             "unit": "ชุด",
@@ -1388,7 +1388,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_8_9",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
             "quantity": 154,
             "unit": "ชุด",
@@ -1397,7 +1397,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_8_14",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.4) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.5 เมตร",
             "quantity": 1,
             "unit": "ป้าย",
@@ -1406,7 +1406,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_8_15",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.5) ค่าอุปกรณ์และเอกสารแบบประเมินก่อนและหลังให้ความรู้",
             "quantity": 77,
             "unit": "ชุด",
@@ -1420,7 +1420,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetLines": [
       {
         "id": "line_8_7",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.1) ค่าตอบแทนวิทยากร",
         "quantity": 5,
         "unit": "ชั่วโมง",
@@ -1429,7 +1429,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_8_8",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.2) ค่าอาหารกลางวัน",
         "quantity": 77,
         "unit": "ชุด",
@@ -1438,7 +1438,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_8_9",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
         "quantity": 154,
         "unit": "ชุด",
@@ -1447,7 +1447,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_8_14",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.4) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.5 เมตร",
         "quantity": 1,
         "unit": "ป้าย",
@@ -1456,7 +1456,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_8_15",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.5) ค่าอุปกรณ์และเอกสารแบบประเมินก่อนและหลังให้ความรู้",
         "quantity": 77,
         "unit": "ชุด",
@@ -1500,7 +1500,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "activityGroups": [
       {
         "id": "act_9_1",
-        "activityName": "กิจกรรมที่ 1",
+        "activityName": "",
         "activities": "1.จัดอบรมให้ความรู้แก่  แกนนำสุขภาพเรื่องการเตรียมตัวก่อนตั้งครรภ์ การปฏิบัติตนขณะตั้งครรภ์ที่ถูกต้องและการเลี้ยงลูกด้วยนมแม่\n2.แกนนำสุขภาพร่วมค้นหาหญิงตั้งครรภ์และรณรงค์ฝากครรภ์ก่อน 12 สัปดาห์\n3.แกนนำสุขภาพติดตามหญิงตั้งครรภ์ให้มาฝากครรภ์ครบ 8 ครั้งตามเกณฑ์\n4.เยี่ยมติดตามหลังคลอด",
         "objectives": "1. เพื่อให้แกนนำสุขภาพมีความรู้ในการดูแลสุขภาพของหญิงตั้งครรภ์\n2. เพื่อให้หญิงตั้งครรภ์ได้รับการฝากครรภ์ครั้งแรกภายใน 12 สัปดาห์ \n3. เพื่อให้หญิงตั้งครรภ์ได้รับการดูแลก่อนคลอดครบ 8 ครั้งตามเกณฑ์",
         "targetGroup": "- แกนนำสุขภาพ จำนวน 77 คน",
@@ -1511,7 +1511,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "budgetLines": [
           {
             "id": "line_9_7",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.1) ค่าตอบแทนวิทยากร",
             "quantity": 6,
             "unit": "ชั่วโมง",
@@ -1520,7 +1520,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_9_8",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.2) ค่าอาหารกลางวัน",
             "quantity": 77,
             "unit": "ชุด",
@@ -1529,7 +1529,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_9_9",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
             "quantity": 154,
             "unit": "ชุด",
@@ -1538,7 +1538,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_9_14",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.4) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.5 เมตร",
             "quantity": 1,
             "unit": "ป้าย",
@@ -1547,7 +1547,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_9_15",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.5) ค่าป้ายไวนิลรณรงค์การฝากครรภ์ 1.2 x 2.5 เมตร",
             "quantity": 4,
             "unit": "ป้าย",
@@ -1556,7 +1556,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_9_16",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "1.5) ค่าอุปกรณ์และเอกสารแบบประเมินก่อนและหลังให้ความรู้",
             "quantity": 77,
             "unit": "ชุด",
@@ -1570,7 +1570,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetLines": [
       {
         "id": "line_9_7",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.1) ค่าตอบแทนวิทยากร",
         "quantity": 6,
         "unit": "ชั่วโมง",
@@ -1579,7 +1579,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_9_8",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.2) ค่าอาหารกลางวัน",
         "quantity": 77,
         "unit": "ชุด",
@@ -1588,7 +1588,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_9_9",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.3) ค่่าอาหารว่างและเครื่องดื่ม 2 มื้อ",
         "quantity": 154,
         "unit": "ชุด",
@@ -1597,7 +1597,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_9_14",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.4) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.5 เมตร",
         "quantity": 1,
         "unit": "ป้าย",
@@ -1606,7 +1606,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_9_15",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.5) ค่าป้ายไวนิลรณรงค์การฝากครรภ์ 1.2 x 2.5 เมตร",
         "quantity": 4,
         "unit": "ป้าย",
@@ -1615,7 +1615,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_9_16",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "1.5) ค่าอุปกรณ์และเอกสารแบบประเมินก่อนและหลังให้ความรู้",
         "quantity": 77,
         "unit": "ชุด",
@@ -1649,7 +1649,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "categoryNumber": 2,
     "categoryName": "ประเภทที่ 2 สนับสนุนและส่งเสริมการจัดกระบวนการหรือกิจกรรมสร้างเสริมสุขภาพ และการป้องกันโรคขององค์กรหรือกลุ่มประชาชน [ข้อ 10 (2)]",
     "proposingOrg": "ชมรมผู้สูงอายุ รพ.กันตัง",
-    "activities": "กิจกรรมที่ 1\n1.1.ให้ความรู้เรื่องโรคที่พบบ่อยในผู้สูงอายุ 1 ช.ม.\n1.2.กิจกรรมออกกำลังกายด้วยยางยืด 1 ช.ม.\nกิจกรรมที่ 2\n2.1.ให้ความรู้เรื่องการปฐมพยาบาลเบื้องต้น การช่วยฟื้นคืนชีพขั้นพื้นฐาน CPR  (2 ช.ม.)\nกิจกรรมที่ 3\n3.1.อบรมความรู้ด้านโภชนาการสำหรับผู้สูงอายุ (1 ช.ม.)\n3.2. เรียนรู้น้ำปั่นน้ำผักผลไม้และฝึกปฏิบัติ (1 ช.ม.)\nกิจกรรมที่ 4 \n4.1.ส่งเสริมสุขภาพจิตและการผ่อนคลายความเครียด (1 ช.ม.)\n4.2.กิจกรรมส่งเสริมการดูแลสุขภาพช่องปากและฟัน พร้อมตรวจสุขภาพช่องปาก (1 ช.ม.)\n\nกิจกรรมที่ 5\n5.1.ให้ความรู้เรื่องโรคที่เกี่ยวข้องกับความคิดและความจำ (1 ช.ม.)\n5.2.กิจกรรมกระตุ้นสมองป้องกันโรคสมองเสื่อม (1 ช.ม.)\nกิจกรรมที่ 6\n6.1.ให้ความรู้การป้องกันการพลัดตกหกล้มและป้องกันโรคข้อเข่าเสื่อมและการยืดเหยียดกล้ามเนื้อ (2 ช.ม.) อบรมให้ความรู้พร้อมฝึกปฏิบัติในทุกกิจกรรม",
+    "activities": "กิจกรรมที่ 1\n1.1.ให้ความรู้เรื่องโรคที่พบบ่อยในผู้สูงอายุ 1 ช.ม.\n1.2.กิจกรรมออกกำลังกายด้วยยางยืด 1 ช.ม.\nกิจกรรมที่ 2\n2.1.ให้ความรู้เรื่องการปฐมพยาบาลเบื้องต้น การช่วยฟื้นคืนชีพขั้นพื้นฐาน CPR  (2 ช.ม.)\nกิจกรรมที่ 3\n3.1.อบรมความรู้ด้านโภชนาการสำหรับผู้สูงอายุ (1 ช.ม.)\n3.2. เรียนรู้น้ำปั่นน้ำผักผลไม้และฝึกปฏิบัติ (1 ช.ม.)\nกิจกรรมที่ 4 \n4.1.ส่งเสริมสุขภาพจิตและการผ่อนคลายความเครียด (1 ช.ม.)\n4.2.กิจกรรมส่งเสริมการดูแลสุขภาพช่องปากและฟัน พร้อมตรวจสุขภาพช่องปาก (1 ช.ม.)\nกิจกรรมที่ 5\n5.1.ให้ความรู้เรื่องโรคที่เกี่ยวข้องกับความคิดและความจำ (1 ช.ม.)\n5.2.กิจกรรมกระตุ้นสมองป้องกันโรคสมองเสื่อม (1 ช.ม.)\nกิจกรรมที่ 6\n6.1.ให้ความรู้การป้องกันการพลัดตกหกล้มและป้องกันโรคข้อเข่าเสื่อมและการยืดเหยียดกล้ามเนื้อ (2 ช.ม.) อบรมให้ความรู้พร้อมฝึกปฏิบัติในทุกกิจกรรม",
     "objectives": "1.ส่งเสริมให้ผู้สูงอายุมีสุขภาพกายและใจที่แข็งแรง ลดการเข้าสู่ภาวะพึ่งพิง\n2.ส่งเสริมการรวมกลุ่มทำกิจกรรมเพื่อสร้างความสัมพันธ์และการช่วยเหลือเกื้อกูลกันในชุมชน",
     "targetGroup": "สมาชิกชมรมผู้สูงอายุและผู้สูงอายุ (กลุ่มติดสังคม) จำนวน 40 คน",
     "kpi": "1. ร้อยละ 80 ของ ผู้สูงอายุที่เข้าร่วมโครงการมีพฤติกรรมสุขภาพที่พึงประสงค์เพิ่มขึ้นหลังจบกิจกรรม",
@@ -1659,8 +1659,8 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "activityGroups": [
       {
         "id": "act_10_1",
-        "activityName": "1.1) ค่าตอบแทนวิทยากร",
-        "activities": "กิจกรรมที่ 1\n1.1.ให้ความรู้เรื่องโรคที่พบบ่อยในผู้สูงอายุ 1 ช.ม.\n1.2.กิจกรรมออกกำลังกายด้วยยางยืด 1 ช.ม.\nกิจกรรมที่ 2\n2.1.ให้ความรู้เรื่องการปฐมพยาบาลเบื้องต้น การช่วยฟื้นคืนชีพขั้นพื้นฐาน CPR  (2 ช.ม.)\nกิจกรรมที่ 3\n3.1.อบรมความรู้ด้านโภชนาการสำหรับผู้สูงอายุ (1 ช.ม.)\n3.2. เรียนรู้น้ำปั่นน้ำผักผลไม้และฝึกปฏิบัติ (1 ช.ม.)\nกิจกรรมที่ 4 \n4.1.ส่งเสริมสุขภาพจิตและการผ่อนคลายความเครียด (1 ช.ม.)\n4.2.กิจกรรมส่งเสริมการดูแลสุขภาพช่องปากและฟัน พร้อมตรวจสุขภาพช่องปาก (1 ช.ม.)",
+        "activityName": "",
+        "activities": "กิจกรรมที่ 1\n1.1.ให้ความรู้เรื่องโรคที่พบบ่อยในผู้สูงอายุ 1 ช.ม.\n1.2.กิจกรรมออกกำลังกายด้วยยางยืด 1 ช.ม.\nกิจกรรมที่ 2\n2.1.ให้ความรู้เรื่องการปฐมพยาบาลเบื้องต้น การช่วยฟื้นคืนชีพขั้นพื้นฐาน CPR  (2 ช.ม.)\nกิจกรรมที่ 3\n3.1.อบรมความรู้ด้านโภชนาการสำหรับผู้สูงอายุ (1 ช.ม.)\n3.2. เรียนรู้น้ำปั่นน้ำผักผลไม้และฝึกปฏิบัติ (1 ช.ม.)\nกิจกรรมที่ 4 \n4.1.ส่งเสริมสุขภาพจิตและการผ่อนคลายความเครียด (1 ช.ม.)\n4.2.กิจกรรมส่งเสริมการดูแลสุขภาพช่องปากและฟัน พร้อมตรวจสุขภาพช่องปาก (1 ช.ม.)\nกิจกรรมที่ 5\n5.1.ให้ความรู้เรื่องโรคที่เกี่ยวข้องกับความคิดและความจำ (1 ช.ม.)\n5.2.กิจกรรมกระตุ้นสมองป้องกันโรคสมองเสื่อม (1 ช.ม.)\nกิจกรรมที่ 6\n6.1.ให้ความรู้การป้องกันการพลัดตกหกล้มและป้องกันโรคข้อเข่าเสื่อมและการยืดเหยียดกล้ามเนื้อ (2 ช.ม.) อบรมให้ความรู้พร้อมฝึกปฏิบัติในทุกกิจกรรม",
         "objectives": "1.ส่งเสริมให้ผู้สูงอายุมีสุขภาพกายและใจที่แข็งแรง ลดการเข้าสู่ภาวะพึ่งพิง\n2.ส่งเสริมการรวมกลุ่มทำกิจกรรมเพื่อสร้างความสัมพันธ์และการช่วยเหลือเกื้อกูลกันในชุมชน",
         "targetGroup": "สมาชิกชมรมผู้สูงอายุและผู้สูงอายุ (กลุ่มติดสังคม) จำนวน 40 คน",
         "targetParticipants": 40,
@@ -1670,7 +1670,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "budgetLines": [
           {
             "id": "line_10_6",
-            "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+            "activityCategory": "",
             "name": "1.1) ค่าตอบแทนวิทยากร",
             "quantity": 12,
             "unit": "ชั่วโมง",
@@ -1679,7 +1679,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_10_7",
-            "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+            "activityCategory": "",
             "name": "1.2) ค่่าอาหารว่างและเครื่องดื่ม 1 มื้อ 40 คน จำนวน 6 ครั้ง",
             "quantity": 240,
             "unit": "ชุด",
@@ -1688,7 +1688,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_10_8",
-            "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+            "activityCategory": "",
             "name": "1.3) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.8 เมตร",
             "quantity": 1,
             "unit": "ป้าย",
@@ -1697,7 +1697,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_10_9",
-            "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+            "activityCategory": "",
             "name": "1.4) ค่าวัสดุอุปกรณ์จัดอบรม",
             "quantity": 1,
             "unit": "ชุด",
@@ -1706,25 +1706,12 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           }
         ],
         "subtotal": 15700
-      },
-      {
-        "id": "act_10_2",
-        "activityName": "กิจกรรมที่ 2",
-        "activities": "กิจกรรมที่ 5\n5.1.ให้ความรู้เรื่องโรคที่เกี่ยวข้องกับความคิดและความจำ (1 ช.ม.)\n5.2.กิจกรรมกระตุ้นสมองป้องกันโรคสมองเสื่อม (1 ช.ม.)\nกิจกรรมที่ 6\n6.1.ให้ความรู้การป้องกันการพลัดตกหกล้มและป้องกันโรคข้อเข่าเสื่อมและการยืดเหยียดกล้ามเนื้อ (2 ช.ม.) อบรมให้ความรู้พร้อมฝึกปฏิบัติในทุกกิจกรรม",
-        "objectives": "",
-        "targetGroup": "",
-        "targetParticipants": 0,
-        "kpi": "",
-        "location": "",
-        "duration": "",
-        "budgetLines": [],
-        "subtotal": 0
       }
     ],
     "budgetLines": [
       {
         "id": "line_10_6",
-        "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+        "activityCategory": "",
         "name": "1.1) ค่าตอบแทนวิทยากร",
         "quantity": 12,
         "unit": "ชั่วโมง",
@@ -1733,7 +1720,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_10_7",
-        "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+        "activityCategory": "",
         "name": "1.2) ค่่าอาหารว่างและเครื่องดื่ม 1 มื้อ 40 คน จำนวน 6 ครั้ง",
         "quantity": 240,
         "unit": "ชุด",
@@ -1742,7 +1729,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_10_8",
-        "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+        "activityCategory": "",
         "name": "1.3) ค่าป้ายไวนิลชื่อโครงการขนาด 1.2 x 2.8 เมตร",
         "quantity": 1,
         "unit": "ป้าย",
@@ -1751,7 +1738,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_10_9",
-        "activityCategory": "1.1) ค่าตอบแทนวิทยากร",
+        "activityCategory": "",
         "name": "1.4) ค่าวัสดุอุปกรณ์จัดอบรม",
         "quantity": 1,
         "unit": "ชุด",
@@ -1851,7 +1838,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_11_17",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฝึกบริหารสมอง",
             "name": "2.1) ค่าอาหารว่างและเครื่องดื่ม จำนวน 60 คนๆ จำนวน 2 ครั้ง",
             "quantity": 120,
             "unit": "ชุด",
@@ -1860,7 +1847,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_11_18",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฝึกบริหารสมอง",
             "name": "2.2) อุปกรณ์ในการจัดกิจกรรมบริหารสมอง",
             "quantity": 1,
             "unit": "ชุด",
@@ -1919,7 +1906,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_11_17",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฝึกบริหารสมอง",
         "name": "2.1) ค่าอาหารว่างและเครื่องดื่ม จำนวน 60 คนๆ จำนวน 2 ครั้ง",
         "quantity": 120,
         "unit": "ชุด",
@@ -1928,7 +1915,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_11_18",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฝึกบริหารสมอง",
         "name": "2.2) อุปกรณ์ในการจัดกิจกรรมบริหารสมอง",
         "quantity": 1,
         "unit": "ชุด",
@@ -2028,7 +2015,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_12_17",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2037,7 +2024,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_12_18",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.2) เครื่องชั่งน้ำหนัก",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2096,7 +2083,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_12_17",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2105,7 +2092,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_12_18",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.2) เครื่องชั่งน้ำหนัก",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2205,7 +2192,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_13_17",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2214,7 +2201,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_13_18",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.2) เครื่องชั่งน้ำหนัก",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2273,7 +2260,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_13_17",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2282,7 +2269,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_13_18",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.2) เครื่องชั่งน้ำหนัก",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2382,7 +2369,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_14_17",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2391,7 +2378,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_14_18",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.2) เครื่องชั่งน้ำหนัก",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2450,7 +2437,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_14_17",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2459,7 +2446,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_14_18",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.2) เครื่องชั่งน้ำหนัก",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2559,7 +2546,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_15_17",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2568,7 +2555,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_15_18",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมติดตามผล",
             "name": "2.2) เครื่องชั่งน้ำหนัก",
             "quantity": 2,
             "unit": "เครื่อง",
@@ -2627,7 +2614,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_15_17",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.1) ค่าเครื่องวัดความดันโลหิต",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2636,7 +2623,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_15_18",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมติดตามผล",
         "name": "2.2) เครื่องชั่งน้ำหนัก",
         "quantity": 2,
         "unit": "เครื่อง",
@@ -2850,7 +2837,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_17_16",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
             "name": "2.1) ค่าจัดทำใบประกาศนียบัตร",
             "quantity": 46,
             "unit": "ใบ",
@@ -2859,7 +2846,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_17_17",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
             "name": "2.2) ค่าวัสดุ/อุปกรณ์ฐานการเรียนรู้",
             "quantity": 3,
             "unit": "ฐาน",
@@ -2909,7 +2896,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_17_16",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
         "name": "2.1) ค่าจัดทำใบประกาศนียบัตร",
         "quantity": 46,
         "unit": "ใบ",
@@ -2918,7 +2905,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_17_17",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
         "name": "2.2) ค่าวัสดุ/อุปกรณ์ฐานการเรียนรู้",
         "quantity": 3,
         "unit": "ฐาน",
@@ -3000,7 +2987,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_18_15",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
             "name": "2.1) ค่าวัสดุ/อุปกรณ์ในการจัดกิจกรรมฐานการเรียนรู้",
             "quantity": 3,
             "unit": "ฐาน",
@@ -3009,7 +2996,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_18_16",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
             "name": "2.2) ค่าตอบแทนวิทยากรบรรยายกิจกรรมฐาน จำนวน 3 คน ชั่วโมงละ 300 บาท",
             "quantity": 3,
             "unit": "ชั่วโมง",
@@ -3050,7 +3037,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_18_15",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
         "name": "2.1) ค่าวัสดุ/อุปกรณ์ในการจัดกิจกรรมฐานการเรียนรู้",
         "quantity": 3,
         "unit": "ฐาน",
@@ -3059,7 +3046,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_18_16",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฐานการเรียนรู้",
         "name": "2.2) ค่าตอบแทนวิทยากรบรรยายกิจกรรมฐาน จำนวน 3 คน ชั่วโมงละ 300 บาท",
         "quantity": 3,
         "unit": "ชั่วโมง",
@@ -3759,7 +3746,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_23_13",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฝึกปฏิบัติการเป็นฐาน",
             "name": "2.1) ค่าวิทยากรประจำฐานจำนวน 2 คนๆ ละ 2 ชั่วโมง ๆ ละ 300 บาท",
             "quantity": 4,
             "unit": "ชั่วโมง",
@@ -3768,7 +3755,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_23_14",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "2. กิจกรรมฝึกปฏิบัติการเป็นฐาน",
             "name": "2.2) ค่าวัสดุอุปกรณ์ที่ใช้จัดกิจกรรม 3 ฐาน ดังรายละเอียด ดังนี้\n- ฐานที่ 1 แซนวิชแสนอร่อย \n- ฐานที่ 2 ประดิษฐ์สื่อสำหรับเด็ก \n- ฐานที่ 3  ระบายสีถุงผ้า",
             "quantity": 3,
             "unit": "ฐาน",
@@ -3827,7 +3814,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_23_13",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฝึกปฏิบัติการเป็นฐาน",
         "name": "2.1) ค่าวิทยากรประจำฐานจำนวน 2 คนๆ ละ 2 ชั่วโมง ๆ ละ 300 บาท",
         "quantity": 4,
         "unit": "ชั่วโมง",
@@ -3836,7 +3823,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_23_14",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "2. กิจกรรมฝึกปฏิบัติการเป็นฐาน",
         "name": "2.2) ค่าวัสดุอุปกรณ์ที่ใช้จัดกิจกรรม 3 ฐาน ดังรายละเอียด ดังนี้\n- ฐานที่ 1 แซนวิชแสนอร่อย \n- ฐานที่ 2 ประดิษฐ์สื่อสำหรับเด็ก \n- ฐานที่ 3  ระบายสีถุงผ้า",
         "quantity": 3,
         "unit": "ฐาน",
@@ -4227,7 +4214,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_26_12",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "1.5) ค่าจัดซื้ออุปกรณ์สาธิตและปฏิบัติการแปรงฟัน",
             "name": "1.5.1) แปรงสีฟัน + ยาสีฟัน + แก้วน้ำ",
             "quantity": 20,
             "unit": "ชุด",
@@ -4236,7 +4223,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
           },
           {
             "id": "line_26_13",
-            "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+            "activityCategory": "1.5) ค่าจัดซื้ออุปกรณ์สาธิตและปฏิบัติการแปรงฟัน",
             "name": "1.5.2) กระเป๋าใส่อุปกรณ์",
             "quantity": 20,
             "unit": "ใบ",
@@ -4295,7 +4282,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_26_12",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "1.5) ค่าจัดซื้ออุปกรณ์สาธิตและปฏิบัติการแปรงฟัน",
         "name": "1.5.1) แปรงสีฟัน + ยาสีฟัน + แก้วน้ำ",
         "quantity": 20,
         "unit": "ชุด",
@@ -4304,7 +4291,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
       },
       {
         "id": "line_26_13",
-        "activityCategory": "1.กิจกรรมอบรมให้ความรู้",
+        "activityCategory": "1.5) ค่าจัดซื้ออุปกรณ์สาธิตและปฏิบัติการแปรงฟัน",
         "name": "1.5.2) กระเป๋าใส่อุปกรณ์",
         "quantity": 20,
         "unit": "ใบ",
@@ -4357,7 +4344,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "activityGroups": [
       {
         "id": "act_27_1",
-        "activityName": "กิจกรรมที่ 1",
+        "activityName": "",
         "activities": "1. สำรวจ/ค้นหา/คัดกรอง กลุ่มเป้าหมายในพื้นที่ โดยขอความร่วมมือจากโรงพยาบาลกันตัง โรงพยาบาลส่งเสริมสุขภาพตำบล และอสม. สำรวจตามรอบประเมินผลสำหรับผู้สูงอายุที่มีภาวะพึ่งพิง\n\n2. ดำเนินการจัดหาและนำส่งผ้าอ้อมผู้ใหญ่ให้กับกลุ่มเป้าหมาย",
         "objectives": "1. เพื่อให้บุคคลที่มีภาวะพึ่งพิง และมีค่าคะแนนระดับความสามารถในการดำเนินกิจวัตรประจำวัน ADL < 6 คะแนน ได้รับการสนับสนุนผ้าอ้อมผู้ใหญ่ ตามสิทธิประโยชน์ในระบบหลักประกันสุขภาพแห่งชาติ\n\n2. เพื่อให้บุคคลที่มีปัญหาการกลั้นปัสสาวะ และอุจจาระไม่ได้ ตามผลการประเมินหรือข้อบ่งชี้ทางการแพทย์ ได้รับการสนับสนุนผ้าอ้อมผู้ใหญ่ ตามสิทธิประโยชน์ในระบบหลักประกันสุขภาพแห่งชาติ",
         "targetGroup": "1. บุคคลที่มีภาวะพึ่งพิง  ADL < 6 คะแนน\n\n2. บุคคลที่มีปัญหาการกลั้นปัสสาวะ และอุจจาระไม่ได้ ตามผลการประเมินหรือข้อบ่งชี้ทางการแพทย์\n\nจำนวน 50 คน",
@@ -4368,7 +4355,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
         "budgetLines": [
           {
             "id": "line_27_7",
-            "activityCategory": "กิจกรรมที่ 1",
+            "activityCategory": "",
             "name": "- ผู้รับผ้าอ้อมผู้ใหญ่ จำนวน 50 คนๆละ 3 ชิ้น/วัน จำนวน 95 วัน ราคาชิ้นละ 9.50 บาท \n(50 คน x 3 ชิ้น x 95 วัน x 9.50 บาท) \nเป็นเงิน 135,375 บาท",
             "quantity": 14250,
             "unit": "ชิ้น",
@@ -4382,7 +4369,7 @@ export const INITIAL_NHSO_FUND_PROJECTS: NhsoProject[] = [
     "budgetLines": [
       {
         "id": "line_27_7",
-        "activityCategory": "กิจกรรมที่ 1",
+        "activityCategory": "",
         "name": "- ผู้รับผ้าอ้อมผู้ใหญ่ จำนวน 50 คนๆละ 3 ชิ้น/วัน จำนวน 95 วัน ราคาชิ้นละ 9.50 บาท \n(50 คน x 3 ชิ้น x 95 วัน x 9.50 บาท) \nเป็นเงิน 135,375 บาท",
         "quantity": 14250,
         "unit": "ชิ้น",
