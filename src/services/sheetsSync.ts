@@ -1096,6 +1096,8 @@ export function getStoredNhsoFundSettings(): NhsoFundSettings {
         const finalSettings: NhsoFundSettings = {
           ...DEFAULT_NHSO_FUND_SETTINGS,
           ...parsed,
+          fiscalYear:
+            parsed.fiscalYear && parsed.fiscalYear !== '2569' ? parsed.fiscalYear : '2570',
           orgProposerDefaults: upgradedOrgDefaults,
           revenueSourcesByYear: mergedRevs,
           clause10_4_PlansByYear: {

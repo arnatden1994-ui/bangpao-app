@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import {
   NhsoProject,
+  User,
   UserRole,
   NhsoFundSettings,
   NHSO_FUND_CATEGORIES,
@@ -109,8 +110,12 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     return mergeNhsoFundProjectsWithMaster(raw);
   }, [externalProjects, internalProjects]);
 
-  // Filter & Search states (Default to 2569 so user sees the 27 completed projects of งป.69 right away)
-  const [selectedYear, setSelectedYear] = useState<string>('2569');
+  // Filter & Search states (Always start at the current fiscal year cycle 2570 when entering the page)
+  const [selectedYear, setSelectedYear] = useState<string>(() =>
+    fundSettings.fiscalYear && fundSettings.fiscalYear !== '2569'
+      ? fundSettings.fiscalYear
+      : '2570'
+  );
   const [customYears, setCustomYears] = useState<string[]>(['2569', '2570', '2571']);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
@@ -1598,9 +1603,42 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
           </div>
 
           {filteredProjects.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 space-y-3">
+            <div className="p-12 text-center text-slate-400 space-y-4">
               <FileText className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
-              <p className="text-sm font-medium">ไม่พบโครงการตามตัวกรองที่เลือก</p>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                  ยังไม่มีรายการโครงการในรอบปีงบประมาณ {selectedYear === 'all' ? 'ที่เลือก' : selectedYear}
+                </p>
+                <p className="text-xs text-slate-500">
+                  คุณสามารถเริ่มเขียนเสนอโครงการใหม่ (พร้อมผู้ช่วย AI ฟรี) หรือเปิดดูฐานข้อมูลปีงบ 2569 เพื่อติ๊กดึงโครงการต่อเนื่องมาปี {selectedYear === 'all' ? '2570' : selectedYear} ได้ทันที
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingProject(null);
+                    setIsBuilderOpen(true);
+                  }}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  เขียนเสนอโครงการใหม่ (ปีงบ {selectedYear === 'all' ? '2570' : selectedYear})
+                </button>
+                {selectedYear !== '2569' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedYear('2569');
+                      setSelectedProjectIds([]);
+                    }}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <FolderPlus className="w-4 h-4 text-indigo-600" />
+                    📜 ดูฐานข้อมูลปีงบ 2569 (27 โครงการ)
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
