@@ -508,9 +508,11 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
     // 1. Search Petitions
     const matchedPetitions = petitions.filter(
       (p) =>
-        p.trackingCode.toLowerCase().includes(query) ||
-        p.petitionerPhone.includes(query) ||
-        p.petitionerName.toLowerCase().includes(query)
+        (p.trackingCode && p.trackingCode.toLowerCase().includes(query)) ||
+        (p.petitionerPhone && p.petitionerPhone.includes(query)) ||
+        (p.phone && p.phone.includes(query)) ||
+        (p.petitionerName && p.petitionerName.toLowerCase().includes(query)) ||
+        (p.citizenName && p.citizenName.toLowerCase().includes(query))
     );
     setSearchResult(matchedPetitions);
 
@@ -2163,7 +2165,7 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                                 {p.trackingCode}
                               </span>
                               <span className="text-xs sm:text-sm text-slate-500 font-medium">
-                                ({new Date(p.createdAt).toLocaleDateString('th-TH')})
+                                ({new Date(p.createdAt || Date.now()).toLocaleDateString('th-TH')})
                               </span>
                             </div>
                             <div className="text-lg sm:text-xl font-black text-slate-900 mt-1.5">

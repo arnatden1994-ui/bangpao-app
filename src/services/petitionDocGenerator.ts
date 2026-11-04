@@ -448,7 +448,7 @@ function generateSewageDocx(
   );
 
   // 13. Bottom Table Left Cell: Intake Date (S_P36 - 5B49BCC9) & Officer Name (S_P38 - 1E07EB25)
-  const intakeOfficer = sanitizePersonText(form.officerNote?.officerName || (form as any).intakeOfficer || '');
+  const intakeOfficer = sanitizePersonText((typeof form.officerNote === 'object' && form.officerNote ? form.officerNote.officerName : form.officerNote) || (form as any).intakeOfficer || '');
   xml = xml.replace(
     /<w:p[^>]*w14:paraId="5B49BCC9"[\s\S]*?<\/w:p>/,
     `<w:p w14:paraId="5B49BCC9" w14:textId="77777777" w:rsidR="00296703" w:rsidRPr="00233D4B" w:rsidRDefault="00296703" w:rsidP="00296703"><w:pPr><w:tabs><w:tab w:val="left" w:pos="709"/></w:tabs><w:spacing w:line="276" w:lineRule="auto"/><w:rPr><w:rFonts w:ascii="TH SarabunIT๙" w:hAnsi="TH SarabunIT๙" w:cs="TH SarabunIT๙"/><w:sz w:val="30"/><w:szCs w:val="30"/></w:rPr></w:pPr>${textRunXml('เมื่อวันที่', '30')}${fillDotsXml(dParts.day ? toThaiDigits(dParts.day) : '', 11, '30')}${textRunXml('เดือน', '30')}${fillDotsXml(dParts.month || '', 26, '30')}${textRunXml('พ.ศ.', '30')}${fillDotsXml(dParts.year ? toThaiDigits(dParts.year) : '', 17, '30')}</w:p>`
@@ -634,7 +634,7 @@ function generateGeneralDocx(
   }
 
   // 11. Bottom Table Left Cell: Subject (G_P32 - 39D7404E), Date (G_P33 - 5B49BCC9), Intake Officer (G_P36 - 1E07EB25)
-  const intakeOfficer = sanitizePersonText(form.officerNote?.officerName || (form as any).intakeOfficer || '');
+  const intakeOfficer = sanitizePersonText((typeof form.officerNote === 'object' && form.officerNote ? form.officerNote.officerName : form.officerNote) || (form as any).intakeOfficer || '');
   const shortSubj = subject.length > 28 ? subject.slice(0, 28) + '...' : subject;
   if (shortSubj) {
     xml = xml.replace(
@@ -778,7 +778,7 @@ export function generatePetitionHtml(
   const receiptNumber = (form.receipt?.receiptNo || (form as any).receiptNumber)
     ? toThaiDigits(form.receipt?.receiptNo || (form as any).receiptNumber)
     : '';
-  const intakeOfficer = sanitizePersonText(form.officerNote?.officerName || (form as any).intakeOfficer || '');
+  const intakeOfficer = sanitizePersonText((typeof form.officerNote === 'object' && form.officerNote ? form.officerNote.officerName : form.officerNote) || (form as any).intakeOfficer || '');
   const collectorOfficer = sanitizePersonText(form.receipt?.collectorName || intakeOfficer);
   const opOfficer = sanitizePersonText(form.operation?.operatorName || p.assignedOfficer || intakeOfficer).replace(/\s*\([^)]*\)\s*/g, ' ').trim();
 

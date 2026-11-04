@@ -267,6 +267,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       adlScore: s.adlScore || 5,
       adlGroup: 'group_2',
       adlCategory: s.adlCategory,
+      diagnosis: s.notes || 'ผู้สูงอายุที่มีภาวะพึ่งพิง LTC',
       careManagerName: 'พันจ่าเอกอานัส เด็นหมาด (CM)',
       caregiverName: s.caregiverName,
       phone: s.phone,
@@ -281,9 +282,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       nextVisitDate: '2026-11-15',
       status: 'active',
       roundItems: { [planRound]: s.items },
-      yearRoundItems: { [planFiscalYear]: { [planRound]: s.items } },
+      yearRoundItems: { [planYear]: { [planRound]: s.items } },
     }));
-  }, [plannedStops, planFiscalYear, planRound]);
+  }, [plannedStops, planYear, planRound]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -489,8 +490,8 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       if (!L || !container) return;
 
       if (!plannerMapInstanceRef.current) {
-        if (container._leaflet_id) {
-          container._leaflet_id = null;
+        if ((container as any)._leaflet_id) {
+          (container as any)._leaflet_id = null;
           container.innerHTML = '';
         }
 
@@ -2246,7 +2247,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         onClose={() => setIsPrintRegModalOpen(false)}
         selectedPatients={plannerPatientsForPrint}
         allPatients={safePatients}
-        fiscalYear={planFiscalYear}
+        fiscalYear={planYear}
         round={planRound}
         defaultScope="selected"
         deliveryDate={deliveryDate}

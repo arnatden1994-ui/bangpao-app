@@ -505,7 +505,7 @@ export const NhsoFundRevenueModal: React.FC<NhsoFundRevenueModalProps> = ({
       budgetRequested: totalPlanned10_4,
       budgetApproved: totalPlanned10_4,
       status: 'approved',
-      committeeDecision: 'approved',
+      committeeDecision: 'approve',
       meetingRound: `มติที่ประชุม กก. ปีงบ ${selectedYear}`,
       committeeComment: `อนุมัติกรอบค่าใช้จ่ายบริหารจัดการกองทุนและการประชุม ตามข้อ 10(4) วงเงิน ${totalPlanned10_4.toLocaleString()} บาท (ไม่เกินร้อยละ ${maxCapPercent} ของเงินรายรับกองทุน)`,
 

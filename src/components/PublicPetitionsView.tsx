@@ -100,6 +100,7 @@ interface PublicPetitionsViewProps {
 
 export const PETITION_CATEGORY_LABELS: Record<PetitionCategory, string> = {
   waste_sewage: 'บริการสูบสิ่งปฏิกูล (ดูดส้วม)',
+  sewage: 'บริการสูบสิ่งปฏิกูล (ดูดส้วม)',
   nuisance_smell: 'กลิ่นเหม็น / มลพิษทางอากาศ / เผาขยะ',
   nuisance_noise: 'เสียงดังรบกวน / สถานบันเทิง / ก่อสร้าง',
   nuisance_animal: 'เหตุรำคาญสัตว์เลี้ยง / สัตว์จรจัด',
@@ -206,13 +207,12 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
   // 2) 'sewage'  -> 📝 ยื่นคำร้องใหม่ (แบบฟอร์มตามแม่แบบราชการ)
   // 3) 'print'   -> 🖨️ เสนออนุมัติ & พิมพ์เอกสาร A4 (Approval & Signer Workflow)
   // 4) 'tracking'-> 🔍 ติดตามผลคำร้องประชาชน (Citizen Tracking Portal)
-  const [internalSubTab, setInternalSubTab] = useState<'dashboard' | 'form'>('dashboard');
+  const [internalSubTab, setInternalSubTab] = useState<'dashboard' | 'form' | 'general' | 'sewage' | 'print' | 'tracking'>('dashboard');
   const rawSubTab = controlledSubTab || internalSubTab;
-  const subTab: 'dashboard' | 'form' = (rawSubTab === 'form' || rawSubTab === 'sewage' || rawSubTab === 'print') ? 'form' : 'dashboard';
+  const subTab = rawSubTab;
   const setSubTab = (t: 'dashboard' | 'form' | 'general' | 'sewage' | 'print' | 'tracking') => {
-    const norm: 'dashboard' | 'form' = (t === 'form' || t === 'sewage' || t === 'print') ? 'form' : 'dashboard';
-    if (onSubTabChange) onSubTabChange(norm);
-    else setInternalSubTab(norm);
+    if (onSubTabChange) onSubTabChange(t);
+    else setInternalSubTab(t);
   };
 
   const signers = externalSigners || DEFAULT_SIGNER_SETTINGS;
@@ -701,7 +701,7 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
     setFormErrorMsg('');
 
     const newId = `PET-${Date.now().toString().slice(-4)}`;
-    const trackingCode = generateTrackingCode(formType);
+    const trackingCode = generateTrackingCode(formType, petitions);
     const todayIso = new Date().toISOString().slice(0, 10);
     const villageName = BANGPAO_VILLAGES[formMoo] || `หมู่ที่ ${formMoo}`;
     const fullAddress = `บ้านเลขที่ ${applicantHouseNo || '-'} หมู่ที่ ${formMoo} ${villageName} ต.${applicantSubdistrict} อ.${applicantDistrict} จ.${applicantProvince}`;
@@ -751,7 +751,7 @@ export const PublicPetitionsView: React.FC<PublicPetitionsViewProps> = ({
         evidenceDoc: formType === 'general' ? generalEvidence : undefined,
         sewagePlace: formType === 'sewage' ? sewagePlace : undefined,
         tankType: formType === 'sewage' ? sewageTankType : undefined,
-        tankVol: formType === 'sewage' ? sewageTankVol : undefined,
+        tankVol: formType === 'sewage' ? (parseFloat(sewageTankVol) || 0) : undefined,
         sewageZone: formType === 'sewage' ? sewageZone : undefined,
         feeAmount: formType === 'sewage' ? calculatedFee : undefined,
         preferredDate: formType === 'sewage' ? sewagePreferredDate : undefined,

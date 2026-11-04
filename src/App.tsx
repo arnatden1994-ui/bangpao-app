@@ -298,7 +298,7 @@ export default function App() {
   const [inspectionFormResetKey, setInspectionFormResetKey] = useState(0);
   const [nhsoLtcSubTab, setNhsoLtcSubTab] = useState<'route' | 'register' | 'inventory' | 'nhso'>('route');
   const [equipmentSubTab, setEquipmentSubTab] = useState<'route' | 'register' | 'inventory' | 'loans' | 'map'>('route');
-  const [petitionsSubTab, setPetitionsSubTab] = useState<'dashboard' | 'form'>('dashboard');
+  const [petitionsSubTab, setPetitionsSubTab] = useState<'dashboard' | 'form' | 'general' | 'print' | 'sewage' | 'tracking'>('dashboard');
   const [settingsSubTab, setSettingsSubTab] = useState<'signers' | 'users' | 'approvers' | 'sheets' | 'notifications'>('signers');
 
   

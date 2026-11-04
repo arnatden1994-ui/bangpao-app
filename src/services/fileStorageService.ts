@@ -40,6 +40,8 @@ export interface StoredFileAttachment {
   uploadedAt: string;
   /** Optional external link (e.g. Google Drive) instead of an uploaded file */
   externalUrl?: string;
+  fileType?: string;
+  fileUrl?: string;
 }
 
 const blobCache = new Map<string, Blob>();

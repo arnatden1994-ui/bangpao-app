@@ -24,6 +24,9 @@ export const PETITION_CATEGORY_LABELS: Record<PetitionCategory, string> = {
   fogging_spray: 'ขอรับบริการพ่นสารเคมีหมอกควันกำจัดยุงลาย',
   rabies_vaccine: 'ขอรับบริการฉีดวัคซีนป้องกันพิษสุนัขบ้า',
   stray_animals: 'จัดการปัญหาสุนัขและแมวจรจัดในชุมชน',
+  nuisance_animal: 'เหตุรำคาญสัตว์เลี้ยง / สัตว์จรจัด',
+  food_sanitation: 'สุขาภิบาลอาหารและสุขอนามัย',
+  sewage: 'บริการสูบสิ่งปฏิกูล (ดูดส้วม)',
   other: 'คำร้องทั่วไปด้านสาธารณสุขและสิ่งแวดล้อม',
 };
 

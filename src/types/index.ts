@@ -19,6 +19,8 @@ export interface LicenseRecord {
   status: 'normal' | 'expiring' | 'expired' | 'pending';
   remainingDays: number;
   daysRemaining?: number;
+  createdAt?: string;
+  updatedAt?: string;
   
   // Owner details
   ownerName: string;
@@ -263,6 +265,9 @@ export type PetitionCategory =
   | 'fogging_spray'
   | 'rabies_vaccine'
   | 'stray_animals'
+  | 'nuisance_animal'
+  | 'food_sanitation'
+  | 'sewage'
   | 'other';
 
 // ชนิดแบบฟอร์มคำร้องตามแม่แบบของเทศบาล (ระบบที่ 5)
@@ -294,6 +299,17 @@ export interface PetitionApprovalTrail {
   rejectReason?: string;
 }
 
+export type PetitionStatus =
+  | 'submitted'
+  | 'accepted'
+  | 'investigating'
+  | 'resolved'
+  | 'rejected'
+  | 'pending'
+  | 'assigned'
+  | 'in_progress'
+  | 'closed';
+
 export interface PetitionFeeReceipt {
   paidAmount?: number;
   bookNo?: string;
@@ -308,6 +324,8 @@ export interface PetitionOperationResult {
   byName?: string;
   byPosition?: string;
   pendingReason?: string;
+  operatorName?: string;
+  operatorPosition?: string;
 }
 
 // ข้อมูลที่ใช้เติมลงแบบฟอร์ม (คำร้องทั่วไป / คำร้องขอรับบริการกำจัดสิ่งปฏิกูล)
@@ -319,7 +337,7 @@ export interface PetitionFormData {
   purpose?: string; // ข้าพเจ้ามีความประสงค์ (คำร้องทั่วไป)
   recommendation?: string; // ความเห็นเจ้าหน้าที่ - เพื่อโปรดทราบและพิจารณา
   directorOrder?: string; // คำสั่ง ผอ.กอง (คำร้องทั่วไป)
-  applicantAddress: PetitionAddress;
+  applicantAddress?: PetitionAddress;
   serviceAddress?: PetitionAddress; // สถานที่ขอรับบริการ (คำร้องขอสูบสิ่งปฏิกูล)
   sewageZone?: SewageZone;
   feeAmount?: number;
@@ -330,6 +348,43 @@ export interface PetitionFormData {
   receivedBy?: string;
   feeReceipt?: PetitionFeeReceipt;
   operation?: PetitionOperationResult;
+  applicantType?: 'individual' | 'juristic' | 'organization';
+  petitionerName?: string;
+  petitionerPhone?: string;
+  petitionerAddress?: string;
+  incidentLocation?: string;
+  assignedTo?: string;
+  resolutionDetails?: string;
+  mayorDecision?: string;
+  mayorNote?: string;
+  directorComment?: string;
+  clerkOrder?: string;
+  assignedDriver?: string;
+  officerNote?: any;
+  receipt?: any;
+  zone?: string | SewageZone;
+  serviceType?: string;
+  receiptBook?: string;
+  receiptNumber?: string;
+  receiptNo?: string;
+  idCard?: string;
+  tankVol?: number;
+  preferredDate?: string;
+  evidenceDoc?: string;
+  sewagePlace?: string;
+  intakeOfficer?: string;
+  driverName?: string;
+  citizenName?: string;
+  age?: number | string;
+  nationality?: string;
+  phone?: string;
+  houseNo?: string;
+  moo?: string;
+  trokSoi?: string;
+  road?: string;
+  subdistrict?: string;
+  district?: string;
+  province?: string;
 }
 
 export interface PublicPetition {
@@ -339,11 +394,15 @@ export interface PublicPetition {
   category: PetitionCategory;
   citizenName: string;
   citizenIdCard?: string;
+  petitionerIdCard?: string;
+  urgency?: 'low' | 'normal' | 'medium' | 'high' | 'urgent' | 'emergency' | 'critical';
+  targetDate?: string;
+  feeStatus?: 'pending' | 'paid' | 'waived' | 'not_applicable';
   phone: string;
   address: string;
   description: string;
-  status: 'submitted' | 'accepted' | 'investigating' | 'resolved' | 'rejected' | 'pending' | 'assigned';
-  assignedOfficer: string;
+  status: PetitionStatus;
+  assignedOfficer?: string;
   submissionDate: string;
   resolvedDate?: string;
   resolutionNotes?: string;
@@ -355,6 +414,13 @@ export interface PublicPetition {
   moo?: string;
   latitude?: number;
   longitude?: number;
+  petitionerName?: string;
+  petitionerPhone?: string;
+  petitionerAddress?: string;
+  incidentLocation?: string;
+  assignedTo?: string;
+  feeAmount?: number;
+  resolutionDetails?: string;
 }
 
 // 3. ระบบโครงการกองทุนหลักประกันสุขภาพระดับท้องถิ่น (NHSO Fund Projects)
@@ -373,6 +439,7 @@ export interface NhsoFundCategoryInfo {
   clause: NhsoFundCategoryClause;
   title: string;
   shortTitle: string;
+  name?: string;
   description: string;
   badgeColor: string;
 }
@@ -454,6 +521,8 @@ export interface NhsoFundBudgetLine {
   total: number;
   note?: string; // เช่น (50 คน x 3 ชิ้น x 95 วัน x 9.50 บาท)
 }
+
+export type NhsoBudgetLine = NhsoFundBudgetLine;
 
 export interface NhsoFundSigners {
   proposerName: string; // ผู้เสนอ
@@ -756,8 +825,8 @@ export interface MedicalEquipment {
   totalQuantity: number;
   availableQuantity: number;
   inUseQuantity: number;
-  maintenanceQuantity: number;
-  condition: 'good' | 'fair' | 'maintenance';
+  maintenanceQuantity?: number;
+  condition?: 'good' | 'fair' | 'maintenance';
   storageLocation: string;
   imageUrl?: string;
   status?: string;
@@ -893,6 +962,8 @@ export interface SignerSettings {
   feeOut20km: string;
   feeOut30km: string;
   inspectors?: InspectorSignerItem[];
+  inspectorName?: string;
+  inspectorPosition?: string;
 }
 
 export const DEFAULT_SIGNER_SETTINGS: SignerSettings = {

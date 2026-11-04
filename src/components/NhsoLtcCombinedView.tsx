@@ -463,7 +463,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         return existing
           ? {
               ...item,
-              status: existing.status === 'delivered' || item.status === 'delivered' ? 'delivered' : 'pending',
+              status: (existing.status === 'delivered' || item.status === 'delivered' ? 'delivered' : 'pending') as 'delivered' | 'pending',
               deliveredAt: existing.deliveredAt || item.deliveredAt,
               receiverName: existing.receiverName || item.receiverName,
               routeOrder: existing.routeOrder || idx + 1,
@@ -6101,7 +6101,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        navigator.clipboard.writeText(ltcNotifyResultLog.lineTextSummary);
+                        navigator.clipboard.writeText(ltcNotifyResultLog.lineTextSummary || '');
                         if (onShowToast) onShowToast('success', 'คัดลอกข้อความแจ้งเตือนคิว LTC เรียบร้อยแล้ว');
                       }}
                       className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
@@ -6113,7 +6113,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                       type="button"
                       onClick={() => {
                         const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(
-                          ltcNotifyResultLog.lineTextSummary
+                          ltcNotifyResultLog.lineTextSummary || ''
                         )}`;
                         window.open(lineUrl, '_blank');
                       }}

@@ -66,6 +66,8 @@ export interface CalendarEventItem {
   responsibleOfficer: string;
   details: string;
   status: 'pending' | 'in_progress' | 'completed';
+  description?: string;
+  time?: string;
   // ประชาสัมพันธ์ / หนังสือเชิญ
   docType?: ActivityDocType;
   docNo?: string; // เลขที่หนังสือ เช่น ตง 0023.4/ว 1234

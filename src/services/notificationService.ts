@@ -383,7 +383,7 @@ export function downloadAttachmentDocx(att: NotificationAttachment): void {
     return;
   }
   const bytes = base64ToUint8Array(att.docxBase64);
-  const blob = new Blob([bytes], {
+  const blob = new Blob([bytes as any], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
   const url = URL.createObjectURL(blob);
@@ -1313,7 +1313,7 @@ export function buildPetitionNotificationPayload(
     referenceCode: refCode,
     title,
     subtitle,
-    urgency: petition.urgency || 'normal',
+    urgency: (petition.urgency === 'emergency' || petition.urgency === 'critical' ? 'critical' : petition.urgency === 'urgent' ? 'urgent' : 'normal') as 'critical' | 'normal' | 'urgent',
     requesterName: petitionerName,
     requesterPhone: petition.phone,
     villageName: villageText,
