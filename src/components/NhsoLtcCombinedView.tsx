@@ -62,6 +62,11 @@ import { LtcRoundPlannerModal } from './LtcRoundPlannerModal.tsx';
 import { PrintLtcRegistrationModal } from './PrintLtcRegistrationModal.tsx';
 import { NhsoFundView } from './NhsoFundView.tsx';
 import { LtcCareView } from './LtcCareView.tsx';
+import {
+  LtcInventoryManager,
+  LtcInventoryItem,
+  StockTransactionLog,
+} from './LtcInventoryManager.tsx';
 
 interface NhsoLtcCombinedViewProps {
   projects: NhsoProject[];
@@ -203,29 +208,6 @@ const convertPatientsToDeliveryStops = (pts: LtcPatient[]): DeliveryStop[] => {
 };
 
 const INITIAL_DELIVERY_STOPS: DeliveryStop[] = convertPatientsToDeliveryStops(INITIAL_LTC_PATIENTS);
-
-interface LtcInventoryItem {
-  id: string;
-  code: string;
-  name: string;
-  specification: string;
-  totalStock: number;
-  allocatedStock: number;
-  remainingStock: number;
-  unit: string;
-  monthlyRequirement: number;
-  lotNo: string;
-  expireDate: string;
-  status: 'sufficient' | 'low' | 'critical';
-}
-
-interface StockTransactionLog {
-  id: string;
-  dateStr: string;
-  itemName: string;
-  type: 'in' | 'out';
-  quantity: number;
-}
 
 const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
   {
@@ -523,14 +505,6 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     } catch {}
     return INITIAL_STOCK_LOGS;
   });
-  const [newStockForm, setNewStockForm] = useState({
-    name: '',
-    code: '',
-    unit: '',
-    quantity: '',
-  });
-  const [inventoryNotice, setInventoryNotice] = useState<string | null>(null);
-
   useEffect(() => {
     try {
       localStorage.setItem('bangpao_ltc_inventory_v2', JSON.stringify(inventory));
@@ -542,67 +516,6 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       localStorage.setItem('bangpao_ltc_stock_logs_v2', JSON.stringify(stockLogs));
     } catch {}
   }, [stockLogs]);
-
-  const handleAddStockSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const itemName = newStockForm.name.trim();
-    const qty = parseInt(newStockForm.quantity, 10) || 0;
-    if (!itemName || qty <= 0) return;
-
-    const unitStr = newStockForm.unit.trim() || 'ชิ้น';
-    const codeStr = newStockForm.code.trim();
-
-    setInventory((prev) => {
-      const existingIdx = prev.findIndex(
-        (it) =>
-          it.name.toLowerCase() === itemName.toLowerCase() ||
-          (codeStr && it.code === codeStr)
-      );
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        const target = updated[existingIdx];
-        updated[existingIdx] = {
-          ...target,
-          totalStock: target.totalStock + qty,
-          remainingStock: target.remainingStock + qty,
-          unit: unitStr || target.unit,
-          status: 'sufficient',
-        };
-        return updated;
-      } else {
-        const nextCode = codeStr || String(prev.length + 1);
-        const newItem: LtcInventoryItem = {
-          id: `INV-LTC-${Date.now().toString().slice(-4)}`,
-          code: nextCode,
-          name: itemName,
-          specification: `พัสดุดูแลผู้มีภาวะพึ่งพิง (${unitStr})`,
-          totalStock: qty,
-          allocatedStock: 0,
-          remainingStock: qty,
-          unit: unitStr,
-          monthlyRequirement: qty,
-          lotNo: `LOT-${new Date().getFullYear() + 543}`,
-          expireDate: '2029-12-31',
-          status: 'sufficient',
-        };
-        return [...prev, newItem];
-      }
-    });
-
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const nowDay = dayNames[new Date().getDay()];
-    const newLog: StockTransactionLog = {
-      id: `LOG-${Date.now()}`,
-      dateStr: nowDay,
-      itemName,
-      type: 'in',
-      quantity: qty,
-    };
-    setStockLogs((prev) => [newLog, ...prev.slice(0, 49)]);
-    setNewStockForm({ name: '', code: '', unit: '', quantity: '' });
-    setInventoryNotice(`✅ บันทึกรับพัสดุ "${itemName}" จำนวน +${qty} ${unitStr} เข้าคลังเรียบร้อยแล้ว`);
-    setTimeout(() => setInventoryNotice(null), 3500);
-  };
 
   // New Patient Registration Form State with GPS & Round Items (By Fiscal Year & Round)
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
@@ -5768,179 +5681,17 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         </div>
       )}
 
-      {/* SUB-VIEW 3: คลังอุปกรณ์ (Matches Image 4) */}
+      {/* SUB-VIEW 3: คลังอุปกรณ์ (Enhanced with Editing, Health KPIs, Demand Forecast, Quick Adjust, Print & CSV) */}
       {subTab === 'inventory' && (
-        <div className="space-y-4">
-          {/* Header Title */}
-          <div className="flex items-center gap-2.5 px-1">
-            <span className="text-xl">🏪</span>
-            <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
-              คลังพัสดุ / คลังอุปกรณ์
-            </h3>
-          </div>
-
-          {inventoryNotice && (
-            <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between animate-in fade-in">
-              <span>{inventoryNotice}</span>
-              <button
-                onClick={() => setInventoryNotice(null)}
-                className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-0.5 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {/* 2-Column Layout matching Image 4 */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            {/* Left Column (7 cols): Stock Table */}
-            <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-slate-50/90 text-slate-800 font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-3 px-3.5 w-20">รหัส</th>
-                    <th className="py-3 px-3.5">รายการ</th>
-                    <th className="py-3 px-3.5">คงเหลือ</th>
-                    <th className="py-3 px-3.5">หน่วย</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {inventory.map((item, idx) => (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-3.5 text-slate-700 font-medium">
-                        {item.code || idx + 1}
-                      </td>
-                      <td className="py-3.5 px-3.5 font-semibold text-slate-800">
-                        {item.name}
-                      </td>
-                      <td className="py-3.5 px-3.5 font-extrabold text-slate-900">
-                        {item.remainingStock}
-                      </td>
-                      <td className="py-3.5 px-3.5 text-slate-600">
-                        {item.unit}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Right Column (5 cols): Add Stock Box + Recent History Box */}
-            <div className="lg:col-span-5 space-y-5">
-              {/* Top Right Card: รับพัสดุเข้าคลัง */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3.5">
-                <h4 className="text-sm sm:text-base font-extrabold text-slate-900">
-                  รับพัสดุเข้าคลัง
-                </h4>
-
-                <form onSubmit={handleAddStockSubmit} className="space-y-3 text-xs sm:text-sm">
-                  <div>
-                    <input
-                      type="text"
-                      required
-                      placeholder="ชื่อพัสดุ (เช่น ผ้าอ้อม M)"
-                      value={newStockForm.name}
-                      onChange={(e) => setNewStockForm({ ...newStockForm, name: e.target.value })}
-                      className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <input
-                        type="text"
-                        placeholder="รหัส"
-                        value={newStockForm.code}
-                        onChange={(e) => setNewStockForm({ ...newStockForm, code: e.target.value })}
-                        className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        required
-                        placeholder="หน่วย (ชิ้น/แพ็ค)"
-                        value={newStockForm.unit}
-                        onChange={(e) => setNewStockForm({ ...newStockForm, unit: e.target.value })}
-                        className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <input
-                      type="number"
-                      min={1}
-                      required
-                      placeholder="จำนวน"
-                      value={newStockForm.quantity}
-                      onChange={(e) => setNewStockForm({ ...newStockForm, quantity: e.target.value })}
-                      className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-                  >
-                    บันทึกรับเข้า
-                  </button>
-                </form>
-              </div>
-
-              {/* Bottom Right Card: ประวัติการเข้า-ออกคลัง (50 รายการล่าสุด) */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
-                <div className="flex items-center gap-2">
-                  <RotateCcw className="w-4 h-4 text-slate-500" />
-                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
-                    ประวัติการเข้า-ออกคลัง (50 รายการล่าสุด)
-                  </h4>
-                </div>
-
-                <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 px-3">ว/ด/ป</th>
-                        <th className="py-2.5 px-3">รายการ</th>
-                        <th className="py-2.5 px-3 text-center">เข้า/ออก</th>
-                        <th className="py-2.5 px-3 text-right">จำนวน</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {stockLogs.map((log) => (
-                        <tr key={log.id} className="hover:bg-slate-50/70">
-                          <td className="py-2.5 px-3 text-slate-500 font-medium">
-                            {log.dateStr}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-800 font-medium">
-                            {log.itemName}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white ${
-                                log.type === 'in' ? 'bg-emerald-600' : 'bg-rose-600'
-                              }`}
-                            >
-                              {log.type === 'in' ? 'รับเข้า' : 'จ่ายออก'}
-                            </span>
-                          </td>
-                          <td
-                            className={`py-2.5 px-3 text-right font-bold ${
-                              log.type === 'in' ? 'text-emerald-700' : 'text-rose-700'
-                            }`}
-                          >
-                            {log.type === 'in' && log.quantity > 0 ? `+${log.quantity}` : log.quantity}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <LtcInventoryManager
+          inventory={inventory}
+          setInventory={setInventory}
+          stockLogs={stockLogs}
+          setStockLogs={setStockLogs}
+          patients={effectivePatients}
+          userRole={userRole}
+          onShowToast={(msg) => (onShowToast ? onShowToast('success', msg) : undefined)}
+        />
       )}
 
       {/* SUB-VIEW 4: โครงการ สปสช. (ยื่นเสนอ, มติกรรมการ, พิมพ์เอกสารแนบ 6) */}
