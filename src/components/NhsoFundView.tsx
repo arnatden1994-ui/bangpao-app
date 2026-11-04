@@ -39,6 +39,13 @@ import {
   RotateCcw,
   Sparkles,
   Table,
+  LayoutDashboard,
+  BarChart3,
+  PieChart,
+  ArrowRight,
+  ExternalLink,
+  FileSpreadsheet,
+  Activity,
 } from 'lucide-react';
 import {
   NhsoProject,
@@ -72,6 +79,8 @@ import { NhsoFundSettingsModal } from './NhsoFundSettingsModal.tsx';
 import { PrintNhsoProjectModal } from './PrintNhsoProjectModal.tsx';
 import { NhsoDisbursementModal } from './NhsoDisbursementModal.tsx';
 import { NhsoFundRevenueModal } from './NhsoFundRevenueModal.tsx';
+
+export type NhsoMainTab = 'dashboard' | 'attachment2_summary' | 'management_disbursement';
 
 interface NhsoFundViewProps {
   projects?: NhsoProject[];
@@ -127,6 +136,9 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   const [activeWorkflowTab, setActiveWorkflowTab] = useState<
     'all' | 'under_review' | 'approved' | 'disbursing' | 'completed'
   >('all');
+
+  // Primary Navigation Mode: 1. แดชบอร์ดสรุปแต่ละปี, 2. สรุปโครงการ (เอกสารแนบ 2), 3. ตารางบริหารและเบิกจ่าย
+  const [activeMainTab, setActiveMainTab] = useState<NhsoMainTab>('dashboard');
 
   // Table View Mode: Color-coded Attachment 2 Tracking vs Detailed Management
   const [tableViewMode, setTableViewMode] = useState<
@@ -514,20 +526,22 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         if (trackingFilter === 'refunded' && !isProjectTrackingRefunded(p)) return false;
         if (trackingFilter === 'selected_only' && !selectedProjectIds.includes(p.id))
           return false;
-        // Workflow Tab filter
-        if (activeWorkflowTab === 'under_review') {
-          if (p.status !== 'submitted' && p.status !== 'under_review' && p.status !== 'draft')
-            return false;
-        } else if (activeWorkflowTab === 'approved') {
-          if (p.status !== 'approved' && p.status !== 'approved_reduced') return false;
-        } else if (activeWorkflowTab === 'disbursing') {
-          if (
-            (p.status !== 'approved' && p.status !== 'approved_reduced') ||
-            (p.disbursedAmount || 0) >= (p.budgetApproved || p.budgetRequested)
-          )
-            return false;
-        } else if (activeWorkflowTab === 'completed') {
-          if (!isProjectTrackingCompleted(p)) return false;
+        // Workflow Tab filter (only active in detailed management view)
+        if (activeMainTab === 'management_disbursement') {
+          if (activeWorkflowTab === 'under_review') {
+            if (p.status !== 'submitted' && p.status !== 'under_review' && p.status !== 'draft')
+              return false;
+          } else if (activeWorkflowTab === 'approved') {
+            if (p.status !== 'approved' && p.status !== 'approved_reduced') return false;
+          } else if (activeWorkflowTab === 'disbursing') {
+            if (
+              (p.status !== 'approved' && p.status !== 'approved_reduced') ||
+              (p.disbursedAmount || 0) >= (p.budgetApproved || p.budgetRequested)
+            )
+              return false;
+          } else if (activeWorkflowTab === 'completed') {
+            if (!isProjectTrackingCompleted(p)) return false;
+          }
         }
         // Org match
         if (selectedOrgFilter !== 'all' && p.proposingOrg !== selectedOrgFilter) return false;
@@ -552,6 +566,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     selectedProjectIds,
     selectedOrgFilter,
     activeWorkflowTab,
+    activeMainTab,
     search,
   ]);
 
@@ -631,6 +646,122 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     return Array.from(set);
   }, [yearProjects]);
 
+  // Multi-Year Comparative Matrix Data (2569 vs 2570 vs 2571...)
+  const multiYearSummary = useMemo(() => {
+    return availableYears.map((yr) => {
+      const projs = projects.filter((p) => p.fiscalYear === yr);
+      const count = projs.length;
+      const req = projs.reduce((s, p) => s + (p.budgetRequested || 0), 0);
+      const rev = fundSettings.revenueSourcesByYear?.[yr];
+      const fundFrame =
+        rev?.totalAnnualBudget ||
+        (yr === fundSettings.fiscalYear ? fundSettings.totalFundBudget : 0) ||
+        0;
+      const approved = projs.reduce(
+        (s, p) =>
+          s +
+          (p.status === 'approved' ||
+          p.status === 'approved_reduced' ||
+          p.status === 'completed' ||
+          p.committeeDecision === 'approve' ||
+          (p.disbursedAmount || 0) > 0
+            ? (p.budgetApproved && p.budgetApproved > 0 ? p.budgetApproved : p.budgetRequested)
+            : 0),
+        0
+      );
+      const disbursed = projs.reduce((s, p) => s + (p.disbursedAmount || 0), 0);
+      const refund = projs
+        .filter((p) => isProjectTrackingRefunded(p) || getProjectRefundAmount(p) > 0)
+        .reduce((s, p) => s + getProjectRefundAmount(p), 0);
+      const completed = projs.filter((p) => isProjectTrackingCompleted(p)).length;
+      const extended = projs.filter((p) => isProjectTrackingExtended(p)).length;
+      const refundedCount = projs.filter((p) => isProjectTrackingRefunded(p)).length;
+      const disbPercent = approved > 0 ? Math.round((disbursed / approved) * 100) : 0;
+
+      return {
+        year: yr,
+        count,
+        fundFrame,
+        req,
+        approved,
+        disbursed,
+        refund,
+        completed,
+        extended,
+        refundedCount,
+        disbPercent,
+      };
+    });
+  }, [projects, availableYears, fundSettings]);
+
+  // Category 1 to 8 Summary for Dashboard
+  const categoryStats = useMemo(() => {
+    const targetProjs = yearProjects;
+    const totalReq = targetProjs.reduce((s, p) => s + (p.budgetRequested || 0), 0);
+    return NHSO_FUND_CATEGORIES.map((cat) => {
+      const matched = targetProjs.filter((p) => (p.categoryNumber || 1) === cat.number);
+      const count = matched.length;
+      const budgetReq = matched.reduce((s, p) => s + (p.budgetRequested || 0), 0);
+      const budgetApp = matched.reduce(
+        (s, p) =>
+          s +
+          (p.status === 'approved' ||
+          p.status === 'approved_reduced' ||
+          p.status === 'completed' ||
+          p.committeeDecision === 'approve'
+            ? (p.budgetApproved && p.budgetApproved > 0 ? p.budgetApproved : p.budgetRequested)
+            : 0),
+        0
+      );
+      const disbursed = matched.reduce((s, p) => s + (p.disbursedAmount || 0), 0);
+      const percentShare = totalReq > 0 ? Math.round((budgetReq / totalReq) * 100) : 0;
+      const theme = getCategoryColorTheme(cat.number);
+      return {
+        category: cat,
+        count,
+        budgetReq,
+        budgetApp,
+        disbursed,
+        percentShare,
+        theme,
+      };
+    });
+  }, [yearProjects]);
+
+  // Agency Summary for Dashboard
+  const agencyStats = useMemo(() => {
+    const targetProjs = yearProjects;
+    const totalReq = targetProjs.reduce((s, p) => s + (p.budgetRequested || 0), 0);
+    const map: Record<
+      string,
+      { org: string; count: number; budgetReq: number; budgetApp: number; disbursed: number }
+    > = {};
+    targetProjs.forEach((p) => {
+      const org = p.proposingOrg || 'กองสาธารณสุขและสิ่งแวดล้อม';
+      if (!map[org]) {
+        map[org] = { org, count: 0, budgetReq: 0, budgetApp: 0, disbursed: 0 };
+      }
+      map[org].count += 1;
+      map[org].budgetReq += p.budgetRequested || 0;
+      const isApp =
+        p.status === 'approved' ||
+        p.status === 'approved_reduced' ||
+        p.status === 'completed' ||
+        p.committeeDecision === 'approve';
+      map[org].budgetApp += isApp
+        ? (p.budgetApproved && p.budgetApproved > 0 ? p.budgetApproved : p.budgetRequested)
+        : 0;
+      map[org].disbursed += p.disbursedAmount || 0;
+    });
+    return Object.values(map)
+      .sort((a, b) => b.budgetReq - a.budgetReq)
+      .map((item) => ({
+        ...item,
+        percentShare: totalReq > 0 ? Math.round((item.budgetReq / totalReq) * 100) : 0,
+        disbPercent: item.budgetApp > 0 ? Math.round((item.disbursed / item.budgetApp) * 100) : 0,
+      }));
+  }, [yearProjects]);
+
   // Open Approval Modal
   const openApprovalModal = (p: NhsoProject) => {
     setApprovalModalProject(p);
@@ -698,6 +829,205 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     }
     setApprovalModalProject(null);
   };
+
+  // Reusable KPI Cards Grid
+  const renderKpiCardsGrid = (showRefundCard = false) => (
+    <div
+      className={`grid grid-cols-1 sm:grid-cols-2 ${
+        showRefundCard ? 'lg:grid-cols-3 xl:grid-cols-6' : 'lg:grid-cols-5'
+      } gap-4`}
+    >
+      {/* 1. กรอบงบกองทุน (พร้อมคำนวณ 4 แหล่งที่มาของเงิน และข้อ 10(4)) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm relative group hover:border-amber-400 dark:hover:border-amber-600 transition-all">
+        <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
+          <span className="font-semibold text-slate-700 dark:text-slate-300">
+            กรอบงบกองทุน {selectedYear !== 'all' ? `ปี ${selectedYear}` : ''}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsRevenueModalOpen(true)}
+            className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+            title="เปิดหน้าต่างคำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) & ข้อ 10(4)"
+          >
+            <Coins className="w-3.5 h-3.5" />
+            <span>ที่มางบ</span>
+          </button>
+        </div>
+
+        <div
+          onClick={() => setIsRevenueModalOpen(true)}
+          className="cursor-pointer rounded-lg p-1 -m-1 transition-colors"
+          title="คลิกเพื่อคำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) และงบประชุม 10(4)"
+        >
+          <div className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center justify-between">
+            <span>
+              {totalFundBudget > 0 ? (
+                <>
+                  {totalFundBudget.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-slate-500">บาท</span>
+                </>
+              ) : (
+                <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                  ยังไม่ได้ตั้งงบ (คลิกตั้งงบ)
+                </span>
+              )}
+            </span>
+            <Coins className="w-4 h-4 text-emerald-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+          </div>
+
+          {currentRevenueSource ? (
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 space-y-0.5 border-t border-slate-100 dark:border-slate-800 pt-1.5 leading-tight">
+              <div className="flex items-center justify-between">
+                <span>สปสช. (45บ. x {currentRevenueSource.populationCount?.toLocaleString()} คน):</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  {(currentRevenueSource.nhsoPerCapitaTotal || 0).toLocaleString()} บ.
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>เทศบาลสมทบ ({currentRevenueSource.municipalMatchingRate}%):</span>
+                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  {(currentRevenueSource.municipalMatchingTotal || 0).toLocaleString()} บ.
+                </span>
+              </div>
+              {((currentRevenueSource.bankInterestTotal || 0) > 0 || (currentRevenueSource.carryOverTotal || 0) > 0) && (
+                <div className="flex items-center justify-between text-[9.5px]">
+                  <span>ดอกเบี้ย + ยกยอด:</span>
+                  <span className="font-semibold text-purple-600 dark:text-purple-400">
+                    {((currentRevenueSource.bankInterestTotal || 0) + (currentRevenueSource.carryOverTotal || 0)).toLocaleString()} บ.
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-400 mt-1">
+              คลิกเพื่อคำนวณ 4 แหล่งที่มาของเงินกองทุน
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* 2. ยอดขอรับงบรวม */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
+          <span>ยอดขอรับงบรวม</span>
+          <div className="p-1.5 bg-amber-50 dark:bg-amber-950/50 text-amber-600 rounded-lg">
+            <FileCheck className="w-4 h-4" />
+          </div>
+        </div>
+        <div className="text-xl font-black text-amber-600 dark:text-amber-400">
+          {totalBudgetRequested.toLocaleString()}{' '}
+          <span className="text-xs font-normal text-slate-500">บาท</span>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-1">จากทั้งหมด {yearProjects.length} โครงการ</p>
+      </div>
+
+      {/* 3. ยอดอนุมัติแล้ว */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
+          <span>ยอดอนุมัติแล้ว</span>
+          <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 rounded-lg">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+        </div>
+        <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+          {totalBudgetApproved.toLocaleString()}{' '}
+          <span className="text-xs font-normal text-slate-500">บาท</span>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-1">
+          อนุมัติ {approvedCount} จาก {yearProjects.length} โครงการ
+        </p>
+      </div>
+
+      {/* 4. ยอดเบิกจ่ายจริงสะสม (Disbursement Tracking) */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
+          <span>เบิกจ่ายจริงสะสม</span>
+          <div className="p-1.5 bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 rounded-lg">
+            <Receipt className="w-4 h-4" />
+          </div>
+        </div>
+        <div className="text-xl font-black text-cyan-600 dark:text-cyan-400">
+          {totalDisbursedActual.toLocaleString()}{' '}
+          <span className="text-xs font-normal text-slate-500">บาท</span>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-1">
+          {totalBudgetApproved > 0
+            ? `เบิกจ่ายแล้ว ${Math.round((totalDisbursedActual / totalBudgetApproved) * 100)}%`
+            : 'รอการเบิกจ่าย'}
+        </p>
+      </div>
+
+      {/* 5. งบประมาณคงเหลือ */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
+          <span>งบประมาณคงเหลือ</span>
+          <div className="p-1.5 bg-purple-50 dark:bg-purple-950/50 text-purple-600 rounded-lg">
+            <TrendingUp className="w-4 h-4" />
+          </div>
+        </div>
+        <div
+          className={`text-xl font-black ${
+            remainingBudget >= 0
+              ? 'text-purple-600 dark:text-purple-400'
+              : 'text-red-600 dark:text-red-400'
+          }`}
+        >
+          {totalFundBudget > 0 ? (
+            <>
+              {remainingBudget.toLocaleString()}{' '}
+              <span className="text-xs font-normal text-slate-500">บาท</span>
+            </>
+          ) : (
+            <span className="text-sm font-semibold text-slate-400">-</span>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-400 mt-1">
+          {totalFundBudget === 0
+            ? 'รอตั้งงบประมาณ'
+            : remainingBudget >= 0
+            ? 'คงเหลือในกรอบ'
+            : '⚠️ เกินกรอบงบประมาณ'}
+        </p>
+      </div>
+
+      {/* 6. ยอดเงินส่งคืนกองทุน (สำหรับ Dashboard) */}
+      {showRefundCard && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm relative group hover:border-rose-300 dark:hover:border-rose-700 transition-all">
+          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
+              ยอดส่งคืนกองทุน
+            </span>
+            <div className="p-1.5 bg-rose-50 dark:bg-rose-950/50 text-rose-600 rounded-lg">
+              <RotateCcw className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-xl font-black text-rose-600 dark:text-rose-400">
+            {totalYearRefundAmount.toLocaleString()}{' '}
+            <span className="text-xs font-normal text-slate-500">บาท</span>
+          </div>
+          <div className="flex items-center justify-between mt-1 text-[11px]">
+            <span className="text-slate-400">{yearRefundedCount} โครงการที่ส่งคืน</span>
+            {totalYearRefundAmount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  syncRefundsIntoSettings(projects, true);
+                  setIsRevenueModalOpen(true);
+                  showToast(
+                    `รวบรวมยอดเงินคืนรวม ${totalYearRefundAmount.toLocaleString()} บาท เข้าสู่ "งบข้อ 4 เงินยกยอดจากปีเก่า" เรียบร้อยแล้ว!`
+                  );
+                }}
+                className="text-[10px] font-bold text-purple-600 hover:text-purple-700 underline cursor-pointer"
+                title="ส่งยอดคืนไปรวมในงบข้อ 4"
+              >
+                ส่งเข้างบข้อ 4 ➔
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -894,530 +1224,660 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         </div>
       )}
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* 1. กรอบงบกองทุน (พร้อมคำนวณ 4 แหล่งที่มาของเงิน และข้อ 10(4)) */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm relative group hover:border-amber-400 dark:hover:border-amber-600 transition-all">
-          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span className="font-semibold text-slate-700 dark:text-slate-300">
-              กรอบงบกองทุน {selectedYear !== 'all' ? `ปี ${selectedYear}` : ''}
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsRevenueModalOpen(true)}
-              className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-bold"
-              title="เปิดหน้าต่างคำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) & ข้อ 10(4)"
-            >
-              <Coins className="w-3.5 h-3.5" />
-              <span>ที่มางบ</span>
-            </button>
-          </div>
-
-          <div
-            onClick={() => setIsRevenueModalOpen(true)}
-            className="cursor-pointer rounded-lg p-1 -m-1 transition-colors"
-            title="คลิกเพื่อคำนวณที่มาของเงินกองทุน (สปสช., เทศบาลสมทบ, ดอกเบี้ย, ยกยอด) และงบประชุม 10(4)"
-          >
-            <div className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center justify-between">
-              <span>
-                {totalFundBudget > 0 ? (
-                  <>
-                    {totalFundBudget.toLocaleString()}{' '}
-                    <span className="text-xs font-normal text-slate-500">บาท</span>
-                  </>
-                ) : (
-                  <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">
-                    ยังไม่ได้ตั้งงบ (คลิกตั้งงบ)
-                  </span>
-                )}
-              </span>
-              <Coins className="w-4 h-4 text-emerald-600 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </div>
-
-            {currentRevenueSource ? (
-              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 space-y-0.5 border-t border-slate-100 dark:border-slate-800 pt-1.5 leading-tight">
-                <div className="flex items-center justify-between">
-                  <span>สปสช. (45บ. x {currentRevenueSource.populationCount?.toLocaleString()} คน):</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    {(currentRevenueSource.nhsoPerCapitaTotal || 0).toLocaleString()} บ.
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>เทศบาลสมทบ ({currentRevenueSource.municipalMatchingRate}%):</span>
-                  <span className="font-semibold text-blue-600 dark:text-blue-400">
-                    {(currentRevenueSource.municipalMatchingTotal || 0).toLocaleString()} บ.
-                  </span>
-                </div>
-                {((currentRevenueSource.bankInterestTotal || 0) > 0 || (currentRevenueSource.carryOverTotal || 0) > 0) && (
-                  <div className="flex items-center justify-between text-[9.5px]">
-                    <span>ดอกเบี้ย + ยกยอด:</span>
-                    <span className="font-semibold text-purple-600 dark:text-purple-400">
-                      {((currentRevenueSource.bankInterestTotal || 0) + (currentRevenueSource.carryOverTotal || 0)).toLocaleString()} บ.
-                    </span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-[11px] text-slate-400 mt-1">
-                คลิกเพื่อคำนวณ 4 แหล่งที่มาของเงินกองทุน
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* 2. ยอดขอรับงบรวม */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span>ยอดขอรับงบรวม</span>
-            <div className="p-1.5 bg-amber-50 dark:bg-amber-950/50 text-amber-600 rounded-lg">
-              <FileCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-amber-600 dark:text-amber-400">
-            {totalBudgetRequested.toLocaleString()}{' '}
-            <span className="text-xs font-normal text-slate-500">บาท</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">จากทั้งหมด {yearProjects.length} โครงการ</p>
-        </div>
-
-        {/* 3. ยอดอนุมัติแล้ว */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span>ยอดอนุมัติแล้ว</span>
-            <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 rounded-lg">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-            {totalBudgetApproved.toLocaleString()}{' '}
-            <span className="text-xs font-normal text-slate-500">บาท</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            อนุมัติ {approvedCount} จาก {yearProjects.length} โครงการ
-          </p>
-        </div>
-
-        {/* 4. ยอดเบิกจ่ายจริงสะสม (Disbursement Tracking) */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span>เบิกจ่ายจริงสะสม</span>
-            <div className="p-1.5 bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 rounded-lg">
-              <Receipt className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-cyan-600 dark:text-cyan-400">
-            {totalDisbursedActual.toLocaleString()}{' '}
-            <span className="text-xs font-normal text-slate-500">บาท</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            {totalBudgetApproved > 0
-              ? `เบิกจ่ายแล้ว ${Math.round((totalDisbursedActual / totalBudgetApproved) * 100)}%`
-              : 'รอการเบิกจ่าย'}
-          </p>
-        </div>
-
-        {/* 5. งบประมาณคงเหลือ */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span>งบประมาณคงเหลือ</span>
-            <div className="p-1.5 bg-purple-50 dark:bg-purple-950/50 text-purple-600 rounded-lg">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div
-            className={`text-xl font-black ${
-              remainingBudget >= 0
-                ? 'text-purple-600 dark:text-purple-400'
-                : 'text-red-600 dark:text-red-400'
+      {/* ===================================================================== */}
+      {/* 4 PRIMARY NAVIGATION BUTTONS RIBBON (แถบ 4 ปุ่มหลักตามที่ผู้ใช้กำหนด) */}
+      {/* 1. หน้าแดชบอร์ดสรุปแต่ละปี                                            */}
+      {/* 2. สรุปโครงการ (เอกสารแนบ 2) - เลือกปีสรุปได้                        */}
+      {/* 3. ตารางบริหารและเบิกจ่าย                                             */}
+      {/* 4. เขียนโครงการใหม่                                                  */}
+      {/* ===================================================================== */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-3 border border-slate-200 dark:border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-2 z-20 backdrop-blur-md bg-white/95 dark:bg-slate-900/95">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Button 1: หน้าแดชบอร์ด */}
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('dashboard')}
+            className={`px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+              activeMainTab === 'dashboard'
+                ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 text-white shadow-lg shadow-blue-500/30 scale-[1.02] ring-2 ring-blue-400/30'
+                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
             }`}
           >
-            {totalFundBudget > 0 ? (
-              <>
-                {remainingBudget.toLocaleString()}{' '}
-                <span className="text-xs font-normal text-slate-500">บาท</span>
-              </>
-            ) : (
-              <span className="text-sm font-semibold text-slate-400">-</span>
-            )}
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            {totalFundBudget === 0
-              ? 'รอตั้งงบประมาณ'
-              : remainingBudget >= 0
-              ? 'คงเหลือในกรอบ'
-              : '⚠️ เกินกรอบงบประมาณ'}
-          </p>
-        </div>
-      </div>
+            <LayoutDashboard className="w-4 h-4" />
+            <span>📊 หน้าแดชบอร์ด (สรุปข้อมูลแต่ละปี)</span>
+          </button>
 
-      {/* Workflow Tabs (For Public Health Officers) */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl p-2 gap-2 shadow-sm text-xs font-medium">
-        <button
-          onClick={() => setActiveWorkflowTab('all')}
-          className={`px-3 py-2 rounded-xl transition-all ${
-            activeWorkflowTab === 'all'
-              ? 'bg-emerald-600 text-white font-bold shadow'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          ทั้งหมด ({yearProjects.length})
-        </button>
-
-        <button
-          onClick={() => setActiveWorkflowTab('under_review')}
-          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-            activeWorkflowTab === 'under_review'
-              ? 'bg-blue-600 text-white font-bold shadow'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5" />
-          <span>📥 หน่วยงานเสนอเข้า (รอตรวจ/รอ กก.)</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
-            {pendingCount}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveWorkflowTab('approved')}
-          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-            activeWorkflowTab === 'approved'
-              ? 'bg-emerald-600 text-white font-bold shadow'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>🟢 กก.อนุมัติแล้ว</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
-            {approvedCount}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveWorkflowTab('disbursing')}
-          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-            activeWorkflowTab === 'disbursing'
-              ? 'bg-cyan-600 text-white font-bold shadow'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Receipt className="w-3.5 h-3.5" />
-          <span>💰 ติดตามการเบิกจ่ายจริง</span>
-        </button>
-
-        <button
-          onClick={() => setActiveWorkflowTab('completed')}
-          className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-            activeWorkflowTab === 'completed'
-              ? 'bg-purple-600 text-white font-bold shadow'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <FileCheck2 className="w-3.5 h-3.5" />
-          <span>✅ ส่งรายงานผลและปิดโครงการ</span>
-        </button>
-      </div>
-
-      {/* Comprehensive Color-Coded Filter Panel (Category, Organization, Tracking Status, Search) */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
-        {/* Row 1: Search + Quick Selects + View Mode Switcher */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ค้นหาชื่อโครงการ, หน่วยงานผู้ขอรับงบ, ผู้รับผิดชอบ หรือรหัส..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Org dropdown */}
-            <select
-              value={selectedOrgFilter}
-              onChange={(e) => setSelectedOrgFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-medium"
-            >
-              <option value="all">ทุกหน่วยงานผู้ขอ ({distinctOrgs.length} หน่วยงาน)</option>
-              {distinctOrgs.map((org) => (
-                <option key={org} value={org}>
-                  {org} ({yearProjects.filter((p) => p.proposingOrg === org).length})
-                </option>
-              ))}
-            </select>
-
-            {/* Status dropdown */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-medium"
-            >
-              <option value="all">ทุกมติ กก.</option>
-              <option value="submitted">รอพิจารณา / เสนอขอ</option>
-              <option value="approved">อนุมัติแล้ว</option>
-              <option value="approved_reduced">อนุมัติปรับลดงบ</option>
-              <option value="completed">เสร็จสิ้น / รายงานผลแล้ว</option>
-              <option value="draft">ฉบับร่าง</option>
-              <option value="rejected">ไม่อนุมัติ</option>
-            </select>
-
-            {/* Reset all filters button */}
-            {(selectedCategory !== 'all' ||
-              selectedOrgFilter !== 'all' ||
-              trackingFilter !== 'all' ||
-              statusFilter !== 'all' ||
-              search.trim() !== '') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCategory('all');
-                  setSelectedOrgFilter('all');
-                  setTrackingFilter('all');
-                  setStatusFilter('all');
-                  setSearch('');
-                }}
-                className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>ล้างตัวกรอง</span>
-              </button>
-            )}
-
-            {/* View Mode Switcher */}
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-              <button
-                type="button"
-                onClick={() => setTableViewMode('attachment2_tracking')}
-                className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  tableViewMode === 'attachment2_tracking'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <ListChecks className="w-3.5 h-3.5" />
-                <span>ตารางแยกสี & ปุ่มติ๊ก (เอกสารแนบ 2)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTableViewMode('detailed_management')}
-                className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  tableViewMode === 'detailed_management'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Table className="w-3.5 h-3.5" />
-                <span>ตารางบริหาร & เบิกจ่ายละเอียด</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2: Color-Coded Category Filter Pills (Matching เอกสารแนบ 2 Colors) */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
-            <span>🎨 กรองตามประเภทโครงการ (แยกสีตามประเภทกองทุน สปสช.):</span>
-          </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('all')}
-              className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-bold transition-all cursor-pointer border ${
-                selectedCategory === 'all'
-                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+          {/* Button 2: สรุปโครงการ (เอกสารแนบ 2) */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMainTab('attachment2_summary');
+              setTableViewMode('attachment2_tracking');
+            }}
+            className={`px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+              activeMainTab === 'attachment2_summary'
+                ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-teal-700 text-white shadow-lg shadow-emerald-500/30 scale-[1.02] ring-2 ring-emerald-400/30'
+                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            <ListChecks className="w-4 h-4" />
+            <span>📑 สรุปโครงการ (เอกสารแบบ 2)</span>
+            <span
+              className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                activeMainTab === 'attachment2_summary'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
               }`}
             >
-              ทุกประเภท ({yearProjects.length})
-            </button>
-            {NHSO_FUND_CATEGORIES.map((cat) => {
-              const count = yearProjects.filter((p) => (p.categoryNumber || 1) === cat.number).length;
-              const catTheme = getCategoryColorTheme(cat.number);
-              const isSelected = selectedCategory === cat.number;
-              return (
-                <button
-                  key={cat.number}
-                  type="button"
-                  onClick={() =>
-                    setSelectedCategory(isSelected ? 'all' : cat.number)
-                  }
-                  style={{
-                    backgroundColor: isSelected || count > 0 ? catTheme.headerHex : undefined,
-                    borderColor: catTheme.borderHex,
-                  }}
-                  className={`px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer ${
-                    isSelected
-                      ? 'ring-2 ring-offset-1 ring-slate-900 dark:ring-white font-black text-slate-950 shadow-md scale-[1.02]'
-                      : count > 0
-                      ? 'font-bold text-slate-950 opacity-90 hover:opacity-100'
-                      : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-800 opacity-60'
-                  }`}
-                  title={cat.title}
-                >
-                  <span>ประเภทที่ {cat.number}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/15 text-slate-950 font-extrabold">
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+              เลือกปีสรุปได้
+            </span>
+          </button>
+
+          {/* Button 3: ตารางบริหารและเบิกจ่าย */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMainTab('management_disbursement');
+              setTableViewMode('detailed_management');
+            }}
+            className={`px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+              activeMainTab === 'management_disbursement'
+                ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-pink-700 text-white shadow-lg shadow-purple-500/30 scale-[1.02] ring-2 ring-purple-400/30'
+                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            <Table className="w-4 h-4" />
+            <span>📋 ตารางบริหารและเบิกจ่าย</span>
+          </button>
         </div>
 
-        {/* Row 3: Color-Coded Proposing Organization Filter Pills (แยกสีตามหน่วยงานผู้ขอรับงบ) */}
-        {distinctOrgs.length > 0 && (
-          <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
-              <span>🏢 กรองตามหน่วยงาน / กลุ่มองค์กรผู้ขอรับงบ (แยกสีชัดเจน):</span>
+        {/* Button 4: เขียนโครงการใหม่ */}
+        <button
+          type="button"
+          onClick={() => {
+            setEditingProject(null);
+            setIsBuilderOpen(true);
+          }}
+          className="px-4 py-2.5 rounded-2xl font-black text-xs bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 flex items-center gap-2 shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer ml-auto border border-emerald-300/40"
+        >
+          <Plus className="w-4 h-4 stroke-[3] text-slate-950" />
+          <span>✍️ + เขียนโครงการใหม่ ({selectedYear === 'all' ? '2570' : selectedYear})</span>
+        </button>
+      </div>
+
+      {/* ===================================================================== */}
+      {/* 1. EXECUTIVE DASHBOARD (หน้าแดชบอร์ดสรุปภาพรวมแต่ละปี & เปรียบเทียบ) */}
+      {/* ===================================================================== */}
+      {activeMainTab === 'dashboard' && (
+        <div className="space-y-6">
+          {/* Dashboard Scope Header */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl border border-blue-200/50 dark:border-blue-800/50">
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+                    แดชบอร์ดสรุปภาพรวมโครงการกองทุน สปสช.
+                  </h2>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-extrabold">
+                    {selectedYear === 'all' ? 'ภาพรวมทุกปีงบประมาณ' : `รอบปีงบประมาณ ${selectedYear}`}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  วิเคราะห์กรอบวงเงินกองทุน, สัดส่วน 8 หมวด (ข้อ 10(1)-(8)), สรุปตามหน่วยงาน และตารางเปรียบเทียบข้อมูลย้อนหลัง
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setSelectedOrgFilter('all')}
-                className={`px-2.5 py-1 rounded-lg whitespace-nowrap font-bold transition-all cursor-pointer border ${
-                  selectedOrgFilter === 'all'
-                    ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                }`}
-              >
-                ทุกหน่วยงาน ({distinctOrgs.length})
-              </button>
-              {distinctOrgs.map((org) => {
-                const orgTheme = getOrgColorTheme(org);
-                const count = yearProjects.filter((p) => p.proposingOrg === org).length;
-                const isSelected = selectedOrgFilter === org;
-                return (
+
+            {/* Scope Year Switcher */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500 font-bold">เลือกปีงบที่ต้องการดู:</span>
+              <div className="flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs gap-1 shadow-xs">
+                {availableYears.map((yr) => (
                   <button
-                    key={org}
+                    key={yr}
                     type="button"
-                    onClick={() => setSelectedOrgFilter(isSelected ? 'all' : org)}
-                    style={{
-                      backgroundColor:
-                        orgTheme.bgHex !== '#ffffff' ? orgTheme.bgHex : '#f8fafc',
-                      borderColor: orgTheme.borderHex,
+                    onClick={() => {
+                      setSelectedYear(yr);
+                      setSelectedProjectIds([]);
                     }}
-                    className={`px-2.5 py-1 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 border text-slate-950 cursor-pointer ${
-                      isSelected
-                        ? 'ring-2 ring-offset-1 ring-emerald-600 font-black shadow-sm scale-[1.02]'
-                        : 'font-semibold opacity-90 hover:opacity-100'
+                    className={`px-3.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      selectedYear === yr
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                     }`}
                   >
-                    <span>{org}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10 font-bold">
-                      {count}
+                    <span>ปี {yr}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        selectedYear === yr ? 'bg-white/20 text-white' : 'bg-black/10 dark:bg-white/10'
+                      }`}
+                    >
+                      {projects.filter((p) => p.fiscalYear === yr).length}
                     </span>
                   </button>
-                );
-              })}
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSelectedYear('all')}
+                  className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                    selectedYear === 'all'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  รวมทุกปี ({projects.length})
+                </button>
+              </div>
             </div>
           </div>
-        )}
 
-        {/* Row 4: Tracking Status Filter Pills & Selection Filter */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 text-xs">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] text-slate-500 font-semibold mr-1">
-              ☑️ กรองผลการติดตามโครงการ:
-            </span>
-            <button
-              type="button"
-              onClick={() => setTrackingFilter('all')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border ${
-                trackingFilter === 'all'
-                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              ทั้งหมด ({yearProjects.length})
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setTrackingFilter(trackingFilter === 'completed' ? 'all' : 'completed')
-              }
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
-                trackingFilter === 'completed'
-                  ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-              }`}
-            >
-              <span>☑ ดำเนินการแล้ว ({yearCompletedCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setTrackingFilter(trackingFilter === 'extended' ? 'all' : 'extended')
-              }
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
-                trackingFilter === 'extended'
-                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-              }`}
-            >
-              <span>⏳ ขอขยายเวลา ({yearExtendedCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setTrackingFilter(trackingFilter === 'refunded' ? 'all' : 'refunded')
-              }
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
-                trackingFilter === 'refunded'
-                  ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                  : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-              }`}
-            >
-              <span>
-                ↩️ คืนเงิน ({yearRefundedCount} โครงการ • รวม {totalYearRefundAmount.toLocaleString()} บ.)
-              </span>
-            </button>
-            {totalYearRefundAmount > 0 && (
+          {/* Financial KPI Cards Grid with Refund Card */}
+          {renderKpiCardsGrid(true)}
+
+          {/* Implementation & Tracking Progress Overview */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-600" />
+                <h3 className="font-black text-sm text-slate-900 dark:text-slate-100">
+                  สถานะและการติดตามผลการดำเนินงาน ({yearProjects.length} โครงการ)
+                </h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                  ดำเนินการแล้ว {yearCompletedCount} โครงการ
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+                  ขอขยายเวลา {yearExtendedCount} โครงการ
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1 font-semibold text-rose-700 dark:text-rose-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
+                  ส่งคืนเงิน {yearRefundedCount} โครงการ
+                </span>
+                {pendingCount > 0 && (
+                  <>
+                    <span>•</span>
+                    <span className="flex items-center gap-1 font-semibold text-blue-700 dark:text-blue-400">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+                      รออนุมัติ/เริ่ม {pendingCount} โครงการ
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Visual Segmented Progress Bar */}
+            <div className="w-full h-3.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex shadow-inner">
+              {yearProjects.length > 0 ? (
+                <>
+                  <div
+                    style={{
+                      width: `${(yearCompletedCount / yearProjects.length) * 100}%`,
+                    }}
+                    className="bg-emerald-500 h-full transition-all"
+                    title={`ดำเนินการแล้ว ${yearCompletedCount} โครงการ (${Math.round(
+                      (yearCompletedCount / yearProjects.length) * 100
+                    )}%)`}
+                  />
+                  <div
+                    style={{
+                      width: `${(yearExtendedCount / yearProjects.length) * 100}%`,
+                    }}
+                    className="bg-amber-500 h-full transition-all"
+                    title={`ขอขยายเวลา ${yearExtendedCount} โครงการ (${Math.round(
+                      (yearExtendedCount / yearProjects.length) * 100
+                    )}%)`}
+                  />
+                  <div
+                    style={{
+                      width: `${(yearRefundedCount / yearProjects.length) * 100}%`,
+                    }}
+                    className="bg-rose-500 h-full transition-all"
+                    title={`ส่งคืนเงิน ${yearRefundedCount} โครงการ (ยอดคืน ${totalYearRefundAmount.toLocaleString()} บ.)`}
+                  />
+                  <div
+                    style={{
+                      width: `${(pendingCount / yearProjects.length) * 100}%`,
+                    }}
+                    className="bg-blue-400 h-full transition-all"
+                    title={`รอพิจารณา / กำลังดำเนินการ ${pendingCount} โครงการ`}
+                  />
+                </>
+              ) : (
+                <div className="w-full bg-slate-200 dark:bg-slate-700 h-full" />
+              )}
+            </div>
+          </div>
+
+          {/* 8 NHSO Category Allocation Breakdown (ข้อ 10(1) ถึง 10(8)) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <PieChart className="w-4 h-4 text-emerald-600" />
+                  สัดส่วนการจัดสรรงบประมาณตามประเภทโครงการ สปสช. ทั้ง 8 หมวด (ข้อ 10(1) - (8))
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  จำแนกตามสีทางการของแบบเอกสารแนบ 2 สามารถคลิกที่หมวดเพื่อดูรายการโครงการได้ทันที
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
-                  syncRefundsIntoSettings(projects, true);
-                  setIsRevenueModalOpen(true);
-                  showToast(
-                    `รวบรวมยอดเงินคืนรวม ${totalYearRefundAmount.toLocaleString()} บาท เข้าสู่ "งบข้อ 4 เงินยกยอดจากปีเก่า" เรียบร้อยแล้ว!`
-                  );
+                  setActiveMainTab('attachment2_summary');
+                  setTableViewMode('attachment2_tracking');
                 }}
-                className="px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border bg-purple-600 hover:bg-purple-500 text-white border-purple-500 shadow-xs flex items-center gap-1"
-                title="รวบรวมยอดเงินคืนทั้งหมดไปไว้ในงบข้อ 4 เงินยกยอดจากปีเก่า และเปิดหน้าต่างตั้งค่างบ"
+                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
               >
-                <Coins className="w-3.5 h-3.5" />
-                <span>ส่งยอดคืน ({totalYearRefundAmount.toLocaleString()} บ.) ไปงบข้อ 4 เงินยกยอด</span>
+                <span>ดูตารางสรุปเต็ม (แบบ 2)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() =>
-                setTrackingFilter(
-                  trackingFilter === 'selected_only' ? 'all' : 'selected_only'
-                )
-              }
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
-                trackingFilter === 'selected_only'
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                  : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
-              }`}
-            >
-              <CheckSquare className="w-3.5 h-3.5" />
-              <span>เฉพาะชุดที่ติ๊กเลือก ({selectedProjectIds.length})</span>
-            </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {categoryStats.map((item) => (
+                <div
+                  key={item.category.number}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border shadow-sm p-3.5 flex flex-col justify-between transition-all hover:shadow-md hover:scale-[1.01]"
+                  style={{ borderColor: item.theme.borderHex }}
+                >
+                  <div>
+                    {/* Header with official category color */}
+                    <div
+                      className="px-2.5 py-1.5 rounded-xl border mb-2.5 flex items-center justify-between"
+                      style={{
+                        backgroundColor: item.theme.headerHex,
+                        borderColor: item.theme.borderHex,
+                      }}
+                    >
+                      <span className="font-black text-xs text-slate-950">
+                        ประเภทที่ {item.category.number}
+                      </span>
+                      <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-black/10 text-slate-950">
+                        {item.count} โครงการ
+                      </span>
+                    </div>
+
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-2 min-h-[32px] leading-snug">
+                      {item.category.name}
+                    </h4>
+
+                    {/* Stats */}
+                    <div className="mt-3 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">งบที่ขอรับ:</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">
+                          {item.budgetReq.toLocaleString()} บ.
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">อนุมัติแล้ว:</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          {item.budgetApp.toLocaleString()} บ.
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">เบิกจ่ายจริง:</span>
+                        <span className="font-bold text-cyan-600 dark:text-cyan-400">
+                          {item.disbursed.toLocaleString()} บ.
+                        </span>
+                      </div>
+
+                      {/* Percentage share bar */}
+                      <div className="pt-1">
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 mb-0.5">
+                          <span>สัดส่วนงบ</span>
+                          <span className="font-bold">{item.percentShare}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, item.percentShare)}%`,
+                              backgroundColor:
+                                item.theme.headerHex !== '#ffffff'
+                                  ? item.theme.headerHex
+                                  : '#10b981',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Action Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory(item.category.number);
+                      setActiveMainTab('attachment2_summary');
+                      setTableViewMode('attachment2_tracking');
+                    }}
+                    className="mt-3 w-full py-1.5 px-2 rounded-xl text-[11px] font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>ดูโครงการกลุ่มนี้ในแบบ 2</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Agency Distribution & Multi-Year Matrix Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Agency Budget Ranking (1 Col) */}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <h3 className="font-black text-sm text-slate-900 dark:text-slate-100">
+                    งบประมาณตามหน่วยงานผู้ขอ
+                  </h3>
+                </div>
+                <span className="text-[11px] font-bold text-slate-500">
+                  {agencyStats.length} หน่วยงาน
+                </span>
+              </div>
+
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                {agencyStats.map((ag) => {
+                  const orgTheme = getOrgColorTheme(ag.org);
+                  return (
+                    <div
+                      key={ag.org}
+                      className="p-3 rounded-2xl border space-y-1.5 transition-all hover:shadow-xs"
+                      style={{
+                        backgroundColor: orgTheme.bgHex !== '#ffffff' ? orgTheme.bgHex : undefined,
+                        borderColor: orgTheme.borderHex,
+                      }}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-black text-slate-950 line-clamp-1">{ag.org}</span>
+                        <span className="font-extrabold px-1.5 py-0.2 rounded-md bg-black/10 text-slate-950 text-[10px]">
+                          {ag.count} โครงการ
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-800">
+                        <span className="text-[11px]">งบขอรับรวม:</span>
+                        <span className="font-bold">{ag.budgetReq.toLocaleString()} บาท</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-600">
+                        <span>เบิกจ่ายแล้ว: {ag.disbursed.toLocaleString()} บ.</span>
+                        <span className="font-bold text-emerald-700">{ag.disbPercent}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-black/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-600 rounded-full"
+                          style={{ width: `${Math.min(100, ag.percentShare)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Multi-Year Comparative Matrix Table (2 Cols) */}
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-purple-600" />
+                    <h3 className="font-black text-sm text-slate-900 dark:text-slate-100">
+                      ตารางเปรียบเทียบข้อมูลย้อนหลังและแนวโน้ม (2569 vs 2570 vs 2571)
+                    </h3>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-bold">
+                    สรุปเสนอคณะกรรมการฯ
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mb-4">
+                  เปรียบเทียบตัวชี้วัดสำคัญของกองทุนหลักประกันสุขภาพตำบลบางเป้าในแต่ละปีงบประมาณ
+                </p>
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                      <tr>
+                        <th className="py-2.5 px-3">ตัวชี้วัด / รายการ</th>
+                        {multiYearSummary.map((my) => (
+                          <th key={my.year} className="py-2.5 px-3 text-right">
+                            ปีงบ {my.year}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <tr>
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          1. จำนวนโครงการที่ขอรับงบ
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right font-bold text-slate-900 dark:text-slate-100"
+                          >
+                            {my.count} โครงการ
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-50/50 dark:bg-slate-800/30">
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          2. กรอบวงเงินกองทุน (4 แหล่งที่มา)
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400"
+                          >
+                            {my.fundFrame > 0 ? `${my.fundFrame.toLocaleString()} บ.` : '-'}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          3. งบประมาณที่ขอรับรวม
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right font-bold text-amber-600 dark:text-amber-400"
+                          >
+                            {my.req.toLocaleString()} บ.
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-50/50 dark:bg-slate-800/30">
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          4. งบประมาณที่อนุมัติแล้ว
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right font-bold text-emerald-700 dark:text-emerald-300"
+                          >
+                            {my.approved.toLocaleString()} บ.
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          5. งบประมาณที่เบิกจ่ายจริงสะสม
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right font-bold text-cyan-600 dark:text-cyan-400"
+                          >
+                            {my.disbursed.toLocaleString()} บ.
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-50/50 dark:bg-slate-800/30">
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          6. ร้อยละการเบิกจ่ายจริง (%)
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right font-black text-cyan-700 dark:text-cyan-300"
+                          >
+                            {my.disbPercent}%
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          7. ยอดเงินส่งคืนกองทุน (คืนเข้าข้อ 4)
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right font-bold text-rose-600 dark:text-rose-400"
+                          >
+                            {my.refund > 0 ? `${my.refund.toLocaleString()} บ.` : '0 บ.'}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-50/50 dark:bg-slate-800/30">
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          8. โครงการดำเนินการแล้วเสร็จ
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td key={my.year} className="py-2 px-3 text-right font-bold text-emerald-600">
+                            {my.completed} โครงการ
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          9. สถานะวงรอบปีงบประมาณ
+                        </td>
+                        {multiYearSummary.map((my) => (
+                          <td
+                            key={my.year}
+                            className="py-2 px-3 text-right text-[11px] font-bold text-slate-600 dark:text-slate-400"
+                          >
+                            {my.year === '2569'
+                              ? 'ปิดงบสมบูรณ์ 100%'
+                              : my.year === '2570'
+                              ? 'ปีปัจจุบัน (รับคำขอ)'
+                              : 'รอบถัดไป'}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Bottom Quick Jump Buttons */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMainTab('attachment2_summary');
+                    setTableViewMode('attachment2_tracking');
+                  }}
+                  className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <ListChecks className="w-3.5 h-3.5" />
+                  <span>เปิดสรุปโครงการ (เอกสารแบบ 2)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMainTab('management_disbursement');
+                    setTableViewMode('detailed_management');
+                  }}
+                  className="px-4 py-2 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Table className="w-3.5 h-3.5" />
+                  <span>เปิดตารางบริหารและเบิกจ่าย</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* 2. สรุปโครงการ (เอกสารแบบ 2) - เลือกปีงบประมาณที่จะสรุปได้มาแสดง       */}
+      {/* ===================================================================== */}
+      {activeMainTab === 'attachment2_summary' && (
+        <div className="space-y-4">
+          {/* Dedicated Fiscal Year Selector & Category Filter Bar for Attachment 2 */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 dark:from-slate-800 dark:via-slate-850 dark:to-slate-900 p-4 rounded-3xl border border-emerald-200 dark:border-emerald-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200 flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                เลือกปีงบประมาณที่จะสรุปโครงการ (เอกสารแนบ 2):
+              </span>
+              <div className="flex flex-wrap bg-white dark:bg-slate-900 p-1 rounded-2xl border border-emerald-200 dark:border-slate-700 text-xs gap-1 shadow-xs">
+                {availableYears.map((yr) => {
+                  const count = projects.filter((p) => p.fiscalYear === yr).length;
+                  const isSelected = selectedYear === yr;
+                  return (
+                    <button
+                      key={yr}
+                      type="button"
+                      onClick={() => {
+                        setSelectedYear(yr);
+                        setSelectedProjectIds([]);
+                      }}
+                      className={`px-3.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>ปีงบ {yr}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-black/10 dark:bg-white/10'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setSelectedYear('all')}
+                  className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                    selectedYear === 'all'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  ทุกปี ({projects.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Summary Pill Badges */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200 shadow-xs">
+                รวม {filteredProjects.length} โครงการ
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-black shadow-xs">
+                งบรวม {filteredProjects.reduce((s, p) => s + p.budgetRequested, 0).toLocaleString()} บ.
+              </span>
+              {totalYearRefundAmount > 0 && (
+                <span className="px-3 py-1.5 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 font-bold border border-rose-200 dark:border-rose-800 shadow-xs">
+                  คืนเงิน {totalYearRefundAmount.toLocaleString()} บ.
+                </span>
+              )}
+            </div>
+          </div>
 
       {/* Multi-Year Dataset Checkbox Selection & Carry-Forward Action Bar */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white rounded-2xl p-4 border border-emerald-500/30 shadow-lg flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
@@ -1569,10 +2029,9 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       </div>
 
       {/* ===================================================================== */}
-      {/* VIEW MODE 1: COLOR-CODED ATTACHMENT 2 TRACKING TABLE (เอกสารแนบ 2)   */}
+      {/* Official Attachment 2 Table (เอกสารแนบ 2)                           */}
       {/* ===================================================================== */}
-      {tableViewMode === 'attachment2_tracking' && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-4 sm:p-6 space-y-5">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-4 sm:p-6 space-y-5">
           {/* Official Peach Title Banner matching เอกสารแนบ 2 */}
           <div
             className="w-full py-3 px-4 rounded-xl text-center border border-[#f4b084] shadow-xs space-y-0.5"
@@ -2034,12 +2493,383 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
             </div>
           )}
         </div>
-      )}
+      </div>
+    )}
 
       {/* ===================================================================== */}
-      {/* VIEW MODE 2: DETAILED MANAGEMENT & DISBURSEMENT TABLE                 */}
+      {/* 3. ตารางบริหารและเบิกจ่าย                                             */}
       {/* ===================================================================== */}
-      {tableViewMode === 'detailed_management' && (
+      {activeMainTab === 'management_disbursement' && (
+        <div className="space-y-4">
+          {/* KPI Cards Grid */}
+          {renderKpiCardsGrid(false)}
+
+          {/* Workflow Tabs (For Public Health Officers) */}
+          <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl p-2 gap-2 shadow-sm text-xs font-medium">
+            <button
+              onClick={() => setActiveWorkflowTab('all')}
+              className={`px-3 py-2 rounded-xl transition-all ${
+                activeWorkflowTab === 'all'
+                  ? 'bg-emerald-600 text-white font-bold shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              ทั้งหมด ({yearProjects.length})
+            </button>
+
+            <button
+              onClick={() => setActiveWorkflowTab('under_review')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeWorkflowTab === 'under_review'
+                  ? 'bg-blue-600 text-white font-bold shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>📥 หน่วยงานเสนอเข้า (รอตรวจ/รอ กก.)</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
+                {pendingCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveWorkflowTab('approved')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeWorkflowTab === 'approved'
+                  ? 'bg-emerald-600 text-white font-bold shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>🟢 กก.อนุมัติแล้ว</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
+                {approvedCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveWorkflowTab('disbursing')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeWorkflowTab === 'disbursing'
+                  ? 'bg-cyan-600 text-white font-bold shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              <span>💰 ติดตามการเบิกจ่ายจริง</span>
+            </button>
+
+            <button
+              onClick={() => setActiveWorkflowTab('completed')}
+              className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+                activeWorkflowTab === 'completed'
+                  ? 'bg-purple-600 text-white font-bold shadow'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <FileCheck2 className="w-3.5 h-3.5" />
+              <span>✅ ส่งรายงานผลและปิดโครงการ</span>
+            </button>
+          </div>
+
+          {/* Comprehensive Color-Coded Filter Panel (Category, Organization, Tracking Status, Search) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5">
+            {/* Row 1: Search + Quick Selects + View Mode Switcher */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="ค้นหาชื่อโครงการ, หน่วยงานผู้ขอรับงบ, ผู้รับผิดชอบ หรือรหัส..."
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Org dropdown */}
+                <select
+                  value={selectedOrgFilter}
+                  onChange={(e) => setSelectedOrgFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-medium"
+                >
+                  <option value="all">ทุกหน่วยงานผู้ขอ ({distinctOrgs.length} หน่วยงาน)</option>
+                  {distinctOrgs.map((org) => (
+                    <option key={org} value={org}>
+                      {org} ({yearProjects.filter((p) => p.proposingOrg === org).length})
+                    </option>
+                  ))}
+                </select>
+
+                {/* Status dropdown */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 font-medium"
+                >
+                  <option value="all">ทุกมติ กก.</option>
+                  <option value="submitted">รอพิจารณา / เสนอขอ</option>
+                  <option value="approved">อนุมัติแล้ว</option>
+                  <option value="approved_reduced">อนุมัติปรับลดงบ</option>
+                  <option value="completed">เสร็จสิ้น / รายงานผลแล้ว</option>
+                  <option value="draft">ฉบับร่าง</option>
+                  <option value="rejected">ไม่อนุมัติ</option>
+                </select>
+
+                {/* Reset all filters button */}
+                {(selectedCategory !== 'all' ||
+                  selectedOrgFilter !== 'all' ||
+                  trackingFilter !== 'all' ||
+                  statusFilter !== 'all' ||
+                  search.trim() !== '') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory('all');
+                      setSelectedOrgFilter('all');
+                      setTrackingFilter('all');
+                      setStatusFilter('all');
+                      setSearch('');
+                    }}
+                    className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>ล้างตัวกรอง</span>
+                  </button>
+                )}
+
+                {/* View Mode Switcher */}
+                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMainTab('attachment2_summary');
+                      setTableViewMode('attachment2_tracking');
+                    }}
+                    className="px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  >
+                    <ListChecks className="w-3.5 h-3.5" />
+                    <span>ตารางแยกสี & ปุ่มติ๊ก (เอกสารแนบ 2)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMainTab('management_disbursement');
+                      setTableViewMode('detailed_management');
+                    }}
+                    className="px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer bg-emerald-600 text-white shadow-sm"
+                  >
+                    <Table className="w-3.5 h-3.5" />
+                    <span>ตารางบริหาร & เบิกจ่ายละเอียด</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Color-Coded Category Filter Pills (Matching เอกสารแนบ 2 Colors) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+                <span>🎨 กรองตามประเภทโครงการ (แยกสีตามประเภทกองทุน สปสช.):</span>
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-bold transition-all cursor-pointer border ${
+                    selectedCategory === 'all'
+                      ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  ทุกประเภท ({yearProjects.length})
+                </button>
+                {NHSO_FUND_CATEGORIES.map((cat) => {
+                  const count = yearProjects.filter((p) => (p.categoryNumber || 1) === cat.number).length;
+                  const catTheme = getCategoryColorTheme(cat.number);
+                  const isSelected = selectedCategory === cat.number;
+                  return (
+                    <button
+                      key={cat.number}
+                      type="button"
+                      onClick={() =>
+                        setSelectedCategory(isSelected ? 'all' : cat.number)
+                      }
+                      style={{
+                        backgroundColor: isSelected || count > 0 ? catTheme.headerHex : undefined,
+                        borderColor: catTheme.borderHex,
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer ${
+                        isSelected
+                          ? 'ring-2 ring-offset-1 ring-slate-900 dark:ring-white font-black text-slate-950 shadow-md scale-[1.02]'
+                          : count > 0
+                          ? 'font-bold text-slate-950 opacity-90 hover:opacity-100'
+                          : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-800 opacity-60'
+                      }`}
+                      title={cat.title}
+                    >
+                      <span>ประเภทที่ {cat.number}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/15 text-slate-950 font-extrabold">
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Row 3: Color-Coded Proposing Organization Filter Pills (แยกสีตามหน่วยงานผู้ขอรับงบ) */}
+            {distinctOrgs.length > 0 && (
+              <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+                  <span>🏢 กรองตามหน่วยงาน / กลุ่มองค์กรผู้ขอรับงบ (แยกสีชัดเจน):</span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOrgFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg whitespace-nowrap font-bold transition-all cursor-pointer border ${
+                      selectedOrgFilter === 'all'
+                        ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    ทุกหน่วยงาน ({distinctOrgs.length})
+                  </button>
+                  {distinctOrgs.map((org) => {
+                    const orgTheme = getOrgColorTheme(org);
+                    const count = yearProjects.filter((p) => p.proposingOrg === org).length;
+                    const isSelected = selectedOrgFilter === org;
+                    return (
+                      <button
+                        key={org}
+                        type="button"
+                        onClick={() => setSelectedOrgFilter(isSelected ? 'all' : org)}
+                        style={{
+                          backgroundColor:
+                            orgTheme.bgHex !== '#ffffff' ? orgTheme.bgHex : '#f8fafc',
+                          borderColor: orgTheme.borderHex,
+                        }}
+                        className={`px-2.5 py-1 rounded-lg whitespace-nowrap transition-all flex items-center gap-1.5 border text-slate-950 cursor-pointer ${
+                          isSelected
+                            ? 'ring-2 ring-offset-1 ring-emerald-600 font-black shadow-sm scale-[1.02]'
+                            : 'font-semibold opacity-90 hover:opacity-100'
+                        }`}
+                      >
+                        <span>{org}</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10 font-bold">
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Row 4: Tracking Status Filter Pills & Selection Filter */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-slate-500 font-semibold mr-1">
+                  ☑️ กรองผลการติดตามโครงการ:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTrackingFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border ${
+                    trackingFilter === 'all'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  ทั้งหมด ({yearProjects.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTrackingFilter(trackingFilter === 'completed' ? 'all' : 'completed')
+                  }
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                    trackingFilter === 'completed'
+                      ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                      : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  }`}
+                >
+                  <span>☑ ดำเนินการแล้ว ({yearCompletedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTrackingFilter(trackingFilter === 'extended' ? 'all' : 'extended')
+                  }
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                    trackingFilter === 'extended'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                      : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                  }`}
+                >
+                  <span>⏳ ขอขยายเวลา ({yearExtendedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTrackingFilter(trackingFilter === 'refunded' ? 'all' : 'refunded')
+                  }
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                    trackingFilter === 'refunded'
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                  }`}
+                >
+                  <span>
+                    ↩️ คืนเงิน ({yearRefundedCount} โครงการ • รวม {totalYearRefundAmount.toLocaleString()} บ.)
+                  </span>
+                </button>
+                {totalYearRefundAmount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      syncRefundsIntoSettings(projects, true);
+                      setIsRevenueModalOpen(true);
+                      showToast(
+                        `รวบรวมยอดเงินคืนรวม ${totalYearRefundAmount.toLocaleString()} บาท เข้าสู่ "งบข้อ 4 เงินยกยอดจากปีเก่า" เรียบร้อยแล้ว!`
+                      );
+                    }}
+                    className="px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border bg-purple-600 hover:bg-purple-500 text-white border-purple-500 shadow-xs flex items-center gap-1"
+                    title="รวบรวมยอดเงินคืนทั้งหมดไปไว้ในงบข้อ 4 เงินยกยอดจากปีเก่า และเปิดหน้าต่างตั้งค่างบ"
+                  >
+                    <Coins className="w-3.5 h-3.5" />
+                    <span>ส่งยอดคืน ({totalYearRefundAmount.toLocaleString()} บ.) ไปงบข้อ 4 เงินยกยอด</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTrackingFilter(
+                      trackingFilter === 'selected_only' ? 'all' : 'selected_only'
+                    )
+                  }
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 ${
+                    trackingFilter === 'selected_only'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                  }`}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span>เฉพาะชุดที่ติ๊กเลือก ({selectedProjectIds.length})</span>
+                </button>
+              </div>
+            </div>
+          </div>
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -2438,7 +3268,8 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
             </div>
           )}
         </div>
-      )}
+      </div>
+    )}
 
       {/* Committee Approval / Resolution Modal */}
       {approvalModalProject && (
