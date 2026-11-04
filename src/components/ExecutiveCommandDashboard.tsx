@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sparkles,
   ClipboardCheck,
@@ -201,6 +201,52 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   const [viewerLinkedEvent, setViewerLinkedEvent] = useState<CalendarEventItem | null>(null);
   const [activityCategoryFilter, setActivityCategoryFilter] = useState<string>('all');
   const [activitySearchQuery, setActivitySearchQuery] = useState<string>('');
+
+  // 🌟 Village distribution filter for 7 villages of Bangpao municipality
+  const [selectedVillageMoo, setSelectedVillageMoo] = useState<string>('all');
+
+  const villageList = useMemo<{ moo: string; name: string }[]>(() => [
+    { moo: '1', name: 'บ้านบางเป้า' },
+    { moo: '2', name: 'บ้านทุ่งค่าย' },
+    { moo: '3', name: 'บ้านหัวหิน' },
+    { moo: '4', name: 'บ้านควนตุ้งกู' },
+    { moo: '5', name: 'บ้านหาดทรายขาว' },
+    { moo: '6', name: 'บ้านปากปรน' },
+    { moo: '7', name: 'บ้านคลองลุ' },
+  ], []);
+
+  const villageStats = useMemo(() => {
+    return villageList.map((v: { moo: string; name: string }) => {
+      const ltcInMoo = ltcPatients.filter((p) => {
+        const m = String((p as any).moo || (p as any).addressMoo || p.address || '').match(/(\d+)/);
+        return m ? m[1] === v.moo : false;
+      }).length;
+
+      const licInMoo = licenses.filter((l) => {
+        const m = String(l.businessMoo || '').trim();
+        return m === v.moo;
+      }).length;
+
+      const petInMoo = petitions.filter((p) => {
+        const m = String((p as any).moo || p.address || '').match(/(\d+)/);
+        return m ? m[1] === v.moo : false;
+      }).length;
+
+      const loansInMoo = loans.filter((ln) => {
+        const m = String((ln as any).borrowerMoo || ln.borrowerAddress || '').match(/(\d+)/);
+        return m ? m[1] === v.moo : false;
+      }).length;
+
+      return {
+        ...v,
+        ltcCount: ltcInMoo,
+        licenseCount: licInMoo,
+        petitionCount: petInMoo,
+        loanCount: loansInMoo,
+        totalServices: ltcInMoo + licInMoo + petInMoo + loansInMoo,
+      };
+    });
+  }, [villageList, ltcPatients, licenses, petitions, loans]);
 
   // Shared Calendar Events State
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>(() => {
@@ -1585,75 +1631,181 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 Cols): Breakdown & Metrics */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Card: ผลตรวจประเมินสุขลักษณะสถานประกอบกิจการ */}
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/90 shadow-xs">
-            <div className="flex items-center justify-between mb-5">
+          {/* 🌟 ศูนย์ติดตามสถานะบริการสาธารณสุข & การกระจายงาน 7 หมู่บ้าน (Smart Village Service & Health Pulse) */}
+          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/90 shadow-xs space-y-5">
+            {/* Header with Live Indicator */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
               <div>
-                <h3 className="font-bold text-base sm:text-lg text-slate-900">
-                  มาตรฐานสุขาภิบาลสถานประกอบกิจการ (EHWA Ratings)
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </span>
+                  <span className="text-xs uppercase font-extrabold tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/70">
+                    Smart Health Pulse • ทต.บางเป้า
+                  </span>
+                </div>
+                <h3 className="font-extrabold text-base sm:text-lg text-slate-900 mt-1 flex items-center gap-2">
+                  <span>ศูนย์ติดตามสถานะบริการและสถิติกระจายงาน 7 หมู่บ้าน</span>
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                  ผลการประเมินสถานประกอบกิจการ {establishments.length || licenses.length || 35} แห่งในเขตพื้นที่เทศบาลตำบลบางเป้า
+                  บูรณาการข้อมูลบริการประชาชน 4 มิติ รายหมู่บ้าน (ม.1 – ม.7 ตำบลบางเป้า) อัปเดตสดจาก Cloud Firestore
                 </p>
               </div>
-              <button
-                onClick={() => onNavigateTab('dashboard')}
-                className="text-xs sm:text-sm font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer bg-emerald-50 px-3 py-1.5 rounded-xl hover:bg-emerald-100 transition-colors"
+
+              {/* Village Filter Tabs */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVillageMoo('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    selectedVillageMoo === 'all'
+                      ? 'bg-slate-900 text-white shadow-xs scale-[1.02]'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  ทุกหมู่บ้าน
+                </button>
+                {villageList.map((v) => (
+                  <button
+                    key={v.moo}
+                    type="button"
+                    onClick={() => setSelectedVillageMoo(v.moo)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedVillageMoo === v.moo
+                        ? 'bg-emerald-700 text-white shadow-xs scale-[1.02]'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                    title={`หมู่ที่ ${v.moo} ${v.name}`}
+                  >
+                    ม.{v.moo}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 4 Dimension Service Metric Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* Card 1: งานสูบส้วม & กำจัดสิ่งปฏิกูล */}
+              <div
+                onClick={() => onNavigateTab('petitions')}
+                className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/40 border border-amber-200/80 hover:border-amber-400 hover:shadow-md transition-all cursor-pointer group"
+                title="คลิกเพื่อไปหน้าระบบยื่นคำร้อง & บริการประชาชน"
               >
-                ดูทั้งหมด <ChevronRight className="w-4 h-4" />
-              </button>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-amber-800">งานสูบส้วม/สิ่งปฏิกูล</span>
+                  <Truck className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-amber-950">
+                  {selectedVillageMoo === 'all'
+                    ? pendingSewage
+                    : villageStats.find((v) => v.moo === selectedVillageMoo)?.petitionCount || 0}
+                </div>
+                <div className="text-[10px] text-amber-700 font-semibold mt-0.5 flex items-center justify-between">
+                  <span>คำร้องรอดำเนินการ</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">จัดการ &rarr;</span>
+                </div>
+              </div>
+
+              {/* Card 2: ใบอนุญาตกิจการอันตราย */}
+              <div
+                onClick={() => onNavigateTab('dashboard')}
+                className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/40 border border-emerald-200/80 hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer group"
+                title="คลิกเพื่อไปแดชบอร์ดติดตามใบอนุญาตกิจการอันตราย"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-emerald-800">กิจการอันตราย</span>
+                  <FileCheck2 className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-emerald-950">
+                  {selectedVillageMoo === 'all'
+                    ? (licenses.length || 35)
+                    : villageStats.find((v) => v.moo === selectedVillageMoo)?.licenseCount || 0}
+                </div>
+                <div className="text-[10px] text-emerald-700 font-semibold mt-0.5 flex items-center justify-between">
+                  <span>สถานประกอบการ</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">ตรวจติดตาม &rarr;</span>
+                </div>
+              </div>
+
+              {/* Card 3: สปสช. LTC ดูแลผู้สูงอายุ */}
+              <div
+                onClick={() => onNavigateTab('ltc')}
+                className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-rose-50 to-pink-50/40 border border-rose-200/80 hover:border-rose-400 hover:shadow-md transition-all cursor-pointer group"
+                title="คลิกเพื่อไปหน้าระบบดูแลระยะยาว LTC"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-rose-800">ผู้ป่วยติดเตียง LTC</span>
+                  <HeartPulse className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-rose-950">
+                  {selectedVillageMoo === 'all'
+                    ? (ltcPatients.length || 14)
+                    : villageStats.find((v) => v.moo === selectedVillageMoo)?.ltcCount || 0}
+                </div>
+                <div className="text-[10px] text-rose-700 font-semibold mt-0.5 flex items-center justify-between">
+                  <span>ดูแลต่อเนื่อง 100%</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">จัดเส้นทาง &rarr;</span>
+                </div>
+              </div>
+
+              {/* Card 4: ธนาคารยืมอุปกรณ์การแพทย์ */}
+              <div
+                onClick={() => onNavigateTab('equipment')}
+                className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50/40 border border-indigo-200/80 hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer group"
+                title="คลิกเพื่อไปหน้าระบบบริการยืม-คืนอุปกรณ์การแพทย์"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-indigo-800">ยืมอุปกรณ์การแพทย์</span>
+                  <Stethoscope className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-indigo-950">
+                  {selectedVillageMoo === 'all'
+                    ? activeLoans
+                    : villageStats.find((v) => v.moo === selectedVillageMoo)?.loanCount || 0}
+                </div>
+                <div className="text-[10px] text-indigo-700 font-semibold mt-0.5 flex items-center justify-between">
+                  <span>สัญญาใช้งานอยู่</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">คลังอุปกรณ์ &rarr;</span>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-5">
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200/70">
-                <span className="text-xs font-bold text-emerald-800 block">ดีมาก (85-100%)</span>
-                <span className="text-3xl font-black text-emerald-900 mt-1 block">{ratingCounts.excellent}</span>
-                <span className="text-[11px] text-emerald-700 font-semibold block mt-1">🏆 มาตรฐานระดับทอง</span>
+            {/* Village Distribution Visual Bars */}
+            <div className="space-y-2.5 pt-1">
+              <div className="flex items-center justify-between text-xs text-slate-700 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                  สัดส่วนการกระจายงานบริการลงสู่ 7 หมู่บ้านตำบลบางเป้า
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {selectedVillageMoo === 'all' ? 'คลิกที่หมู่บ้านเพื่อกรองดูเฉพาะจุด' : `กำลังเจาะลึกเฉพาะ หมู่ที่ ${selectedVillageMoo}`}
+                </span>
               </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-50 to-teal-100/50 border border-teal-200/70">
-                <span className="text-xs font-bold text-teal-800 block">ดี (70-84%)</span>
-                <span className="text-3xl font-black text-teal-900 mt-1 block">{ratingCounts.good}</span>
-                <span className="text-[11px] text-teal-700 font-semibold block mt-1">🥈 มาตรฐานระดับเงิน</span>
-              </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100/50 border border-amber-200/70">
-                <span className="text-xs font-bold text-amber-800 block">พอใช้ (60-69%)</span>
-                <span className="text-3xl font-black text-amber-900 mt-1 block">{ratingCounts.fair}</span>
-                <span className="text-[11px] text-amber-700 font-semibold block mt-1">⚠️ ต้องเฝ้าระวัง</span>
-              </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-50 to-rose-100/50 border border-rose-200/70">
-                <span className="text-xs font-bold text-rose-800 block">ต้องตรวจซ้ำ</span>
-                <span className="text-3xl font-black text-rose-900 mt-1 block">{ratingCounts.reinspect}</span>
-                <span className="text-[11px] text-rose-700 font-semibold block mt-1">❌ ถูกร้องเรียน/ไม่ผ่าน</span>
-              </div>
-            </div>
 
-            {/* Visual Bar */}
-            <div className="space-y-2">
-              <div className="h-4 rounded-full overflow-hidden flex bg-slate-100 shadow-inner">
-                <div
-                  style={{ width: `${Math.round((ratingCounts.excellent / totalEstablishmentsCount) * 100)}%` }}
-                  className="bg-emerald-500 transition-all duration-500"
-                  title={`ดีมาก ${Math.round((ratingCounts.excellent / totalEstablishmentsCount) * 100)}%`}
-                />
-                <div
-                  style={{ width: `${Math.round((ratingCounts.good / totalEstablishmentsCount) * 100)}%` }}
-                  className="bg-teal-500 transition-all duration-500"
-                  title={`ดี ${Math.round((ratingCounts.good / totalEstablishmentsCount) * 100)}%`}
-                />
-                <div
-                  style={{ width: `${Math.round((ratingCounts.fair / totalEstablishmentsCount) * 100)}%` }}
-                  className="bg-amber-400 transition-all duration-500"
-                  title={`พอใช้ ${Math.round((ratingCounts.fair / totalEstablishmentsCount) * 100)}%`}
-                />
-                <div
-                  style={{ width: `${Math.round((ratingCounts.reinspect / totalEstablishmentsCount) * 100)}%` }}
-                  className="bg-rose-500 transition-all duration-500"
-                  title={`ต้องตรวจซ้ำ ${Math.round((ratingCounts.reinspect / totalEstablishmentsCount) * 100)}%`}
-                />
-              </div>
-              <div className="flex items-center justify-between text-xs text-slate-500 px-1 font-semibold">
-                <span className="text-emerald-700">อัตราผ่านเกณฑ์สะสม {passingRatePercent}%</span>
-                <span>เป้าหมายประจำปี 100%</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                {villageStats.map((v) => {
+                  const isSelected = selectedVillageMoo === v.moo;
+                  return (
+                    <div
+                      key={v.moo}
+                      onClick={() => setSelectedVillageMoo(selectedVillageMoo === v.moo ? 'all' : v.moo)}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        isSelected
+                          ? 'ring-2 ring-emerald-600 bg-emerald-50 border-emerald-400 shadow-sm scale-102'
+                          : 'bg-slate-50/80 border-slate-200/90 hover:bg-slate-100 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="text-[11px] font-black text-slate-800">ม.{v.moo}</div>
+                      <div className="text-[10px] text-slate-500 truncate" title={v.name}>{v.name}</div>
+                      <div className="mt-1.5 flex items-center justify-center gap-1 text-[10px] font-bold">
+                        <span className={`px-1.5 py-0.5 rounded-md ${isSelected ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {v.totalServices} งาน
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
