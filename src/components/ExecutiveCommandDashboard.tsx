@@ -206,13 +206,13 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
   const [selectedVillageMoo, setSelectedVillageMoo] = useState<string>('all');
 
   const villageList = useMemo<{ moo: string; name: string }[]>(() => [
-    { moo: '1', name: 'บ้านบางเป้า' },
-    { moo: '2', name: 'บ้านทุ่งค่าย' },
-    { moo: '3', name: 'บ้านหัวหิน' },
-    { moo: '4', name: 'บ้านควนตุ้งกู' },
-    { moo: '5', name: 'บ้านหาดทรายขาว' },
-    { moo: '6', name: 'บ้านปากปรน' },
-    { moo: '7', name: 'บ้านคลองลุ' },
+    { moo: '1', name: 'บ้านหลังวัด' },
+    { moo: '2', name: 'บ้านเกาะปอม' },
+    { moo: '3', name: 'บ้านตลาดใหม่' },
+    { moo: '4', name: 'บ้านแหลมม่วง' },
+    { moo: '5', name: 'บ้านป่าเตียว' },
+    { moo: '6', name: 'บ้านควนทองสีห์' },
+    { moo: '7', name: 'บ้านท่าเรือ' },
   ], []);
 
   const villageStats = useMemo(() => {
