@@ -6409,6 +6409,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         fiscalYear={selectedYearFilter === 'all' ? '2569' : selectedYearFilter}
         round={selectedRoundFilter === 'all' ? '2' : selectedRoundFilter}
         defaultScope={printRegDefaultScope}
+        deliveryDate={currentPlan?.deliveryDate}
       />
     </div>
   );

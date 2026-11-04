@@ -2249,6 +2249,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         fiscalYear={planFiscalYear}
         round={planRound}
         defaultScope="selected"
+        deliveryDate={deliveryDate}
       />
     </div>
   );

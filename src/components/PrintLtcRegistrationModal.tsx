@@ -8,6 +8,12 @@ import {
   Edit3,
   RotateCcw,
   Sparkles,
+  Calculator,
+  Calendar,
+  RefreshCw,
+  Clock,
+  HelpCircle,
+  Check,
 } from 'lucide-react';
 import { LtcPatient, LtcRoundItem } from '../types/index.ts';
 
@@ -30,6 +36,106 @@ interface PrintLtcRegistrationModalProps {
   fiscalYear: string;
   round: string;
   defaultScope?: 'selected' | 'all';
+  deliveryDate?: string;
+}
+
+// อักษรย่อเดือนภาษาไทยตามมาตรฐานราชการ
+export const THAI_MONTHS_SHORT = [
+  'ม.ค.',
+  'ก.พ.',
+  'มี.ค.',
+  'เม.ย.',
+  'พ.ค.',
+  'มิ.ย.',
+  'ก.ค.',
+  'ส.ค.',
+  'ก.ย.',
+  'ต.ค.',
+  'พ.ย.',
+  'ธ.ค.',
+];
+
+// Helper: ดึงจำนวนผ้าอ้อมจาก allocationText หรือข้อมูล roundItems
+export function extractDiaperQuantity(
+  allocationText: string,
+  patient?: LtcPatient,
+  fiscalYear?: string,
+  round?: string
+): number {
+  if (patient) {
+    const items: LtcRoundItem[] =
+      (fiscalYear && round && patient.yearRoundItems?.[fiscalYear]?.[round]) ||
+      (round && patient.roundItems?.[round]) ||
+      patient.roundItems?.['1'] ||
+      [];
+    const diaperItem = items.find((i) => i.itemName?.includes('ผ้าอ้อม'));
+    if (diaperItem && diaperItem.quantity > 0) {
+      return diaperItem.quantity;
+    }
+  }
+
+  if (!allocationText) return 0;
+  const clean = allocationText.trim();
+
+  // หากขึ้นต้นด้วย นม และไม่มีคำว่าผ้าอ้อม ถือว่าไม่มีผ้าอ้อม (0 ชิ้น)
+  if (/^นม/i.test(clean) && !/ผ้าอ้อม/i.test(clean)) {
+    return 0;
+  }
+
+  // รูปแบบ "M 390 ชิ้น", "L 310 / นม", "390 ชิ้น", "30 ชิ้น", "2XL 350"
+  const match = clean.match(/(?:(?:2XL|XXL|XL|M|L|S)\s+)?(\d+)(?:\s*ชิ้น)?/i);
+  if (match && match[1]) {
+    const num = parseInt(match[1], 10);
+    if (!isNaN(num) && !clean.startsWith('นม')) {
+      return num;
+    }
+  }
+
+  return 0;
+}
+
+// Helper: คำนวณวันสิ้นสุดโครงการตามสูตร "ผ้าอ้อม 3 ชิ้นต่อวัน" (เช่น แจก 30 ชิ้น ใช้ได้ 10 วัน)
+export function computeLtcEndDate(
+  diaperQty: number,
+  baseDateInput: string | Date,
+  formatStyle: 'day_month' | 'short_year' | 'full_year' = 'day_month'
+): { endDateText: string; days: number } {
+  if (diaperQty <= 0) {
+    return { endDateText: '-', days: 0 };
+  }
+
+  // สูตรคำนวณ: อัตรา 3 ชิ้นต่อวัน -> จำนวนวัน = จำนวนผ้าอ้อม / 3
+  const days = Math.round(diaperQty / 3);
+
+  let start: Date;
+  if (typeof baseDateInput === 'string') {
+    start = new Date(baseDateInput.includes('T') ? baseDateInput : `${baseDateInput}T00:00:00`);
+  } else {
+    start = new Date(baseDateInput.getTime());
+  }
+
+  if (isNaN(start.getTime())) {
+    return { endDateText: '-', days };
+  }
+
+  const target = new Date(start.getTime());
+  target.setDate(target.getDate() + days);
+
+  const day = target.getDate();
+  const month = THAI_MONTHS_SHORT[target.getMonth()];
+  const beYear = target.getFullYear() + 543;
+  const shortBeYear = String(beYear).slice(-2);
+
+  let endDateText = '';
+  if (formatStyle === 'full_year') {
+    endDateText = `${day} ${month} ${beYear}`;
+  } else if (formatStyle === 'short_year') {
+    endDateText = `${day} ${month} ${shortBeYear}`;
+  } else {
+    endDateText = `${day} ${month}`;
+  }
+
+  return { endDateText, days };
 }
 
 // Helper: แปลงที่อยู่เต็มให้เป็นที่อยู่ย่อตามต้นฉบับ เช่น "35/5 หมู่ที่ 5 บ้านป่าเตียว" -> "35/5 ม.5"
@@ -106,6 +212,7 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
   fiscalYear,
   round,
   defaultScope = 'selected',
+  deliveryDate,
 }) => {
   const [scope, setScope] = useState<'selected' | 'all'>(
     selectedPatients.length > 0 ? defaultScope : 'all'
@@ -122,6 +229,22 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
   const [sig2DatePage2, setSig2DatePage2] = useState<string>('…….../………../………');
   const [rows, setRows] = useState<LtcRegistrationRow[]>([]);
   const [isEditingCells, setIsEditingCells] = useState<boolean>(false);
+
+  // รูปแบบการแสดงปีในช่องหมายเหตุ: 'day_month' (30 ธ.ค.), 'short_year' (30 ธ.ค. 69), 'full_year' (30 ธ.ค. 2569)
+  const [yearFormat, setYearFormat] = useState<'day_month' | 'short_year' | 'full_year'>('day_month');
+
+  // วันเริ่มแจก/วันเริ่มนับวัน (Base Date สำหรับคำนวณวันสิ้นสุดโครงการ)
+  const [calcBaseDate, setCalcBaseDate] = useState<string>(() => {
+    if (deliveryDate && !isNaN(new Date(deliveryDate).getTime())) {
+      return deliveryDate.split('T')[0];
+    }
+    if (fiscalYear === '2569' && round === '1') {
+      return '2026-08-22';
+    }
+    return new Date().toISOString().split('T')[0];
+  });
+
+  const [calcToast, setCalcToast] = useState<string | null>(null);
 
   // Sync default title when round/fiscalYear changes
   useEffect(() => {
@@ -141,21 +264,76 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
   }, [scope, selectedPatients, allPatients]);
 
   useEffect(() => {
-    const mapped: LtcRegistrationRow[] = sourcePatients.map((p, idx) => ({
-      id: p.id,
-      orderNo: idx + 1,
-      fullName: p.fullName || '',
-      shortAddress: formatShortLtcAddress(p),
-      allocationText:
+    const mapped: LtcRegistrationRow[] = sourcePatients.map((p, idx) => {
+      const alloc =
         idx === 0 && formatShortLtcAllocation(p, fiscalYear, round) === 'M 390'
           ? 'M 390 ชิ้น'
-          : formatShortLtcAllocation(p, fiscalYear, round),
-      signature1: '',
-      signature2: '',
-      projectEndDateNote: p.projectEndDateNote || '-',
-    }));
+          : formatShortLtcAllocation(p, fiscalYear, round);
+
+      let endNote = p.projectEndDateNote || '';
+      if (!endNote) {
+        const diaperQty = extractDiaperQuantity(alloc, p, fiscalYear, round);
+        endNote = computeLtcEndDate(diaperQty, calcBaseDate, yearFormat).endDateText;
+      } else if (yearFormat !== 'day_month' && endNote !== '-') {
+        const diaperQty = extractDiaperQuantity(alloc, p, fiscalYear, round);
+        if (diaperQty > 0) {
+          endNote = computeLtcEndDate(diaperQty, calcBaseDate, yearFormat).endDateText;
+        }
+      }
+
+      return {
+        id: p.id,
+        orderNo: idx + 1,
+        fullName: p.fullName || '',
+        shortAddress: formatShortLtcAddress(p),
+        allocationText: alloc,
+        signature1: '',
+        signature2: '',
+        projectEndDateNote: endNote || '-',
+      };
+    });
     setRows(mapped);
   }, [sourcePatients, fiscalYear, round]);
+
+  // ฟังก์ชันคำนวณวันสิ้นสุดโครงการใหม่อัตโนมัติทุกรายชื่อตามสูตร 3 ชิ้น/วัน
+  const handleAutoCalculateAllEndDates = (
+    targetFormat: 'day_month' | 'short_year' | 'full_year' = yearFormat,
+    targetBaseDate: string = calcBaseDate
+  ) => {
+    setRows((prev) =>
+      prev.map((row) => {
+        const patient = sourcePatients.find((p) => p.id === row.id);
+        const diaperQty = extractDiaperQuantity(row.allocationText, patient, fiscalYear, round);
+        const { endDateText, days } = computeLtcEndDate(diaperQty, targetBaseDate, targetFormat);
+        return {
+          ...row,
+          projectEndDateNote: endDateText,
+        };
+      })
+    );
+    const dateFormatted = targetBaseDate ? new Date(targetBaseDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : targetBaseDate;
+    setCalcToast(`✓ คำนวณวันสิ้นสุดโครงการอัตโนมัติเรียบร้อยแล้ว (อัตรา 3 ชิ้น/วัน • วันตั้งต้น: ${dateFormatted})`);
+    setTimeout(() => setCalcToast(null), 4500);
+  };
+
+  // เมื่อเปลี่ยนรูปแบบปีในแถบเครื่องมือ
+  const handleYearFormatChange = (newFormat: 'day_month' | 'short_year' | 'full_year') => {
+    setYearFormat(newFormat);
+    setRows((prev) =>
+      prev.map((row) => {
+        if (!row.projectEndDateNote || row.projectEndDateNote === '-') {
+          return row;
+        }
+        const patient = sourcePatients.find((p) => p.id === row.id);
+        const diaperQty = extractDiaperQuantity(row.allocationText, patient, fiscalYear, round);
+        if (diaperQty > 0) {
+          const { endDateText } = computeLtcEndDate(diaperQty, calcBaseDate, newFormat);
+          return { ...row, projectEndDateNote: endDateText };
+        }
+        return row;
+      })
+    );
+  };
 
   // Split into pages of 10 rows per page (matching ใบลงทะเบียนรายชื่อผู้ที่มีภาวะพึ่งพิง 2.docx: Page 1 has rows 1-10, Page 2 has rows 11-14)
   const pages = useMemo(() => {
@@ -530,6 +708,101 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
           </div>
         </div>
 
+        {/* Smart Calculation Toolbar: วันสิ้นสุดโครงการ (อัตรา 3 ชิ้น/วัน) */}
+        <div className="px-5 py-3 bg-gradient-to-r from-emerald-950/60 via-slate-800 to-emerald-950/60 border-b border-emerald-500/25 flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Formula Explanation */}
+          <div className="flex items-center gap-2.5 max-w-2xl">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+              <Calculator className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white flex items-center gap-1">
+                  <span>ที่มาของช่องหมายเหตุ (สิ้นสุดโครงการ):</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  สูตร 3 ชิ้น/วัน
+                </span>
+                {calcToast && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-600 text-white animate-pulse">
+                    {calcToast}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                คำนวณจากจำนวนผ้าอ้อม ÷ 3 ชิ้น/วัน (เช่น <strong className="text-emerald-300">30 ชิ้น = 10 วัน</strong>, <strong className="text-emerald-300">300 ชิ้น = 100 วัน</strong>, <strong className="text-emerald-300">390 ชิ้น = 130 วัน</strong>) เริ่มนับจากวันเริ่มแจกของรอบ • กรณีได้เฉพาะนม (0 ชิ้น) จะแสดงเป็น <strong className="text-slate-400">"-"</strong>
+              </p>
+            </div>
+          </div>
+
+          {/* Interactive Date & Year Format Controls */}
+          <div className="flex items-center gap-2 flex-wrap ml-auto">
+            {/* Base Delivery Date */}
+            <div className="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1.5 rounded-xl border border-slate-700">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[11px] text-slate-300 font-medium">วันเริ่มแจก:</span>
+              <input
+                type="date"
+                value={calcBaseDate}
+                onChange={(e) => setCalcBaseDate(e.target.value)}
+                className="bg-slate-800 text-white text-xs px-2 py-0.5 rounded border border-slate-600 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Year Format Selector */}
+            <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-700">
+              <span className="text-[11px] text-slate-400 px-1 font-medium">แสดงผล:</span>
+              <button
+                type="button"
+                onClick={() => handleYearFormatChange('day_month')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  yearFormat === 'day_month'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+                title="เฉพาะ วัน-เดือน เช่น 30 ธ.ค."
+              >
+                30 ธ.ค.
+              </button>
+              <button
+                type="button"
+                onClick={() => handleYearFormatChange('short_year')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  yearFormat === 'short_year'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+                title="วัน เดือน ปี พ.ศ. 2 หลัก เช่น 30 ธ.ค. 69"
+              >
+                30 ธ.ค. 69
+              </button>
+              <button
+                type="button"
+                onClick={() => handleYearFormatChange('full_year')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  yearFormat === 'full_year'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+                title="วัน เดือน ปี พ.ศ. เต็ม 4 หลัก เช่น 30 ธ.ค. 2569"
+              >
+                30 ธ.ค. 2569
+              </button>
+            </div>
+
+            {/* Button: Auto Recalculate */}
+            <button
+              type="button"
+              onClick={() => handleAutoCalculateAllEndDates(yearFormat, calcBaseDate)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-sm transition-all flex items-center gap-1.5"
+              title="คำนวณวันสิ้นสุดโครงการใหม่ให้ทุกรายชื่อตามสูตร 3 ชิ้น/วัน"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              คำนวณใหม่อัตโนมัติ (3 ชิ้น/วัน)
+            </button>
+          </div>
+        </div>
+
         {/* A4 Landscape Preview Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950/90 space-y-8 flex flex-col items-center">
           {pages.map((pageRows, pageIndex) => {
@@ -859,19 +1132,50 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
                               }}
                             >
                               {isEditingCells ? (
-                                <input
-                                  type="text"
-                                  value={row.projectEndDateNote}
-                                  onChange={(e) =>
-                                    handleUpdateRow(
-                                      globalIdx,
-                                      'projectEndDateNote',
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-full text-center border border-amber-400 bg-amber-50/70 rounded px-1 text-black"
-                                  style={{ fontSize: '16pt' }}
-                                />
+                                <div className="space-y-1">
+                                  <input
+                                    type="text"
+                                    value={row.projectEndDateNote}
+                                    onChange={(e) =>
+                                      handleUpdateRow(
+                                        globalIdx,
+                                        'projectEndDateNote',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full text-center border border-amber-400 bg-amber-50/70 rounded px-1 text-black font-semibold"
+                                    style={{ fontSize: '15pt' }}
+                                  />
+                                  {/* Dynamic formula badge */}
+                                  {(() => {
+                                    const patient = sourcePatients.find((p) => p.id === row.id);
+                                    const diaperQty = extractDiaperQuantity(row.allocationText, patient, fiscalYear, round);
+                                    if (diaperQty > 0) {
+                                      const days = Math.round(diaperQty / 3);
+                                      return (
+                                        <div className="text-[10px] text-emerald-800 bg-emerald-100/90 px-1 py-0.5 rounded border border-emerald-300 flex items-center justify-between gap-1 leading-tight font-sans">
+                                          <span>{diaperQty} ชิ้น ÷ 3 = {days} วัน</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const { endDateText } = computeLtcEndDate(diaperQty, calcBaseDate, yearFormat);
+                                              handleUpdateRow(globalIdx, 'projectEndDateNote', endDateText);
+                                            }}
+                                            className="text-[9px] text-emerald-900 bg-emerald-200 hover:bg-emerald-300 px-1 rounded font-bold transition-colors"
+                                            title="กดเพื่อคำนวณช่องนี้ตามสูตร 3 ชิ้น/วัน"
+                                          >
+                                            คำนวณ
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div className="text-[10px] text-slate-500 bg-slate-100 px-1 py-0.5 rounded border border-slate-300 leading-tight font-sans">
+                                        เฉพาะนม = -
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
                               ) : (
                                 <>
                                   <div>{row.projectEndDateNote}</div>
