@@ -1188,7 +1188,10 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     });
 
     if (plan.stops && plan.stops.length > 0) {
-      const planStopIds = plan.stops.map((s) => s.patientId);
+      const planStopIds = plan.stops.map((ps) => {
+        const found = stops.find((s) => s.patientId === ps.patientId);
+        return found ? found.id : ps.patientId;
+      });
       setSelectedYearFilter(plan.fiscalYear);
       setSelectedRoundFilter(plan.round);
       updateSelectedQueueForPeriod(planStopIds, plan.fiscalYear, plan.round);
@@ -1631,7 +1634,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
   // Ordered selected stops in the exact sequence chosen by the user (Excluding already-delivered persons in this round!)
   const orderedSelectedStops = selectedStopIds
-    .map((id) => stops.find((s) => s.id === id))
+    .map((id) => stops.find((s) => s.id === id || s.patientId === id))
     .filter((s): s is DeliveryStop => Boolean(s))
     .filter((s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending');
 
@@ -4331,9 +4334,9 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                   ) : (
                     tableStops.map((stop) => {
                       const matchedPt = effectivePatients.find((p) => p.id === stop.patientId);
-                      const isQueued = selectedStopIds.includes(stop.id);
+                      const isQueued = selectedStopIds.includes(stop.id) || selectedStopIds.includes(stop.patientId);
                       const queueNo = isQueued
-                        ? orderedSelectedStops.findIndex((s) => s.id === stop.id) + 1
+                        ? orderedSelectedStops.findIndex((s) => s.id === stop.id || s.patientId === stop.patientId) + 1
                         : null;
                       const deliveryInfo = getStopDeliveryStatus(
                         stop.patientId,

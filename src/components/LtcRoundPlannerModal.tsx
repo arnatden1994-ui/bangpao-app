@@ -236,6 +236,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   const [patientSearch, setPatientSearch] = useState<string>('');
   const [patientMooFilter, setPatientMooFilter] = useState<string>('all');
   const [patientAdlFilter, setPatientAdlFilter] = useState<string>('all');
+  const [selectionViewMode, setSelectionViewMode] = useState<'all' | 'selected' | 'unselected'>('all');
+  const [draggedPlannerStopId, setDraggedPlannerStopId] = useState<string | null>(null);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
 
   // Edit item modal/popover state inside planner
   const [editingStopIndex, setEditingStopIndex] = useState<number | null>(null);
@@ -392,39 +395,10 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       });
       setPlannedStops(reconciled);
     } else {
-      // Default: create fresh title and pre-select active registered patients
+      // Default: create fresh title and start with empty queue so user can selectively pick villages (e.g. Moo 1 -> Moo 4 -> Moo 6)
       const title = `แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ ${planYear} (รอบที่ ${planRound})`;
       setPlanTitle(title);
-      // Auto-pull all registered patients with actual registered coordinates
-      const defaultStops: LtcPlanStop[] = safePatients
-        .filter((p) => p.status !== 'deceased')
-        .map((p, idx) => {
-          const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
-          const lat = p.latitude ?? (mooFallback.lat + 0.001 * (idx + 1));
-          const lng = p.longitude ?? (mooFallback.lng + 0.001 * (idx + 1));
-          return {
-            patientId: p.id,
-            queueOrder: idx + 1,
-            fullName: p.fullName,
-            idCard: p.idCard,
-            age: p.age,
-            gender: p.gender,
-            phone: p.phone || p.caregiverPhone || '081-000-0000',
-            caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
-            caregiverPhone: p.caregiverPhone || p.phone || '-',
-            address: p.address,
-            moo: p.moo || '1',
-            latitude: lat,
-            longitude: lng,
-            adlScore: p.adlScore,
-            adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
-            items: extractPatientRoundItems(p, planRound, planYear),
-            scheduledTime: `0${9 + Math.floor(idx / 2)}:${(idx % 2) * 30 || '00'} น.`,
-            deliveryStatus: 'pending',
-            notes: p.diagnosis || '',
-          };
-        });
-      setPlannedStops(defaultStops);
+      setPlannedStops([]);
     }
   }, [planYear, planRound, existingPlans, safePatients]);
 
@@ -765,6 +739,112 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
     showToast(`เพิ่มผู้ป่วย ${toAdd.length} ราย เข้าคิวเรียบร้อยแล้ว`);
   };
 
+  // Add all unselected patients in a specific Moo to the queue
+  const handleAddMooToQueue = (mooNum: string) => {
+    const targetPatients = safePatients.filter(
+      (p) => p.status !== 'deceased' && p.moo === mooNum
+    );
+    const toAdd = targetPatients.filter(
+      (p) => !plannedStops.some((s) => matchPlanStopWithPatient(s, p))
+    );
+    if (toAdd.length === 0) {
+      showToast(`รายชื่อในหมู่ที่ ${mooNum} อยู่ในคิวครบแล้ว`);
+      return;
+    }
+
+    const newStops: LtcPlanStop[] = toAdd.map((p, idx) => {
+      const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
+      const lat = p.latitude ?? (mooFallback.lat + 0.001 * (plannedStops.length + idx + 1));
+      const lng = p.longitude ?? (mooFallback.lng + 0.001 * (plannedStops.length + idx + 1));
+      return {
+        patientId: p.id,
+        queueOrder: plannedStops.length + idx + 1,
+        fullName: p.fullName,
+        idCard: p.idCard,
+        age: p.age,
+        gender: p.gender,
+        phone: p.phone || p.caregiverPhone || '081-000-0000',
+        caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
+        caregiverPhone: p.caregiverPhone || p.phone || '-',
+        address: p.address,
+        moo: p.moo || mooNum,
+        latitude: lat,
+        longitude: lng,
+        adlScore: p.adlScore,
+        adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
+        items: extractPatientRoundItems(p, planRound, planYear),
+        scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
+        deliveryStatus: 'pending',
+        notes: p.diagnosis || '',
+      };
+    });
+
+    setPlannedStops([...plannedStops, ...newStops]);
+    showToast(`✅ ส่งหมู่ที่ ${mooNum} (${BANGPAO_VILLAGES[mooNum] || ''}) เพิ่ม ${toAdd.length} ราย เข้าคิวเรียบร้อยแล้ว`);
+  };
+
+  // Remove all patients in a specific Moo from the queue
+  const handleRemoveMooFromQueue = (mooNum: string) => {
+    const filtered = plannedStops
+      .filter((s) => s.moo !== mooNum)
+      .map((s, i) => ({ ...s, queueOrder: i + 1 }));
+    setPlannedStops(filtered);
+    showToast(`นำรายชื่อหมู่ที่ ${mooNum} ออกจากคิวแล้ว`);
+  };
+
+  // Select all registered active patients
+  const handleSelectAllPatients = () => {
+    const toAdd = safePatients.filter(
+      (p) => p.status !== 'deceased' && !plannedStops.some((s) => matchPlanStopWithPatient(s, p))
+    );
+    if (toAdd.length === 0) {
+      showToast('ผู้ป่วยทุกคนอยู่ในคิวเรียบร้อยแล้ว');
+      return;
+    }
+    const newStops: LtcPlanStop[] = toAdd.map((p, idx) => {
+      const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
+      const lat = p.latitude ?? (mooFallback.lat + 0.001 * (plannedStops.length + idx + 1));
+      const lng = p.longitude ?? (mooFallback.lng + 0.001 * (plannedStops.length + idx + 1));
+      return {
+        patientId: p.id,
+        queueOrder: plannedStops.length + idx + 1,
+        fullName: p.fullName,
+        idCard: p.idCard,
+        age: p.age,
+        gender: p.gender,
+        phone: p.phone || p.caregiverPhone || '081-000-0000',
+        caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
+        caregiverPhone: p.caregiverPhone || p.phone || '-',
+        address: p.address,
+        moo: p.moo || '1',
+        latitude: lat,
+        longitude: lng,
+        adlScore: p.adlScore,
+        adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
+        items: extractPatientRoundItems(p, planRound, planYear),
+        scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
+        deliveryStatus: 'pending',
+        notes: p.diagnosis || '',
+      };
+    });
+    setPlannedStops([...plannedStops, ...newStops]);
+    showToast(`ดึงรายชื่อผู้ป่วยทั้งหมด ${toAdd.length} ราย เข้าคิวเรียบร้อยแล้ว`);
+  };
+
+  // Reorder stops by Drag & Drop
+  const handleReorderStopsByDrag = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    const sourceIdx = plannedStops.findIndex((s) => s.patientId === sourceId);
+    const targetIdx = plannedStops.findIndex((s) => s.patientId === targetId);
+    if (sourceIdx === -1 || targetIdx === -1) return;
+
+    const copy = [...plannedStops];
+    const [moved] = copy.splice(sourceIdx, 1);
+    copy.splice(targetIdx, 0, moved);
+    const updated = copy.map((s, i) => ({ ...s, queueOrder: i + 1 }));
+    setPlannedStops(updated);
+  };
+
   // Save the plan
   const handleSaveCurrentPlan = () => {
     if (!planTitle.trim()) {
@@ -1012,9 +1092,38 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       }
       return true;
     });
-  }, [safePatients, patientMooFilter, patientAdlFilter, patientSearch]);
+  }, [safePatients, patientMooFilter, patientAdlFilter, patientSearch, selectionViewMode, plannedStops]);
 
-  const selectedPatientIds = new Set(plannedStops.map((s) => s.patientId));
+  const selectedPatientIds = useMemo(() => new Set(plannedStops.map((s) => s.patientId)), [plannedStops]);
+
+  // Patients who are not yet in the plan stops (for quick add in Step 4)
+  const unselectedPatients = useMemo(() => {
+    return safePatients.filter((p) => p.status !== 'deceased' && !selectedPatientIds.has(p.id));
+  }, [safePatients, selectedPatientIds]);
+
+  // Moo-level counts
+  const currentMooPatients = useMemo(() => {
+    if (patientMooFilter === 'all') return [];
+    return safePatients.filter((p) => p.status !== 'deceased' && p.moo === patientMooFilter);
+  }, [safePatients, patientMooFilter]);
+
+  const currentMooSelectedCount = useMemo(() => {
+    return currentMooPatients.filter((p) => selectedPatientIds.has(p.id)).length;
+  }, [currentMooPatients, selectedPatientIds]);
+
+  const currentMooUnselectedCount = useMemo(() => {
+    return currentMooPatients.length - currentMooSelectedCount;
+  }, [currentMooPatients, currentMooSelectedCount]);
+
+  // Selected counts by Moo map across all plannedStops
+  const selectedCountByMoo = useMemo(() => {
+    const counts: Record<string, number> = {};
+    plannedStops.forEach((s) => {
+      const m = s.moo || '1';
+      counts[m] = (counts[m] || 0) + 1;
+    });
+    return counts;
+  }, [plannedStops]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
@@ -1481,6 +1590,55 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                 </div>
               </div>
 
+              {/* Village Queue Chips Bar */}
+              {plannedStops.length > 0 && (
+                <div className="p-3.5 bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-teal-950 flex-wrap gap-2">
+                    <span className="flex items-center gap-1.5 font-extrabold text-teal-900">
+                      <Home className="w-4 h-4 text-teal-700" />
+                      <span>หมู่บ้านที่จัดคิวส่งมอบแล้ว ({Object.keys(selectedCountByMoo).length} หมู่บ้าน • รวม {plannedStops.length} ราย):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPlannedStops([])}
+                      className="text-rose-600 hover:text-rose-800 text-[11px] font-bold underline cursor-pointer"
+                    >
+                      ล้างคิวทั้งหมด
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {Object.entries(selectedCountByMoo)
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([moo, count]) => (
+                        <div
+                          key={moo}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-extrabold shadow-2xs transition-all ${
+                            patientMooFilter === moo
+                              ? 'bg-teal-700 text-white ring-2 ring-teal-400'
+                              : 'bg-white text-teal-900 border border-teal-300 hover:bg-teal-100/70'
+                          }`}
+                        >
+                          <span
+                            onClick={() => setPatientMooFilter(moo)}
+                            className="cursor-pointer"
+                            title="คลิกเพื่อกรองดูรายชื่อหมู่นี้ในตาราง"
+                          >
+                            🏡 หมู่ {moo} ({BANGPAO_VILLAGES[moo] || ''}): {count} ราย
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMooFromQueue(moo)}
+                            className="p-0.5 rounded hover:bg-black/10 font-black cursor-pointer text-[12px] leading-none text-rose-300 hover:text-white"
+                            title={`นำรายชื่อหมู่ที่ ${moo} ออกจากคิว`}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Filter Toolbar for Selection */}
               <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xs space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 text-xs">
@@ -1508,12 +1666,16 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                       onChange={(e) => setPatientMooFilter(e.target.value)}
                       className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-teal-500 cursor-pointer"
                     >
-                      <option value="all">ทุกหมู่บ้าน</option>
-                      {Object.entries(BANGPAO_VILLAGES).map(([m, name]) => (
-                        <option key={m} value={m}>
-                          หมู่ที่ {m} {name}
-                        </option>
-                      ))}
+                      <option value="all">ทุกหมู่บ้าน ({safePatients.filter(p => p.status !== 'deceased').length} ราย)</option>
+                      {Object.entries(BANGPAO_VILLAGES).map(([m, name]) => {
+                        const inMoo = safePatients.filter((p) => p.status !== 'deceased' && p.moo === m).length;
+                        const inQueue = selectedCountByMoo[m] || 0;
+                        return (
+                          <option key={m} value={m}>
+                            หมู่ที่ {m} {name} ({inMoo} ราย {inQueue > 0 ? `• ในคิว ${inQueue}` : ''})
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -1533,14 +1695,15 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     </select>
                   </div>
 
-                  {/* Quick Select Buttons */}
+                  {/* Global Quick Action Buttons */}
                   <div className="flex items-end gap-1.5">
                     <button
                       type="button"
-                      onClick={() => handleSelectAllFiltered(filteredPatients)}
+                      onClick={handleSelectAllPatients}
                       className="flex-1 py-1.5 px-2 bg-teal-100 hover:bg-teal-200 text-teal-900 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                      title="เลือกผู้ป่วยทุกคนทั้งหมดเข้าคิว"
                     >
-                      ✓ เลือกทุกคนที่กรอง ({filteredPatients.length})
+                      📥 ดึงทุกคน ({safePatients.filter(p => p.status !== 'deceased').length})
                     </button>
                     <button
                       type="button"
@@ -1552,6 +1715,81 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Moo-level bulk actions banner when a specific Moo is selected */}
+                {patientMooFilter !== 'all' && (
+                  <div className="flex items-center justify-between gap-2 p-2.5 bg-emerald-50/80 border border-emerald-300 rounded-xl flex-wrap text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-emerald-950">
+                        🏡 หมู่ที่ {patientMooFilter} {BANGPAO_VILLAGES[patientMooFilter]}:
+                      </span>
+                      <span className="text-slate-600">
+                        ทั้งหมด <strong>{currentMooPatients.length}</strong> ราย (ในคิวแล้ว <strong className="text-emerald-800">{currentMooSelectedCount}</strong> ราย
+                        {currentMooUnselectedCount > 0 ? `, รอส่งเข้าคิว ${currentMooUnselectedCount} ราย` : ' • ครบทุกรายในหมู่นี้แล้ว ✅'})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {currentMooUnselectedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleAddMooToQueue(patientMooFilter)}
+                          className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-extrabold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>📥 ส่งทั้งหมู่ {patientMooFilter} เข้าคิว (+{currentMooUnselectedCount} ราย)</span>
+                        </button>
+                      )}
+                      {currentMooSelectedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMooFromQueue(patientMooFilter)}
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs cursor-pointer transition-colors"
+                          title={`นำรายชื่อหมู่ที่ ${patientMooFilter} ออกจากคิวทั้งหมด`}
+                        >
+                          <span>✕ นำทั้งหมู่ {patientMooFilter} ออก</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* View Mode Tabs: All Filtered vs In Queue vs Unselected */}
+                <div className="flex items-center gap-1.5 border-t border-slate-100 pt-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setSelectionViewMode('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+                      selectionViewMode === 'all'
+                        ? 'bg-teal-700 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    📋 แสดงทั้งหมดที่กรอง ({filteredPatients.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectionViewMode('selected')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer flex items-center gap-1 ${
+                      selectionViewMode === 'selected'
+                        ? 'bg-emerald-700 text-white shadow-2xs'
+                        : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>✓ เฉพาะที่อยู่ในคิวจัดรอบแล้ว ({plannedStops.length} ราย)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectionViewMode('unselected')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+                      selectionViewMode === 'unselected'
+                        ? 'bg-amber-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    ⏳ ยังไม่ถูกเลือก ({unselectedPatients.length} ราย)
+                  </button>
+                </div>
               </div>
 
               {/* Patient Selection Table / Cards */}
@@ -1560,117 +1798,155 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200">
-                        <th className="py-2.5 px-3 text-center w-12">เลือก</th>
+                        <th className="py-2.5 px-3 text-center w-20">คิว / เลือก</th>
                         <th className="py-2.5 px-3">ผู้ป่วย & อายุ</th>
                         <th className="py-2.5 px-3">ที่อยู่ & หมู่บ้าน & พิกัด</th>
                         <th className="py-2.5 px-3">เบอร์โทร & ผู้ดูแล</th>
                         <th className="py-2.5 px-3">สิ่งของที่ต้องได้รับในรอบนี้</th>
-                        <th className="py-2.5 px-3 text-center w-24">แก้ไขของ</th>
+                        <th className="py-2.5 px-3 text-center w-36">จัดการ / แก้ไขของ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredPatients.map((p) => {
-                        const matchedStop = plannedStops.find((s) => matchPlanStopWithPatient(s, p));
-                        const isSelected = Boolean(matchedStop) || selectedPatientIds.has(p.id);
-                        const stopIndex = matchedStop ? plannedStops.indexOf(matchedStop) : -1;
-                        const items = matchedStop
-                          ? matchedStop.items
-                          : extractPatientRoundItems(p, planRound, planYear);
+                      {filteredPatients.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-400">
+                            ไม่พบรายชื่อผู้ป่วยตามเงื่อนไขที่เลือก
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredPatients.map((p) => {
+                          const matchedStop = plannedStops.find((s) => matchPlanStopWithPatient(s, p));
+                          const isSelected = Boolean(matchedStop) || selectedPatientIds.has(p.id);
+                          const stopIndex = matchedStop ? plannedStops.indexOf(matchedStop) : -1;
+                          const queueNumber = stopIndex >= 0 ? stopIndex + 1 : null;
+                          const items = matchedStop
+                            ? matchedStop.items
+                            : extractPatientRoundItems(p, planRound, planYear);
 
-                        return (
-                          <tr
-                            key={p.id}
-                            className={`transition-colors ${
-                              isSelected ? 'bg-teal-50/50 hover:bg-teal-50' : 'hover:bg-slate-50'
-                            }`}
-                          >
-                            <td className="py-2.5 px-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleTogglePatientSelection(p)}
-                                className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer ${
-                                  isSelected
-                                    ? 'bg-teal-700 text-white'
-                                    : 'border border-slate-300 hover:border-teal-500'
-                                }`}
-                              >
-                                {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              </button>
-                            </td>
-
-                            <td className="py-2.5 px-3">
-                              <div className="font-extrabold text-slate-900 text-xs sm:text-sm">
-                                {p.fullName}
-                              </div>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-slate-500">{p.age} ปี</span>
-                                <span
-                                  className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
-                                    p.adlCategory === 'ติดเตียง'
-                                      ? 'bg-rose-100 text-rose-800'
-                                      : 'bg-amber-100 text-amber-800'
-                                  }`}
-                                >
-                                  {p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน')}
-                                </span>
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-3">
-                              <div className="font-semibold text-slate-800">{p.address}</div>
-                              <div className="text-[11px] text-teal-800 font-bold">
-                                หมู่ที่ {p.moo} {BANGPAO_VILLAGES[p.moo || '1'] || ''}
-                              </div>
-                              <div className="text-[10px] font-mono text-slate-400">
-                                📍 {p.latitude ? `${p.latitude.toFixed(4)}, ${p.longitude?.toFixed(4)}` : 'ไม่มีพิกัด'}
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-3">
-                              <div className="font-bold text-slate-800">
-                                📞 {p.phone || p.caregiverPhone || '-'}
-                              </div>
-                              <div className="text-[11px] text-slate-500">
-                                ผู้ดูแล: {p.caregiverName || '-'}
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-3">
-                              <div className="space-y-1">
-                                {items.map((it, i) => (
-                                  <div
-                                    key={i}
-                                    className="text-[11px] font-semibold text-teal-900 flex items-center gap-1"
+                          return (
+                            <tr
+                              key={p.id}
+                              className={`transition-colors ${
+                                isSelected ? 'bg-teal-50/50 hover:bg-teal-50' : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <td className="py-2.5 px-3 text-center">
+                                <div className="flex flex-col items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePatientSelection(p)}
+                                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-teal-700 text-white shadow-2xs'
+                                        : 'border border-slate-300 hover:border-teal-500'
+                                    }`}
+                                    title={isSelected ? 'คลิกเพื่อนำออกจากคิว' : 'คลิกเพื่อส่งเข้าคิว'}
                                   >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
-                                    <span>
-                                      {it.itemName}: <strong>{it.quantity}</strong> {it.unit}
+                                    {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                  </button>
+                                  {queueNumber && (
+                                    <span className="px-1.5 py-0.2 rounded-full bg-teal-800 text-white font-extrabold text-[9px] shadow-2xs">
+                                      #{queueNumber}
                                     </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
+                                  )}
+                                </div>
+                              </td>
 
-                            <td className="py-2.5 px-3 text-center">
-                              {isSelected && matchedStop ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingStopIndex(stopIndex);
-                                    setEditingItemsStop(JSON.parse(JSON.stringify(matchedStop)));
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 font-extrabold text-[11px] transition-colors cursor-pointer"
-                                  title="แก้ไขสิ่งของ/จำนวนของรายนี้"
-                                >
-                                  ✏️ แก้ไขของ
-                                </button>
-                              ) : (
-                                <span className="text-slate-300 text-[11px]">-</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              <td className="py-2.5 px-3">
+                                <div className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                                  {p.fullName}
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-slate-500">{p.age} ปี</span>
+                                  <span
+                                    className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
+                                      p.adlCategory === 'ติดเตียง'
+                                        ? 'bg-rose-100 text-rose-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                    }`}
+                                  >
+                                    {p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน')}
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="py-2.5 px-3">
+                                <div className="font-semibold text-slate-800">{p.address}</div>
+                                <div className="text-[11px] text-teal-800 font-bold">
+                                  หมู่ที่ {p.moo} {BANGPAO_VILLAGES[p.moo || '1'] || ''}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-400">
+                                  📍 {p.latitude ? `${p.latitude.toFixed(4)}, ${p.longitude?.toFixed(4)}` : 'ไม่มีพิกัด'}
+                                </div>
+                              </td>
+
+                              <td className="py-2.5 px-3">
+                                <div className="font-bold text-slate-800">
+                                  📞 {p.phone || p.caregiverPhone || '-'}
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  ผู้ดูแล: {p.caregiverName || '-'}
+                                </div>
+                              </td>
+
+                              <td className="py-2.5 px-3">
+                                <div className="space-y-1">
+                                  {items.map((it, i) => (
+                                    <div
+                                      key={i}
+                                      className="text-[11px] font-semibold text-teal-900 flex items-center gap-1"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                                      <span>
+                                        {it.itemName}: <strong>{it.quantity}</strong> {it.unit}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+
+                              <td className="py-2.5 px-3 text-center">
+                                <div className="flex items-center justify-center gap-1 flex-wrap">
+                                  {!isSelected ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTogglePatientSelection(p)}
+                                      className="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-[10px] shadow-2xs flex items-center gap-0.5 cursor-pointer transition-colors"
+                                      title="ส่งเข้าคิวจัดรอบ"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>เข้าคิว</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTogglePatientSelection(p)}
+                                      className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[10px] cursor-pointer transition-colors"
+                                      title="นำออกจากคิว"
+                                    >
+                                      ✕ ออก
+                                    </button>
+                                  )}
+
+                                  {isSelected && matchedStop && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingStopIndex(stopIndex);
+                                        setEditingItemsStop(JSON.parse(JSON.stringify(matchedStop)));
+                                      }}
+                                      className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] transition-colors cursor-pointer"
+                                      title="แก้ไขสิ่งของ/จำนวนของรายนี้"
+                                    >
+                                      ✏️ ปรับของ
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1725,7 +2001,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     type="button"
                     onClick={handleAutoSortNearest}
                     className="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
-                    title="ระบบคำนวณเรียงลำดับไปบ้านที่ใกล้ที่สุดต่อๆ กันอัตโนมัติ"
+                    title="ระบบคำนวณเรียงลำดับไปบ้านที่ใกล้ที่สุดต่อๆ กันอัตโนมัติจาก ทต.บางเป้า"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>🚀 จัดลำดับใกล้สุดอัตโนมัติ</span>
@@ -1735,7 +2011,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     type="button"
                     onClick={handleAutoSortByMoo}
                     className="px-3 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
-                    title="เรียงตามหมู่บ้าน หมู่ 1 ถึง หมู่ 7"
+                    title="เรียงตามกลุ่มหมู่บ้าน หมู่ 1 ถึง หมู่ 7"
                   >
                     <span>🏘️ เรียงตามหมู่บ้าน (ม.1 ➔ ม.7)</span>
                   </button>
@@ -1747,9 +2023,61 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                       setPlannedStops(reversed);
                     }}
                     className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer"
+                    title="กลับลำดับคิวจากหลังมาหน้า"
                   >
                     สลับกลับหัวคิว
                   </button>
+
+                  {/* Quick Add Stop in Step 4 */}
+                  {unselectedPatients.length > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsQuickAddOpen((prev) => !prev)}
+                        className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        title="เลือกผู้ป่วยที่ยังไม่ได้อยู่ในคิวเพิ่มเข้ามาในรอบนี้"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ เพิ่มผู้ป่วยเข้าคิว ({unselectedPatients.length} ราย)</span>
+                      </button>
+
+                      {isQuickAddOpen && (
+                        <div className="absolute left-0 top-full mt-1.5 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 space-y-1 max-h-72 overflow-y-auto">
+                          <div className="text-[11px] font-extrabold text-slate-700 px-2 py-1 border-b border-slate-100 flex items-center justify-between">
+                            <span>คลิกเพื่อเพิ่มเข้าคิวรอบนี้:</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsQuickAddOpen(false)}
+                              className="text-slate-400 hover:text-slate-600 font-bold px-1"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          {unselectedPatients.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                handleTogglePatientSelection(p);
+                                setIsQuickAddOpen(false);
+                              }}
+                              className="w-full text-left p-2 rounded-lg hover:bg-teal-50 text-xs flex items-center justify-between gap-1.5 cursor-pointer transition-colors border-b border-slate-50 last:border-0"
+                            >
+                              <div>
+                                <div className="font-bold text-slate-800">{p.fullName}</div>
+                                <div className="text-[10px] text-slate-500">
+                                  ม.{p.moo} {BANGPAO_VILLAGES[p.moo || '1']} • {p.adlCategory || 'ติดบ้าน'}
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-extrabold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full shrink-0">
+                                + เพิ่ม
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1784,31 +2112,57 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     <span className="font-extrabold text-slate-800 text-xs sm:text-sm">
                       ลำดับคิวส่งมอบ ({plannedStops.length} บ้าน)
                     </span>
-                    <span className="text-[11px] text-slate-400">เลื่อนขึ้น-ลง หรือพิมพ์เลขคิว</span>
+                    <span className="text-[11px] text-slate-400">เลือกเลขคิว, ลากสลับ หรือเลื่อนขึ้น-ลง</span>
                   </div>
 
                   <div className="space-y-2 max-h-[410px] overflow-y-auto pr-1">
                     {plannedStops.map((stop, idx) => (
                       <div
                         key={stop.patientId}
-                        className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:border-teal-400 hover:shadow-xs transition-all space-y-2"
+                        draggable
+                        onDragStart={() => setDraggedPlannerStopId(stop.patientId)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (draggedPlannerStopId && draggedPlannerStopId !== stop.patientId) {
+                            handleReorderStopsByDrag(draggedPlannerStopId, stop.patientId);
+                          }
+                          setDraggedPlannerStopId(null);
+                        }}
+                        onDragEnd={() => setDraggedPlannerStopId(null)}
+                        className={`p-3 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:border-teal-400 hover:shadow-xs transition-all space-y-2 cursor-grab active:cursor-grabbing ${
+                          draggedPlannerStopId === stop.patientId ? 'opacity-40 border-dashed border-teal-500 bg-teal-50/30' : ''
+                        }`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <span className="w-6 h-6 rounded-full bg-teal-800 text-white font-black text-xs flex items-center justify-center shrink-0">
                               {idx + 1}
                             </span>
-                            <div>
-                              <div className="font-extrabold text-slate-900 text-xs">
+                            <div className="min-w-0">
+                              <div className="font-extrabold text-slate-900 text-xs truncate">
                                 {stop.fullName}
                               </div>
-                              <div className="text-[10px] text-slate-500">
+                              <div className="text-[10px] text-slate-500 truncate">
                                 ม.{stop.moo} {BANGPAO_VILLAGES[stop.moo] || ''} • 📞 {stop.phone}
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1">
+                          {/* Direct Queue Selector + Move Buttons + Delete Button */}
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={idx + 1}
+                              onChange={(e) => handleSetStopPosition(stop.patientId, Number(e.target.value))}
+                              className="text-[11px] font-extrabold bg-white text-teal-950 border border-slate-300 rounded px-1.5 py-0.5 cursor-pointer outline-none hover:border-teal-500 shadow-2xs"
+                              title="เปลี่ยนลำดับคิวโดยตรง"
+                            >
+                              {plannedStops.map((_, pIdx) => (
+                                <option key={pIdx + 1} value={pIdx + 1}>
+                                  คิว #{pIdx + 1}
+                                </option>
+                              ))}
+                            </select>
+
                             <button
                               type="button"
                               onClick={() => handleMoveStop(idx, 'up')}
