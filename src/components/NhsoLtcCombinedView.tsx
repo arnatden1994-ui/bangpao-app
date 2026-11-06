@@ -5748,6 +5748,8 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                       type="button"
                                       onClick={() => {
                                         if (window.confirm(`ยืนยันการลบข้อมูลผู้ป่วย "${p.fullName}" หรือไม่?`)) {
+                                          setStops((prev) => prev.filter((s) => s.patientId !== p.id && s.id !== p.id));
+                                          setSelectedStopIds((prev) => prev.filter((id) => id !== p.id));
                                           onDeletePatient(p.id);
                                         }
                                       }}

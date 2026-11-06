@@ -205,59 +205,94 @@ export function saveStoredNhso(items: NhsoProject[]) {
   }
 }
 
+const DELETED_LTC_KEY = 'bangpao_deleted_ltc_ids_v1';
+
+export function getDeletedLtcIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_LTC_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function markLtcPatientAsDeleted(patientId: string) {
+  try {
+    const set = getDeletedLtcIds();
+    set.add(patientId);
+    safeSetItem(DELETED_LTC_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function unmarkLtcPatientAsDeleted(patientId: string) {
+  try {
+    const set = getDeletedLtcIds();
+    set.delete(patientId);
+    safeSetItem(DELETED_LTC_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 // LTC
 export function mergeLtcWithMaster(items: LtcPatient[]): LtcPatient[] {
+  const deletedIds = getDeletedLtcIds();
+
   if (!Array.isArray(items) || items.length === 0) {
-    return INITIAL_LTC_PATIENTS;
+    return INITIAL_LTC_PATIENTS.filter((p) => !deletedIds.has(p.id));
   }
   const parsedMap = new Map<string, LtcPatient>();
   for (const p of items) {
-    if (p && p.id) parsedMap.set(p.id, p);
+    if (p && p.id && !deletedIds.has(p.id)) parsedMap.set(p.id, p);
   }
 
-  // Ensure all 14 official patients in INITIAL_LTC_PATIENTS are present in exact 1–14 order
-  // and upgraded with authentic names, allocationText, projectEndDateNote, shortAddress, and roundItems
+  // Ensure official patients that have not been deleted by the user are present
   const officialIds = new Set(INITIAL_LTC_PATIENTS.map((p) => p.id));
-  const officialMerged: LtcPatient[] = INITIAL_LTC_PATIENTS.map((init) => {
-    const existing = parsedMap.get(init.id);
-    if (!existing) return init;
-    const isLegacyName =
-      existing.fullName?.includes('นายยี แซ่จุ้ย') ||
-      existing.fullName?.includes('นายสุนทร ลาพิมพ์') ||
-      !existing.allocationText ||
-      !existing.shortAddress;
-    return {
-      ...init,
-      ...existing,
-      fullName: init.fullName,
-      age: init.age,
-      gender: init.gender,
-      adlGroup: init.adlGroup,
-      adlCategory: init.adlCategory || existing.adlCategory,
-      shortAddress: init.shortAddress || existing.shortAddress,
-      allocationText: init.allocationText || existing.allocationText,
-      projectEndDateNote: init.projectEndDateNote || existing.projectEndDateNote,
-      equipmentNeeded: isLegacyName ? init.equipmentNeeded : (existing.equipmentNeeded || init.equipmentNeeded),
-      roundItems: isLegacyName ? init.roundItems : (existing.roundItems || init.roundItems),
-      yearRoundItems: isLegacyName ? init.yearRoundItems : (existing.yearRoundItems || init.yearRoundItems),
-      createdAt: existing.createdAt || init.createdAt || existing.lastVisitDate || '2026-10-01',
-      address: isLegacyName ? init.address : (existing.address || init.address),
-      moo: init.moo || existing.moo,
-    };
-  });
+  const officialMerged: LtcPatient[] = INITIAL_LTC_PATIENTS
+    .filter((init) => !deletedIds.has(init.id))
+    .map((init) => {
+      const existing = parsedMap.get(init.id);
+      if (!existing) return init;
+      const isLegacyName =
+        existing.fullName?.includes('นายยี แซ่จุ้ย') ||
+        existing.fullName?.includes('นายสุนทร ลาพิมพ์') ||
+        !existing.allocationText ||
+        !existing.shortAddress;
+      return {
+        ...init,
+        ...existing,
+        fullName: init.fullName,
+        age: init.age,
+        gender: init.gender,
+        adlGroup: init.adlGroup,
+        adlCategory: init.adlCategory || existing.adlCategory,
+        shortAddress: init.shortAddress || existing.shortAddress,
+        allocationText: init.allocationText || existing.allocationText,
+        projectEndDateNote: init.projectEndDateNote || existing.projectEndDateNote,
+        equipmentNeeded: isLegacyName ? init.equipmentNeeded : (existing.equipmentNeeded || init.equipmentNeeded),
+        roundItems: isLegacyName ? init.roundItems : (existing.roundItems || init.roundItems),
+        yearRoundItems: isLegacyName ? init.yearRoundItems : (existing.yearRoundItems || init.yearRoundItems),
+        createdAt: existing.createdAt || init.createdAt || existing.lastVisitDate || '2026-10-01',
+        address: isLegacyName ? init.address : (existing.address || init.address),
+        moo: init.moo || existing.moo,
+      };
+    });
 
-  // Keep any custom user-added patients after the 14 official ones
-  const customPatients = items.filter((p: LtcPatient) => p && p.id && !officialIds.has(p.id));
+  // Keep any custom user-added patients (excluding deleted ones)
+  const customPatients = items.filter(
+    (p: LtcPatient) => p && p.id && !officialIds.has(p.id) && !deletedIds.has(p.id)
+  );
   return [...officialMerged, ...customPatients];
 }
 
 export function getStoredLtc(): LtcPatient[] {
+  const deletedIds = getDeletedLtcIds();
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.LTC);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const normalized = mergeLtcWithMaster(parsed);
+        const normalized = mergeLtcWithMaster(parsed).filter((p) => !deletedIds.has(p.id));
         safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(normalized));
         return normalized;
       }
@@ -265,12 +300,14 @@ export function getStoredLtc(): LtcPatient[] {
   } catch (e) {
     console.error('Failed to get LTC patients from storage:', e);
   }
-  safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(INITIAL_LTC_PATIENTS));
-  return INITIAL_LTC_PATIENTS;
+  const fallback = INITIAL_LTC_PATIENTS.filter((p) => !deletedIds.has(p.id));
+  safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(fallback));
+  return fallback;
 }
 
 export function saveStoredLtc(items: LtcPatient[]) {
-  const merged = mergeLtcWithMaster(items);
+  const deletedIds = getDeletedLtcIds();
+  const merged = mergeLtcWithMaster(items).filter((p) => !deletedIds.has(p.id));
   safeSetItem(STORAGE_KEYS.LTC, JSON.stringify(merged));
 }
 

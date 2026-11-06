@@ -43,6 +43,8 @@ import {
   mergeNhsoFundProjectsWithMaster,
   getStoredLtc,
   mergeLtcWithMaster,
+  getDeletedLtcIds,
+  markLtcPatientAsDeleted,
   getStoredEquipment,
   getStoredEquipmentUnits,
   getStoredLoans,
@@ -578,22 +580,12 @@ export default function App() {
     });
     const unsubLtc = subscribeCollection<LtcPatient>(COLLECTIONS.LTC, (items) => {
       if (items && items.length > 0) {
-        const merged = mergeLtcWithMaster(items);
+        const deletedIds = getDeletedLtcIds();
+        const activeItems = items.filter((p) => !deletedIds.has(p.id));
+        const merged = mergeLtcWithMaster(activeItems);
         setLtcPatients(merged);
       }
     });
-
-    // Auto-sync all 14 official LTC patients to Firestore so cloud database is guaranteed complete
-    const syncAll14LtcToCloud = async () => {
-      try {
-        for (const pt of INITIAL_LTC_PATIENTS) {
-          await saveToFirestore(COLLECTIONS.LTC, pt, pt.id);
-        }
-      } catch (err) {
-        console.warn('Auto sync 14 LTC to Firestore error:', err);
-      }
-    };
-    syncAll14LtcToCloud();
     const unsubUsers = subscribeCollection<User>(COLLECTIONS.USERS, (items) => {
       if (items && items.length > 0) syncUsersFromRemote(items);
     });
@@ -1427,7 +1419,10 @@ unsubLicenses();
                 }}
                 onDeletePatient={(patientId) => {
                   const target = ltcPatients.find((p) => p.id === patientId);
-                  setLtcPatients((prev) => prev.filter((p) => p.id !== patientId));
+                  markLtcPatientAsDeleted(patientId);
+                  const updated = ltcPatients.filter((p) => p.id !== patientId);
+                  setLtcPatients(updated);
+                  saveStoredLtc(updated);
                   deleteFromFirestore(COLLECTIONS.LTC, patientId).catch(() => {});
                   if (target) {
                     showToast('info', `ลบรายชื่อ "${target.fullName}" เรียบร้อยแล้ว`);
