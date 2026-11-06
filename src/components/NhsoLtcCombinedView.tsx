@@ -476,8 +476,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     });
     setSelectedStopIds((prevIds) => {
       const validIds = new Set(converted.map((s) => s.id));
-      const filtered = prevIds.filter((id) => validIds.has(id));
-      return filtered.length > 0 ? filtered : converted.map((s) => s.id);
+      return prevIds.filter((id) => validIds.has(id));
     });
   }, [effectivePatients]);
 
@@ -636,7 +635,19 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   });
 
   // Per-(FiscalYear, Round) Delivery Queue Map so each Year + Round maintains its own queue
-  const [periodQueues, setPeriodQueues] = useState<Record<string, string[]>>({});
+  const [periodQueues, setPeriodQueues] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('bangpao_ltc_period_queues_v2');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bangpao_ltc_period_queues_v2', JSON.stringify(periodQueues));
+    } catch {}
+  }, [periodQueues]);
 
   // Per-(Patient, Year, Round) Delivery Handover Records & Tracking
   const [deliveryRecords, setDeliveryRecords] = useState<Record<string, RoundDeliveryRecord>>(() => {
@@ -1287,7 +1298,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   useEffect(() => {
     const pKey = getActivePeriodKey(selectedYearFilter, selectedRoundFilter);
     const existingQueue = periodQueues[pKey];
-    if (existingQueue && existingQueue.length >= stops.length && existingQueue.length > 0) {
+    if (existingQueue && existingQueue.length > 0) {
       // Filter out any stops that have already been delivered in this period
       const validPending = existingQueue.filter((id) => {
         const targetStop = stops.find((s) => s.id === id);
@@ -1295,17 +1306,10 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         return getStopDeliveryStatus(targetStop.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending';
       });
       setSelectedStopIds(validPending);
-    } else if (stops.length > 0) {
-      // Auto-populate all pending stops for this round (all 14 official stops)
-      const allPendingIds = stops
-        .filter((s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending')
-        .map((s) => s.id);
-      setSelectedStopIds(allPendingIds);
-      setPeriodQueues((prev) => ({ ...prev, [pKey]: allPendingIds }));
     } else {
       setSelectedStopIds([]);
     }
-  }, [selectedYearFilter, selectedRoundFilter, deliveryRecords, stops]);
+  }, [selectedYearFilter, selectedRoundFilter]);
 
   // Send a stop directly to the delivery queue for the active Year & Round ("ส่งไปจัดรอบแจก")
   const sendStopToRoundQueue = (stop: DeliveryStop, scrollToSequencer = false) => {
@@ -3374,7 +3378,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     </span>
                     {orderedSelectedStops.length === 0 ? (
                       <span className="text-slate-500 italic text-[11px] pl-1">
-                        ยังไม่ได้เลือกบ้านในคิว — ติ๊กเลือกบ้านด้านขวาตามลำดับที่จะไปก่อน-หลัง
+                        ยังไม่ได้เลือกบ้านในคิว — กดปุ่ม &ldquo;+ จัดรอบ&rdquo; ที่ตารางรายชื่อด้านล่าง เพื่อดึงรายชื่อเข้าคิวจัดส่ง
                       </span>
                     ) : (
                       orderedSelectedStops.map((s, qIdx) => (
@@ -3519,8 +3523,31 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                               className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                             >
                               <Navigation className="w-3.5 h-3.5" />
-                              <span>นำทาง Google Maps ไปบ้านรายนี้</span>
+                              <span>นำทาง Google Maps</span>
                             </button>
+
+                            {!isDel && (
+                              !selectedStopIds.includes(activeStop.id) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => sendStopToRoundQueue(activeStop, false)}
+                                  className="py-2 px-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                  title="ดึงรายชื่อนี้เข้าสู่คิวจัดส่งรอบนี้"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>+ จัดรอบ</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleStopSelection(activeStop.id)}
+                                  className="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                  title="นำออกจากคิวจัดรอบ"
+                                >
+                                  <span>✕ ออกจากคิว (#{orderedSelectedStops.findIndex((s) => s.id === activeStop.id) + 1})</span>
+                                </button>
+                              )
+                            )}
 
                             {!isDel ? (
                               <button
@@ -3842,7 +3869,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                             ยังไม่มีรายชื่อในคิวจัดรอบส่งมอบ ({activeYearLabel} • {activeRoundLabel})
                           </div>
                           <p className="text-[11px] text-slate-600 max-w-sm mx-auto leading-relaxed">
-                            พื้นที่นี้ใช้สำหรับจัดลำดับส่งมอบ ให้กดปุ่ม <strong>&ldquo;+ ส่งไปจัดรอบ&rdquo;</strong> จากตารางรายชื่อด้านล่าง เพื่อนำผู้ป่วยเข้าสู่คิวจัดเส้นทาง หรือกดปุ่มด้านล่างเพื่อดึงทั้งหมด
+                            พื้นที่นี้ใช้สำหรับจัดลำดับส่งมอบ ให้กดปุ่ม <strong>&ldquo;+ จัดรอบ&rdquo;</strong> จากตารางรายชื่อด้านล่าง เพื่อนำผู้ป่วยเข้าสู่คิวจัดเส้นทางทีละท่าน หรือกดปุ่มด้านล่างเพื่อดึงทั้งหมด
                           </p>
                           <button
                             type="button"
@@ -4472,9 +4499,9 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                   {!isQueued ? (
                                     <button
                                       type="button"
-                                      onClick={() => sendStopToRoundQueue(stop, true)}
+                                      onClick={() => sendStopToRoundQueue(stop, false)}
                                       className="px-2 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-[11px] shadow-2xs flex items-center gap-0.5 cursor-pointer transition-colors"
-                                      title="ส่งรายชื่อนี้เข้าสู่คิวจัดรอบส่งมอบ"
+                                      title="ดึงเฉพาะรายชื่อนี้เข้าสู่คิวจัดรอบส่งมอบ"
                                     >
                                       <Plus className="w-3 h-3" />
                                       <span>จัดรอบ</span>
