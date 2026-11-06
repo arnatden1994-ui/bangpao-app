@@ -274,6 +274,7 @@ export function mergeLtcWithMaster(items: LtcPatient[]): LtcPatient[] {
         yearRoundItems: isLegacyName ? init.yearRoundItems : (existing.yearRoundItems || init.yearRoundItems),
         createdAt: existing.createdAt || init.createdAt || existing.lastVisitDate || '2026-10-01',
         address: isLegacyName ? init.address : (existing.address || init.address),
+        landmark: existing.landmark || init.landmark || '',
         moo: init.moo || existing.moo,
       };
     });

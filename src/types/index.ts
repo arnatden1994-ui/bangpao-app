@@ -794,6 +794,7 @@ export interface LtcPatient {
   phone: string;
   address: string;
   shortAddress?: string; // ที่อยู่ย่อสำหรับใบลงทะเบียน เช่น "35/5 ม.5"
+  landmark?: string; // จุดสังเกต / จุดอ้างอิงใกล้เคียง เช่น "ร้านข้าวแกงป้าณี", "บ้านผู้ใหญ่", "ซอยข้างมัสยิด"
   allocationText?: string; // จำนวน ผ้าอ้อม/นม สำหรับใบลงทะเบียน เช่น "M 390 ชิ้น", "L 310 / นม", "นม 3"
   projectEndDateNote?: string; // หมายเหตุ สิ้นสุดโครงการ เช่น "30 ธ.ค.", "18 ธ.ค.", "-", "21 ม.ค."
   subdistrict: string;

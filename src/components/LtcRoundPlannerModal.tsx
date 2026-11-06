@@ -1080,7 +1080,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         const matchHn = p.hn?.toLowerCase().includes(q);
         const matchIdCard = p.idCard?.replace(/-/g, '').includes(q.replace(/-/g, ''));
         const matchPhone = p.phone?.includes(q) || p.caregiverPhone?.includes(q);
-        if (!matchName && !matchHn && !matchIdCard && !matchPhone) return false;
+        const matchAddr = p.address?.toLowerCase().includes(q);
+        const matchLandmark = p.landmark?.toLowerCase().includes(q);
+        if (!matchName && !matchHn && !matchIdCard && !matchPhone && !matchAddr && !matchLandmark) return false;
       }
       return true;
     });
@@ -1907,6 +1909,12 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
                               <td className="py-2.5 px-3">
                                 <div className="font-semibold text-slate-800">{p.address}</div>
+                                {p.landmark && (
+                                  <div className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80 font-bold inline-flex items-center gap-1 mt-0.5">
+                                    <span>📍 ใกล้:</span>
+                                    <span>{p.landmark}</span>
+                                  </div>
+                                )}
                                 <div className="text-[11px] text-teal-800 font-bold">
                                   หมู่ที่ {p.moo} {BANGPAO_VILLAGES[p.moo || '1'] || ''}
                                 </div>
