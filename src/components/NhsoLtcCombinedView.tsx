@@ -1345,6 +1345,14 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     }
   };
 
+  // Ordered selected stops in the exact sequence chosen by the user (Excluding already-delivered persons in this round!)
+  const orderedSelectedStops = useMemo(() => {
+    return selectedStopIds
+      .map((id) => stops.find((s) => s.id === id || s.patientId === id))
+      .filter((s): s is DeliveryStop => Boolean(s))
+      .filter((s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending');
+  }, [selectedStopIds, stops, selectedYearFilter, selectedRoundFilter, deliveryRecords]);
+
   const applyNewStopsOrder = (orderedStops: DeliveryStop[], nextSelectedIds?: string[]) => {
     const updated = orderedStops.map((s, idx) => ({
       ...s,
@@ -1358,60 +1366,123 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     updateSelectedQueueForPeriod(syncedSelected);
   };
 
-  // Reorder Stops in Route Planner by index
-  const moveStopOrder = (index: number, direction: 'up' | 'down') => {
-    const newStops = [...stops];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newStops.length) return;
-    const temp = newStops[index];
-    newStops[index] = newStops[targetIndex];
-    newStops[targetIndex] = temp;
-    applyNewStopsOrder(newStops);
-  };
-
-  // Move a specific stop up or down freely by stopId
+  // Move a specific stop up or down freely by stopId in the queue
   const moveStopById = (stopId: string, direction: 'up' | 'down') => {
-    const idx = stops.findIndex((s) => s.id === stopId);
-    if (idx === -1) return;
-    moveStopOrder(idx, direction);
+    const queueStops = [...orderedSelectedStops];
+    const currentQueueIdx = queueStops.findIndex((s) => s.id === stopId || s.patientId === stopId);
+    if (currentQueueIdx === -1) return;
+
+    const targetQueueIdx = direction === 'up' ? currentQueueIdx - 1 : currentQueueIdx + 1;
+    if (targetQueueIdx < 0 || targetQueueIdx >= queueStops.length) return;
+
+    const [moved] = queueStops.splice(currentQueueIdx, 1);
+    queueStops.splice(targetQueueIdx, 0, moved);
+
+    const nextQueueIds = queueStops.map((s) => s.id);
+    const otherSelectedIds = selectedStopIds.filter((id) => !queueStops.some((s) => s.id === id || s.patientId === id));
+    const fullSelectedIds = [...nextQueueIds, ...otherSelectedIds];
+
+    const unpickedStops = stops.filter((s) => !fullSelectedIds.includes(s.id) && !fullSelectedIds.includes(s.patientId));
+    const updatedMasterStops = [...queueStops, ...unpickedStops].map((s, idx) => ({
+      ...s,
+      routeOrder: idx + 1,
+    }));
+
+    setStops(updatedMasterStops);
+    updateSelectedQueueForPeriod(fullSelectedIds);
   };
 
-  // Jump a stop directly to a specific 1-based position (1 = บ้านแรก, 2 = บ้านที่ 2, ...)
+  // Jump a stop directly to a specific 1-based position in the active queue (1 = ลำดับ 1, 2 = ลำดับ 2, ...)
   const changeStopPosition = (stopId: string, targetOneBasedPos: number) => {
-    const currentIndex = stops.findIndex((s) => s.id === stopId);
-    if (currentIndex === -1) return;
-    const targetIndex = Math.max(0, Math.min(stops.length - 1, targetOneBasedPos - 1));
-    if (currentIndex === targetIndex) return;
-    const newStops = [...stops];
-    const [moved] = newStops.splice(currentIndex, 1);
-    newStops.splice(targetIndex, 0, moved);
-    const nextSel = selectedStopIds.includes(stopId)
-      ? selectedStopIds
-      : [...selectedStopIds, stopId];
-    applyNewStopsOrder(newStops, nextSel);
+    const queueStops = [...orderedSelectedStops];
+    const currentQueueIdx = queueStops.findIndex((s) => s.id === stopId || s.patientId === stopId);
+    if (currentQueueIdx === -1) return;
+
+    const targetQueueIdx = Math.max(0, Math.min(queueStops.length - 1, targetOneBasedPos - 1));
+    if (currentQueueIdx === targetQueueIdx) return;
+
+    // Move stop to the target position in the queue
+    const [moved] = queueStops.splice(currentQueueIdx, 1);
+    queueStops.splice(targetQueueIdx, 0, moved);
+
+    // Get the new list of IDs in exact queue sequence
+    const nextQueueIds = queueStops.map((s) => s.id);
+    const otherSelectedIds = selectedStopIds.filter((id) => !queueStops.some((s) => s.id === id || s.patientId === id));
+    const fullSelectedIds = [...nextQueueIds, ...otherSelectedIds];
+
+    // Reorder master stops so queued stops come first in this exact sequence
+    const unpickedStops = stops.filter((s) => !fullSelectedIds.includes(s.id) && !fullSelectedIds.includes(s.patientId));
+    const updatedMasterStops = [...queueStops, ...unpickedStops].map((s, idx) => ({
+      ...s,
+      routeOrder: idx + 1,
+    }));
+
+    setStops(updatedMasterStops);
+    updateSelectedQueueForPeriod(fullSelectedIds);
+    setQueueToastMsg(`เปลี่ยน "${moved.patientName}" ไปอยู่คิวลำดับ #${targetQueueIdx + 1} เรียบร้อยแล้ว 🔄`);
+    setTimeout(() => setQueueToastMsg(null), 3000);
   };
 
-  // Drag-and-drop reorder between two stop cards
+  // Drag-and-drop reorder between two stop cards in the queue
   const reorderStopsByDrag = (sourceId: string, targetId: string) => {
     if (!sourceId || !targetId || sourceId === targetId) return;
-    const srcIdx = stops.findIndex((s) => s.id === sourceId);
-    const tgtIdx = stops.findIndex((s) => s.id === targetId);
+    const queueStops = [...orderedSelectedStops];
+    const srcIdx = queueStops.findIndex((s) => s.id === sourceId || s.patientId === sourceId);
+    const tgtIdx = queueStops.findIndex((s) => s.id === targetId || s.patientId === targetId);
     if (srcIdx === -1 || tgtIdx === -1) return;
-    const newStops = [...stops];
-    const [moved] = newStops.splice(srcIdx, 1);
-    newStops.splice(tgtIdx, 0, moved);
-    applyNewStopsOrder(newStops);
+
+    const [moved] = queueStops.splice(srcIdx, 1);
+    queueStops.splice(tgtIdx, 0, moved);
+
+    const nextQueueIds = queueStops.map((s) => s.id);
+    const otherSelectedIds = selectedStopIds.filter((id) => !queueStops.some((s) => s.id === id || s.patientId === id));
+    const fullSelectedIds = [...nextQueueIds, ...otherSelectedIds];
+
+    const unpickedStops = stops.filter((s) => !fullSelectedIds.includes(s.id) && !fullSelectedIds.includes(s.patientId));
+    const updatedMasterStops = [...queueStops, ...unpickedStops].map((s, idx) => ({
+      ...s,
+      routeOrder: idx + 1,
+    }));
+
+    setStops(updatedMasterStops);
+    updateSelectedQueueForPeriod(fullSelectedIds);
   };
 
   // Auto Sort Route Order by Village Moo (1 -> 7)
   const autoSortStopsByMoo = () => {
-    const newStops = [...stops].sort((a, b) => Number(a.moo) - Number(b.moo));
-    applyNewStopsOrder(newStops);
+    const queueStops = [...orderedSelectedStops];
+    if (queueStops.length > 0) {
+      const sorted = queueStops.sort((a, b) => {
+        const mooA = parseInt(a.moo || '0', 10);
+        const mooB = parseInt(b.moo || '0', 10);
+        if (mooA !== mooB) return mooA - mooB;
+        return a.patientName.localeCompare(b.patientName, 'th');
+      });
+
+      const nextQueueIds = sorted.map((s) => s.id);
+      const otherSelectedIds = selectedStopIds.filter((id) => !sorted.some((s) => s.id === id || s.patientId === id));
+      const fullSelectedIds = [...nextQueueIds, ...otherSelectedIds];
+
+      const unpickedStops = stops.filter((s) => !fullSelectedIds.includes(s.id) && !fullSelectedIds.includes(s.patientId));
+      const updatedMasterStops = [...sorted, ...unpickedStops].map((s, idx) => ({
+        ...s,
+        routeOrder: idx + 1,
+      }));
+
+      setStops(updatedMasterStops);
+      updateSelectedQueueForPeriod(fullSelectedIds);
+    } else {
+      const newStops = [...stops].sort((a, b) => Number(a.moo) - Number(b.moo));
+      applyNewStopsOrder(newStops);
+    }
+    setQueueToastMsg('จัดลำดับเรียงตามหมู่บ้าน ม.1 ➔ ม.7 เรียบร้อยแล้ว 🏘️');
+    setTimeout(() => setQueueToastMsg(null), 3500);
   };
 
   // Auto Sort by Nearest Neighbor starting from Bangpao Municipality HQ (7.429625, 99.52522)
   const autoSortNearestFromHq = () => {
-    const remaining = [...stops];
+    const targetList = orderedSelectedStops.length > 0 ? [...orderedSelectedStops] : [...stops];
+    const remaining = [...targetList];
     const sorted: DeliveryStop[] = [];
     let curLat = BANGPAO_MUNICIPALITY_COORDS.lat;
     let curLng = BANGPAO_MUNICIPALITY_COORDS.lng;
@@ -1434,7 +1505,24 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       curLng = closest.lng;
     }
 
-    applyNewStopsOrder(sorted);
+    if (orderedSelectedStops.length > 0) {
+      const nextQueueIds = sorted.map((s) => s.id);
+      const otherSelectedIds = selectedStopIds.filter((id) => !sorted.some((s) => s.id === id || s.patientId === id));
+      const fullSelectedIds = [...nextQueueIds, ...otherSelectedIds];
+
+      const unpickedStops = stops.filter((s) => !fullSelectedIds.includes(s.id) && !fullSelectedIds.includes(s.patientId));
+      const updatedMasterStops = [...sorted, ...unpickedStops].map((s, idx) => ({
+        ...s,
+        routeOrder: idx + 1,
+      }));
+
+      setStops(updatedMasterStops);
+      updateSelectedQueueForPeriod(fullSelectedIds);
+    } else {
+      applyNewStopsOrder(sorted);
+    }
+    setQueueToastMsg('จัดลำดับเรียงใกล้สุดจาก ทต.บางเป้า เรียบร้อยแล้ว 🚀');
+    setTimeout(() => setQueueToastMsg(null), 3500);
   };
 
   // Toggle Selection of a Stop for Route (Selecting appends to the end of queue and orders selected stops first)
@@ -1632,11 +1720,6 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     setTimeout(() => setQueueToastMsg(null), 4000);
   };
 
-  // Ordered selected stops in the exact sequence chosen by the user (Excluding already-delivered persons in this round!)
-  const orderedSelectedStops = selectedStopIds
-    .map((id) => stops.find((s) => s.id === id || s.patientId === id))
-    .filter((s): s is DeliveryStop => Boolean(s))
-    .filter((s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending');
 
   // Generate Turn-by-Turn Multi-Stop Google Maps Navigation URL following the exact user-chosen sequence
   const getGoogleMapsRouteUrl = () => {
@@ -4514,14 +4597,14 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          changeStopPosition(stop.id, 1);
+                                          focusStopOnOverviewMap(stop);
                                           routeSequencerBoxRef.current?.scrollIntoView({
                                             behavior: 'smooth',
                                             block: 'center',
                                           });
                                         }}
                                         className="px-1.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-[10px] flex items-center gap-0.5 cursor-pointer transition-colors"
-                                        title="อยู่ในคิวจัดรอบแล้ว (#1)"
+                                        title={`อยู่ในคิวจัดรอบแล้ว (คิว #${queueNo}) คลิกเพื่อดูหมุดและตำแหน่งในคิว`}
                                       >
                                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                         <span>ในคิว #{queueNo}</span>
