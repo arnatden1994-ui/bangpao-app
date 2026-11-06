@@ -81,7 +81,7 @@ export const normalizeThaiName = (name?: string): string => {
   if (!name) return '';
   return name
     .replace(/\s+/g, '')
-    .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|ด\.ญ\.)/, '')
+    .replace(/^(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)/, '')
     .trim();
 };
 
@@ -90,53 +90,33 @@ export const extractGivenName = (fullName?: string): string => {
   if (!fullName) return '';
   const clean = fullName
     .replace(/\s+/g, ' ')
-    .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|ด\.ญ\.)\s*/, '')
+    .replace(/^(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.)\s*/, '')
     .trim();
   return clean.split(' ')[0] || clean;
 };
 
-// Resilient matcher between a plan stop and a registered patient
+// Exact & resilient matcher between a plan stop and a registered patient
 export const matchPlanStopWithPatient = (
   stop: { patientId?: string; fullName?: string; idCard?: string; address?: string },
   patient: LtcPatient
 ): boolean => {
-  // 1. Direct ID match
-  if (stop.patientId && patient.id && stop.patientId === patient.id) return true;
-
-  // 2. ID Card match
-  if (patient.idCard && stop.idCard && patient.idCard === stop.idCard && stop.idCard !== '-') return true;
-
-  // 3. Address match (rural house number + Moo is very reliable)
-  if (stop.address && patient.address) {
-    const sAddr = stop.address.replace(/\s+/g, '');
-    const pAddr = patient.address.replace(/\s+/g, '');
-    if (sAddr === pAddr || sAddr.includes(pAddr) || pAddr.includes(sAddr)) return true;
+  // 1. Direct ID match (Best & most accurate)
+  if (stop.patientId && patient.id) {
+    return stop.patientId === patient.id;
   }
 
-  // 4. Given name matching (handles transcription differences like ลาพิมพ์ vs สาพิมพ์, ดำหนูอินทร์ vs ดำหนูจันทร์)
-  const stopGiven = extractGivenName(stop.fullName);
-  const patientGiven = extractGivenName(patient.fullName);
-  if (stopGiven && patientGiven) {
-    if (stopGiven === patientGiven) return true;
-    if (
-      (stopGiven.includes('สุนทร') && patientGiven.includes('สุนทร')) ||
-      (stopGiven.includes('เลียบ') && patientGiven.includes('เลียบ')) ||
-      (stopGiven.includes('ยี') && (patientGiven.includes('ยี') || patientGiven.includes('ยี่') || patientGiven.includes('ชี'))) ||
-      ((stopGiven.includes('ผึ้ง') || stopGiven.includes('พริ้ง')) && (patientGiven.includes('ผึ้ง') || patientGiven.includes('พริ้ง'))) ||
-      (stopGiven.includes('แดง') && patientGiven.includes('แดง'))
-    ) {
-      return true;
-    }
+  // 2. ID Card match (only if valid 13 digits)
+  if (patient.idCard && stop.idCard && patient.idCard !== '-' && stop.idCard !== '-') {
+    const sCard = stop.idCard.replace(/[-\s]/g, '');
+    const pCard = patient.idCard.replace(/[-\s]/g, '');
+    if (sCard.length === 13 && sCard === pCard) return true;
   }
 
-  // 5. Full normalized name check
+  // 3. Exact full normalized name match (Never use substring .includes()!)
   if (stop.fullName && patient.fullName) {
     const sNorm = normalizeThaiName(stop.fullName);
     const pNorm = normalizeThaiName(patient.fullName);
-    if (sNorm && pNorm) {
-      if (sNorm === pNorm) return true;
-      if (sNorm.includes(pNorm) || pNorm.includes(sNorm)) return true;
-    }
+    if (sNorm && pNorm && sNorm === pNorm) return true;
   }
 
   return false;
@@ -667,10 +647,13 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
   // Add/remove a patient to stops from Step 3
   const handleTogglePatientSelection = (p: LtcPatient) => {
-    const existingIdx = plannedStops.findIndex((s) => matchPlanStopWithPatient(s, p));
+    const existingIdx = plannedStops.findIndex((s) => s.patientId === p.id || matchPlanStopWithPatient(s, p));
     if (existingIdx !== -1) {
-      const stopToRemove = plannedStops[existingIdx];
-      handleRemoveStop(stopToRemove.patientId);
+      const filtered = plannedStops
+        .filter((_, idx) => idx !== existingIdx)
+        .map((s, i) => ({ ...s, queueOrder: i + 1 }));
+      setPlannedStops(filtered);
+      showToast(`นำ "${p.fullName}" ออกจากคิวจัดรอบแล้ว`);
     } else {
       const mooFallback = BANGPAO_COORDS[p.moo || '2'] || BANGPAO_HQ_COORDS;
       const lat = p.latitude ?? (mooFallback.lat + 0.001 * (plannedStops.length + 1));
@@ -697,14 +680,14 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         notes: p.diagnosis || '',
       };
       setPlannedStops([...plannedStops, newStop]);
-      showToast(`เพิ่ม "${p.fullName}" เข้าคิวจัดรอบแล้ว`);
+      showToast(`เพิ่ม "${p.fullName}" เข้าคิวจัดรอบแล้ว (คิว #${plannedStops.length + 1})`);
     }
   };
 
   // Select all filtered patients
   const handleSelectAllFiltered = (filteredList: LtcPatient[]) => {
     const toAdd = filteredList.filter(
-      (p) => !plannedStops.some((s) => matchPlanStopWithPatient(s, p))
+      (p) => !plannedStops.some((s) => s.patientId === p.id || matchPlanStopWithPatient(s, p))
     );
     if (toAdd.length === 0) return;
 
@@ -745,7 +728,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       (p) => p.status !== 'deceased' && p.moo === mooNum
     );
     const toAdd = targetPatients.filter(
-      (p) => !plannedStops.some((s) => matchPlanStopWithPatient(s, p))
+      (p) => !plannedStops.some((s) => s.patientId === p.id || matchPlanStopWithPatient(s, p))
     );
     if (toAdd.length === 0) {
       showToast(`รายชื่อในหมู่ที่ ${mooNum} อยู่ในคิวครบแล้ว`);
@@ -795,7 +778,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   // Select all registered active patients
   const handleSelectAllPatients = () => {
     const toAdd = safePatients.filter(
-      (p) => p.status !== 'deceased' && !plannedStops.some((s) => matchPlanStopWithPatient(s, p))
+      (p) => p.status !== 'deceased' && !plannedStops.some((s) => s.patientId === p.id || matchPlanStopWithPatient(s, p))
     );
     if (toAdd.length === 0) {
       showToast('ผู้ป่วยทุกคนอยู่ในคิวเรียบร้อยแล้ว');
@@ -1072,8 +1055,17 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
     printWindow.document.close();
   };
 
-  // Filtered patients for selection in Step 3
-  const filteredPatients = useMemo(() => {
+  // Helper to check if a patient is in the current plan stops
+  const isPatientInPlan = (p: LtcPatient): boolean => {
+    return plannedStops.some((s) => s.patientId === p.id || matchPlanStopWithPatient(s, p));
+  };
+
+  const findPatientStopIndex = (p: LtcPatient): number => {
+    return plannedStops.findIndex((s) => s.patientId === p.id || matchPlanStopWithPatient(s, p));
+  };
+
+  // Base filtered patients by Moo, ADL, and Search (Step 3)
+  const baseFilteredPatients = useMemo(() => {
     return safePatients.filter((p) => {
       if (p.status === 'deceased') return false;
       if (patientMooFilter !== 'all' && p.moo !== patientMooFilter) return false;
@@ -1092,14 +1084,36 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       }
       return true;
     });
-  }, [safePatients, patientMooFilter, patientAdlFilter, patientSearch, selectionViewMode, plannedStops]);
+  }, [safePatients, patientMooFilter, patientAdlFilter, patientSearch]);
+
+  // Counts within current base filter
+  const inQueueCountInFilter = useMemo(() => {
+    return baseFilteredPatients.filter((p) => isPatientInPlan(p)).length;
+  }, [baseFilteredPatients, plannedStops]);
+
+  const unselectedCountInFilter = useMemo(() => {
+    return baseFilteredPatients.length - inQueueCountInFilter;
+  }, [baseFilteredPatients, inQueueCountInFilter]);
+
+  // Displayed patients in Step 3 table based on view mode tab
+  const displayedPatients = useMemo(() => {
+    return baseFilteredPatients.filter((p) => {
+      const inPlan = isPatientInPlan(p);
+      if (selectionViewMode === 'selected') return inPlan;
+      if (selectionViewMode === 'unselected') return !inPlan;
+      return true;
+    });
+  }, [baseFilteredPatients, plannedStops, selectionViewMode]);
+
+  // For backwards compatibility and toolbar
+  const filteredPatients = displayedPatients;
 
   const selectedPatientIds = useMemo(() => new Set(plannedStops.map((s) => s.patientId)), [plannedStops]);
 
   // Patients who are not yet in the plan stops (for quick add in Step 4)
   const unselectedPatients = useMemo(() => {
-    return safePatients.filter((p) => p.status !== 'deceased' && !selectedPatientIds.has(p.id));
-  }, [safePatients, selectedPatientIds]);
+    return safePatients.filter((p) => p.status !== 'deceased' && !isPatientInPlan(p));
+  }, [safePatients, plannedStops]);
 
   // Moo-level counts
   const currentMooPatients = useMemo(() => {
@@ -1108,8 +1122,8 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   }, [safePatients, patientMooFilter]);
 
   const currentMooSelectedCount = useMemo(() => {
-    return currentMooPatients.filter((p) => selectedPatientIds.has(p.id)).length;
-  }, [currentMooPatients, selectedPatientIds]);
+    return currentMooPatients.filter((p) => isPatientInPlan(p)).length;
+  }, [currentMooPatients, plannedStops]);
 
   const currentMooUnselectedCount = useMemo(() => {
     return currentMooPatients.length - currentMooSelectedCount;
@@ -1697,14 +1711,31 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
                   {/* Global Quick Action Buttons */}
                   <div className="flex items-end gap-1.5">
-                    <button
-                      type="button"
-                      onClick={handleSelectAllPatients}
-                      className="flex-1 py-1.5 px-2 bg-teal-100 hover:bg-teal-200 text-teal-900 rounded-lg font-bold text-xs transition-colors cursor-pointer"
-                      title="เลือกผู้ป่วยทุกคนทั้งหมดเข้าคิว"
-                    >
-                      📥 ดึงทุกคน ({safePatients.filter(p => p.status !== 'deceased').length})
-                    </button>
+                    {patientMooFilter === 'all' && !patientSearch.trim() && patientAdlFilter === 'all' ? (
+                      <button
+                        type="button"
+                        onClick={handleSelectAllPatients}
+                        className="flex-1 py-1.5 px-2 bg-teal-100 hover:bg-teal-200 text-teal-900 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                        title="เลือกผู้ป่วยทุกคนทั้งหมดเข้าคิว"
+                      >
+                        📥 ดึงทุกคน ({safePatients.filter(p => p.status !== 'deceased').length})
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectAllFiltered(baseFilteredPatients)}
+                        disabled={unselectedCountInFilter === 0}
+                        className={`flex-1 py-1.5 px-2 rounded-lg font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+                          unselectedCountInFilter > 0
+                            ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        }`}
+                        title="เลือกรายชื่อที่กรองไว้ทั้งหมดเข้าคิว"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>✓ เลือกทุกคนที่กรอง ({unselectedCountInFilter})</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setPlannedStops([])}
@@ -1764,7 +1795,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    📋 แสดงทั้งหมดที่กรอง ({filteredPatients.length})
+                    📋 แสดงทั้งหมดที่กรอง ({baseFilteredPatients.length})
                   </button>
                   <button
                     type="button"
@@ -1776,7 +1807,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     }`}
                   >
                     <Check className="w-3.5 h-3.5" />
-                    <span>✓ เฉพาะที่อยู่ในคิวจัดรอบแล้ว ({plannedStops.length} ราย)</span>
+                    <span>✓ เฉพาะที่อยู่ในคิว ({inQueueCountInFilter} ราย)</span>
                   </button>
                   <button
                     type="button"
@@ -1787,7 +1818,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    ⏳ ยังไม่ถูกเลือก ({unselectedPatients.length} ราย)
+                    ⏳ ยังไม่ถูกเลือก ({unselectedCountInFilter} ราย)
                   </button>
                 </div>
               </div>
@@ -1807,18 +1838,22 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredPatients.length === 0 ? (
+                      {displayedPatients.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-8 text-center text-slate-400">
-                            ไม่พบรายชื่อผู้ป่วยตามเงื่อนไขที่เลือก
+                            {selectionViewMode === 'selected'
+                              ? 'ยังไม่มีรายชื่อในตัวกรองนี้ที่อยู่ในคิวจัดรอบ'
+                              : selectionViewMode === 'unselected'
+                              ? 'รายชื่อทั้งหมดในตัวกรองนี้ถูกเลือกเข้าคิวแล้ว'
+                              : 'ไม่พบรายชื่อผู้ป่วยตามเงื่อนไขที่เลือก'}
                           </td>
                         </tr>
                       ) : (
-                        filteredPatients.map((p) => {
-                          const matchedStop = plannedStops.find((s) => matchPlanStopWithPatient(s, p));
-                          const isSelected = Boolean(matchedStop) || selectedPatientIds.has(p.id);
-                          const stopIndex = matchedStop ? plannedStops.indexOf(matchedStop) : -1;
-                          const queueNumber = stopIndex >= 0 ? stopIndex + 1 : null;
+                        displayedPatients.map((p) => {
+                          const stopIndex = findPatientStopIndex(p);
+                          const isSelected = stopIndex >= 0;
+                          const matchedStop = isSelected ? plannedStops[stopIndex] : null;
+                          const queueNumber = isSelected ? stopIndex + 1 : null;
                           const items = matchedStop
                             ? matchedStop.items
                             : extractPatientRoundItems(p, planRound, planYear);
