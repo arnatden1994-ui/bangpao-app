@@ -4542,65 +4542,93 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                         </div>
                       )}
 
-                      {/* Direct Share Bar for Live Mobile Convoy App Link (ไม่ต้องล็อกอิน) */}
-                      <div className="pt-2.5 border-t border-white/15 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-                        <div className="text-[11px] text-teal-200 flex items-center gap-1.5">
-                          <span>📱</span>
-                          <span>
-                            ส่งลิงก์แอปติดตามขบวนรอบนี้ให้ทีมงาน/ผู้บริหารเปิดดูบนมือถือสดๆ <strong className="text-amber-300">(ไม่ต้องล็อกอิน)</strong>:
-                          </span>
+                      {/* Direct Share Bar for Live Mobile Convoy App Link (แยกลิงก์ผู้ติดตาม vs ลิงก์รถขนของชัดเจน) */}
+                      <div className="pt-2.5 border-t border-white/15 space-y-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                          <div className="text-[11px] text-teal-200 flex items-center gap-1.5">
+                            <span>🚗</span>
+                            <span>
+                              <strong>ลิงก์สำหรับคณะผู้ติดตาม / ผู้บริหาร</strong> <span className="text-amber-300">(ดูสถานะ & กดนำทางตามอย่างเดียว กดมั่วไม่ได้)</span>:
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                broadcastConvoyStateToCloud({ isActive: true });
+                                const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
+                                navigator.clipboard.writeText(convoyUrl);
+                                setQueueToastMsg('✅ คัดลอก "ลิงก์สำหรับคณะผู้ติดตาม (ดูอย่างเดียว)" เรียบร้อย! ส่งเข้ากลุ่ม LINE ได้เลย');
+                                setTimeout(() => setQueueToastMsg(null), 4500);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-all"
+                              title="คัดลอกลิงก์สำหรับคณะผู้ติดตาม (ดูสถานะและนำทางได้อย่างเดียว)"
+                            >
+                              <Copy className="w-3 h-3" />
+                              <span>คัดลอกลิงก์ผู้ติดตาม</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                broadcastConvoyStateToCloud({ isActive: true });
+                                const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
+                                const lineMsg = [
+                                  `🛰️ ลิงก์ติดตามขบวนแจกพัสดุ สปสช. LTC ทต.บางเป้า (สด Real-Time)`,
+                                  `📅 ${activeYearLabel} • ${activeRoundLabel}`,
+                                  `📍 จำนวนในคิวรอบนี้: ${orderedSelectedStops.length} บ้าน (ส่งแล้ว ${deliveredCount} บ้าน)`,
+                                  `🎯 บ้านเป้าหมายปัจจุบัน: คิว #${currentTargetIdx + 1} ${currentTargetStop.patientName} (ม.${currentTargetStop.moo} ${currentTargetStop.village})`,
+                                  ``,
+                                  `📲 กดลิงก์ด้านล่างเพื่อดูสถานะขบวนสดและกดนำทางตามไปสมทบ (ไม่ต้องเข้าระบบ):`,
+                                  convoyUrl,
+                                ].join('\n');
+                                window.open(`https://line.me/R/msg/text/?${encodeURIComponent(lineMsg)}`, '_blank');
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-black text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs transition-all"
+                              title="แชร์ลิงก์สำหรับคณะผู้ติดตามเข้ากลุ่ม LINE ทันที"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>💬 แชร์ให้ผู้ติดตาม (LINE)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                broadcastConvoyStateToCloud({ isActive: true });
+                                window.open(`${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`, '_blank');
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-slate-950 font-black text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs transition-all"
+                              title="เปิดดูหน้าแอปมือถือของรอบนี้"
+                            >
+                              <span>📱 เปิดดูแอป</span>
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              broadcastConvoyStateToCloud({ isActive: true });
-                              const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
-                              navigator.clipboard.writeText(convoyUrl);
-                              setQueueToastMsg('✅ คัดลอกลิงก์แอปติดตามขบวนสดเรียบร้อย! ส่งให้ทีมงานเปิดในมือถือได้เลย (ไม่ต้องล็อกอิน)');
-                              setTimeout(() => setQueueToastMsg(null), 4500);
-                            }}
-                            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-all"
-                            title="คัดลอกลิงก์แอปมือถือสำหรับรอบนี้"
-                          >
-                            <Copy className="w-3 h-3" />
-                            <span>คัดลอกลิงก์แอปมือถือ</span>
-                          </button>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              broadcastConvoyStateToCloud({ isActive: true });
-                              const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
-                              const lineMsg = [
-                                `🛰️ ลิงก์ติดตามขบวนแจกพัสดุ สปสช. LTC ทต.บางเป้า (สด Real-Time)`,
-                                `📅 ${activeYearLabel} • ${activeRoundLabel}`,
-                                `📍 จำนวนในคิว: ${orderedSelectedStops.length} บ้าน (ส่งแล้ว ${deliveredCount} บ้าน)`,
-                                `🎯 บ้านเป้าหมายปัจจุบัน: คิว #${currentTargetIdx + 1} ${currentTargetStop.patientName} (ม.${currentTargetStop.moo} ${currentTargetStop.village})`,
-                                ``,
-                                `📲 กดลิงก์ด้านล่างเพื่อเปิดแอปแผนที่นำทางและดูคิวสดบนมือถือ (ไม่ต้องเข้าระบบ):`,
-                                convoyUrl,
-                              ].join('\n');
-                              window.open(`https://line.me/R/msg/text/?${encodeURIComponent(lineMsg)}`, '_blank');
-                            }}
-                            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-black text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs transition-all"
-                            title="แชร์ลิงก์แอปติดตามขบวนเข้ากลุ่ม LINE ทันที"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>💬 แชร์เข้า LINE</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              broadcastConvoyStateToCloud({ isActive: true });
-                              window.open(`${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`, '_blank');
-                            }}
-                            className="px-2.5 py-1.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-slate-950 font-black text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs transition-all"
-                            title="เปิดดูหน้าแอปมือถือของรอบนี้"
-                          >
-                            <span>📱 เปิดดูแอป</span>
-                          </button>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1.5 border-t border-white/10">
+                          <div className="text-[11px] text-emerald-300 flex items-center gap-1.5">
+                            <span>🚚</span>
+                            <span>
+                              <strong>สำหรับเจ้าหน้าที่ประจำรถขนของ</strong> (ส่งส่วนตัวให้คนถือมือถือบนรถ เพื่อกดเช็คส่งของ):
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                broadcastConvoyStateToCloud({ isActive: true });
+                                const staffUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}&role=lead&key=bpstaff`;
+                                navigator.clipboard.writeText(staffUrl);
+                                setQueueToastMsg('🚚 คัดลอก "ลิงก์เฉพาะเจ้าหน้าที่รถขนของ" แล้ว! (ส่งส่วนตัวให้เจ้าหน้าที่ประจำรถเท่านั้น)');
+                                setTimeout(() => setQueueToastMsg(null), 4500);
+                              }}
+                              className="px-2.5 py-1 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-200 border border-emerald-400/40 font-extrabold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-all"
+                              title="คัดลอกลิงก์ที่ปลดล็อกโหมดเจ้าหน้าที่รถขนของอัตโนมัติ (ส่งส่วนตัวให้คนขับ/ทีมแจกของ)"
+                            >
+                              <Copy className="w-3 h-3" />
+                              <span>🚚 คัดลอกลิงก์เฉพาะรถขนของ</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

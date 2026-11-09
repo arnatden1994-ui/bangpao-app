@@ -110,11 +110,13 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
   const activePlanKey = `${activeYear}_${activeRound}`;
 
   // Role mode: Strictly 'follower' (Read-Only) by default when opened via shared link!
-  // Only unlocks 'lead' (Driver/Staff control mode) if opened with ?role=lead&pin=2569 or unlocked via Officer PIN modal
+  // Only unlocks 'lead' (Driver/Staff control mode) if opened via private Staff Link (?role=lead&key=bpstaff) or unlocked via secret Officer PIN
   const [roleMode, setRoleMode] = useState<'follower' | 'lead'>(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
-      if (p.get('role') === 'lead' && p.get('pin') === '2569') return 'lead';
+      if (p.get('role') === 'lead' && (p.get('key') === 'bpstaff' || p.get('pin') === '2569')) {
+        return 'lead';
+      }
     }
     return 'follower';
   });
@@ -1660,30 +1662,30 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
         </div>
       </div>
 
-      {/* Modal: Officer PIN Verification to Unlock Lead Vehicle Controls */}
+      {/* Modal: Officer PIN Verification to Unlock Lead Vehicle Controls (NO PIN HINT SHOWN!) */}
       {isStaffPinModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-slate-900 border border-teal-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 text-white">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <span className="text-[11px] font-black text-amber-400">
-                  🔒 ยืนยันสิทธิ์เจ้าหน้าที่ประจำรถขนของ
+                  🔒 เฉพาะเจ้าหน้าที่ประจำรถขนของ
                 </span>
                 <h3 className="font-black text-base text-white mt-0.5">
-                  เข้าสู่โหมดควบคุมขบวน & บันทึกส่งของ
+                  ยืนยันรหัสผ่านเจ้าหน้าที่ (Staff PIN)
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsStaffPinModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold"
+                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              เพื่อป้องกันไม่ให้คณะผู้ติดตามเผลอกดปุ่มส่งมอบของหรือเปลี่ยนคิวโดยไม่ตั้งใจ กรุณากรอกรหัสเจ้าหน้าที่ประจำรถขนของ (รหัสมาตรฐาน: <strong className="text-amber-300">2569</strong>)
+              ส่วนนี้สำหรับเจ้าหน้าที่ผู้รับผิดชอบรถขนของและบันทึกการส่งมอบพัสดุเท่านั้น กรุณากรอกรหัส PIN เจ้าหน้าที่ที่กำหนดไว้ในหน้าจอควบคุมหลักของเทศบาล
             </p>
 
             <div className="space-y-2">
@@ -1695,8 +1697,20 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                   setStaffPinInput(e.target.value);
                   setStaffPinError('');
                 }}
-                placeholder="กรอกรหัสเจ้าหน้าที่ 4 หลัก (เช่น 2569)"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-black text-center text-base tracking-widest outline-none focus:border-emerald-400"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const expectedPin = String(cloudConvoyDoc?.staffPin || '2569').trim();
+                    if (staffPinInput.trim() === expectedPin) {
+                      setRoleMode('lead');
+                      setIsStaffPinModalOpen(false);
+                      showToast('🔓 ยืนยันสิทธิ์สำเร็จ เข้าสู่โหมดเจ้าหน้าที่รถขนของ');
+                    } else {
+                      setStaffPinError('❌ รหัสผ่านเจ้าหน้าที่ไม่ถูกต้อง');
+                    }
+                  }
+                }}
+                placeholder="••••••••"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-black text-center text-lg tracking-widest outline-none focus:border-emerald-400"
               />
               {staffPinError && (
                 <div className="text-xs text-rose-400 font-bold text-center">{staffPinError}</div>
@@ -1714,17 +1728,18 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (staffPinInput.trim() === '2569' || staffPinInput.trim() === '1234') {
+                  const expectedPin = String(cloudConvoyDoc?.staffPin || '2569').trim();
+                  if (staffPinInput.trim() === expectedPin) {
                     setRoleMode('lead');
                     setIsStaffPinModalOpen(false);
-                    showToast('🔓 ปลดล็อกโหมดเจ้าหน้าที่รถขนของเรียบร้อยแล้ว');
+                    showToast('🔓 ยืนยันสิทธิ์สำเร็จ เข้าสู่โหมดเจ้าหน้าที่รถขนของ');
                   } else {
-                    setStaffPinError('รหัสไม่ถูกต้อง (รหัสเจ้าหน้าที่คือ 2569)');
+                    setStaffPinError('❌ รหัสผ่านเจ้าหน้าที่ไม่ถูกต้อง');
                   }
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer shadow-md"
               >
-                🔓 ยืนยันเข้าโหมดรถส่งของ
+                🔓 ยืนยันรหัสเจ้าหน้าที่
               </button>
             </div>
           </div>
