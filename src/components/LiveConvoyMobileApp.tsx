@@ -310,9 +310,11 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
       }
     } catch {}
 
-    // Priority 4: LocalStorage saved round plans (`bangpao_ltc_round_plans_v1`)
+    // Priority 4: LocalStorage saved round plans (`bangpao_ltc_round_plans_v2_14pts` or `bangpao_ltc_round_plans_v1`)
     try {
-      const localPlansRaw = localStorage.getItem('bangpao_ltc_round_plans_v1');
+      const localPlansRaw =
+        localStorage.getItem('bangpao_ltc_round_plans_v2_14pts') ||
+        localStorage.getItem('bangpao_ltc_round_plans_v1');
       if (localPlansRaw) {
         const plansMap = JSON.parse(localPlansRaw);
         const targetPlan = plansMap?.[activePlanKey];
@@ -355,34 +357,9 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
       }
     }
 
-    // Fallback if no round plan exists yet
-    return effectivePatients
-      .filter((p) => p.status !== 'deceased')
-      .map((p, idx) => enrichStopWithPatientData(p, idx));
+    // If no round plan or queue exists for this round, strictly return an empty array ([]) so unplanned rounds remain empty!
+    return [];
   }, [cloudConvoyDoc, cloudPlanDoc, effectivePatients, activeYear, activeRound, activePlanKey]);
-
-  // Auto-heal Cloud Firestore: if this device has the round's stops from localStorage/Plan but LIVE_CONVOY_${activePlanKey} in Firestore doesn't have stopsSnapshot yet, push it once!
-  useEffect(() => {
-    if (
-      allConvoyStops.length > 0 &&
-      (!cloudConvoyDoc || !Array.isArray(cloudConvoyDoc.stopsSnapshot) || cloudConvoyDoc.stopsSnapshot.length === 0)
-    ) {
-      saveToFirestore(
-        COLLECTIONS.LTC_QUEUES,
-        {
-          id: `LIVE_CONVOY_${activePlanKey}`,
-          planKey: activePlanKey,
-          fiscalYear: activeYear,
-          round: activeRound,
-          isActive: true,
-          targetStopId: cloudConvoyDoc?.targetStopId || allConvoyStops[0].id,
-          stopsSnapshot: allConvoyStops,
-          updatedAt: new Date().toISOString(),
-        },
-        `LIVE_CONVOY_${activePlanKey}`
-      ).catch(() => {});
-    }
-  }, [allConvoyStops.length, activePlanKey, cloudConvoyDoc?.stopsSnapshot?.length]);
 
   // Check if a stop is delivered in this year & round
   const getStopDeliveryInfo = (patientId: string) => {
@@ -1370,6 +1347,16 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          ) : allConvoyStops.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-center space-y-2">
+              <div className="text-3xl">📋</div>
+              <div className="font-black text-base text-amber-300">
+                ปีงบประมาณ {activeYear} • งวดรอบที่ {activeRound} ยังไม่ได้จัดแผนคิวส่งมอบ
+              </div>
+              <p className="text-xs text-teal-200">
+                กรุณาให้เจ้าหน้าที่จัดแผนและลำดับคิวส่งมอบในระบบหลักก่อน จึงจะมีรายชื่อและเส้นทางแสดงในรอบนี้
+              </p>
             </div>
           ) : (
             <div className="p-6 rounded-2xl bg-emerald-950/50 border border-emerald-500/40 text-center space-y-2">

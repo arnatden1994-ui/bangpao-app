@@ -563,10 +563,12 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const [plannerInitialRound, setPlannerInitialRound] = useState<string>('1');
   const [roundPlans, setRoundPlans] = useState<Record<string, LtcRoundPlan>>(() => {
     try {
-      const saved = localStorage.getItem('bangpao_ltc_round_plans_v2_14pts');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+      const savedV2 = localStorage.getItem('bangpao_ltc_round_plans_v2_14pts');
+      const savedV1 = localStorage.getItem('bangpao_ltc_round_plans_v1');
+      const raw = savedV2 || savedV1;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
           return parsed;
         }
       }
@@ -577,7 +579,9 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   // Sync roundPlans to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('bangpao_ltc_round_plans_v2_14pts', JSON.stringify(roundPlans));
+      const serialized = JSON.stringify(roundPlans);
+      localStorage.setItem('bangpao_ltc_round_plans_v2_14pts', serialized);
+      localStorage.setItem('bangpao_ltc_round_plans_v1', serialized);
     } catch {}
   }, [roundPlans]);
 
@@ -715,9 +719,27 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         }));
       }
 
-      // 2. Sync live convoy state for activePlanKey
+      // 2. Sync saved round plan for activePlanKey first
+      const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+      const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+      const planDoc = docs.find(
+        (d) =>
+          d.id === `PLAN_${effYear}_R${effRound}` ||
+          d.id === `LTC_${effYear}_R${effRound}` ||
+          d.id === `PLAN-${effYear}-R${effRound}` ||
+          d.id === `LTC-${effYear}-R${effRound}`
+      );
+      if (planDoc && planDoc.fullPlanData) {
+        setRoundPlans((prev) => ({
+          ...prev,
+          [`${effYear}_${effRound}`]: planDoc.fullPlanData,
+        }));
+      }
+
+      // 3. Sync live convoy state for activePlanKey ONLY when this round actually has a saved plan or active queue
       const convoyDoc = docs.find((d) => d.id === `LIVE_CONVOY_${activePlanKey}`);
-      if (convoyDoc) {
+      const hasPlanForRound = Boolean(planDoc?.fullPlanData || roundPlans[activePlanKey]?.stops?.length);
+      if (convoyDoc && hasPlanForRound) {
         setLiveConvoyState({
           isActive: Boolean(convoyDoc.isActive),
           targetStopId: convoyDoc.targetStopId || null,
@@ -732,21 +754,15 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
             return prev;
           });
         }
-      }
-
-      // 3. Sync saved round plan for activePlanKey
-      const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
-      const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
-      const planDoc = docs.find((d) => d.id === `PLAN_${effYear}_R${effRound}` || d.id === `LTC_${effYear}_R${effRound}`);
-      if (planDoc && planDoc.fullPlanData) {
-        setRoundPlans((prev) => ({
-          ...prev,
-          [`${effYear}_${effRound}`]: planDoc.fullPlanData,
-        }));
+      } else if (!hasPlanForRound) {
+        setLiveConvoyState({
+          isActive: false,
+          targetStopId: null,
+        });
       }
     });
     return () => unsub();
-  }, [activePlanKey, selectedYearFilter, selectedRoundFilter]);
+  }, [activePlanKey, selectedYearFilter, selectedRoundFilter, Boolean(roundPlans[activePlanKey])]);
 
   const broadcastConvoyStateToCloud = (patch: Partial<{
     isActive: boolean;
@@ -851,9 +867,9 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     });
   };
 
-  // Automatically keep LIVE_CONVOY_${activePlanKey} synced whenever the round's selectedStopIds or saved plan exists
+  // Automatically keep LIVE_CONVOY_${activePlanKey} synced ONLY when the round has an arranged plan or active user queue
   useEffect(() => {
-    if (selectedStopIds.length > 0 || currentPlan?.stops?.length) {
+    if (Boolean(currentPlan?.stops?.length) && (selectedStopIds.length > 0 || currentPlan?.stops?.length)) {
       broadcastConvoyStateToCloud({});
     }
   }, [activePlanKey, selectedStopIds.length, currentPlan?.updatedAt]);
@@ -1499,7 +1515,9 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     setRoundPlans((prev) => {
       const updated = { ...prev, [`${plan.fiscalYear}_${plan.round}`]: plan };
       try {
-        localStorage.setItem('bangpao_ltc_round_plans_v1', JSON.stringify(updated));
+        const serialized = JSON.stringify(updated);
+        localStorage.setItem('bangpao_ltc_round_plans_v2_14pts', serialized);
+        localStorage.setItem('bangpao_ltc_round_plans_v1', serialized);
       } catch {}
       return updated;
     });
@@ -1632,7 +1650,9 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       const next = { ...prev };
       delete next[planKey];
       try {
-        localStorage.setItem('bangpao_ltc_round_plans_v1', JSON.stringify(next));
+        const serialized = JSON.stringify(next);
+        localStorage.setItem('bangpao_ltc_round_plans_v2_14pts', serialized);
+        localStorage.setItem('bangpao_ltc_round_plans_v1', serialized);
       } catch {}
       return next;
     });
@@ -1694,20 +1714,54 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
   // Sync selectedStopIds when user switches Year or Round filter on the dashboard
   useEffect(() => {
-    const pKey = getActivePeriodKey(selectedYearFilter, selectedRoundFilter);
-    const existingQueue = periodQueues[pKey];
-    if (existingQueue && existingQueue.length > 0) {
-      // Filter out any stops that have already been delivered in this period
-      const validPending = existingQueue.filter((id) => {
-        const targetStop = stops.find((s) => s.id === id);
-        if (!targetStop) return false;
-        return getStopDeliveryStatus(targetStop.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending';
-      });
-      setSelectedStopIds(validPending);
-    } else {
+    if (selectedRoundFilter === 'all') {
       setSelectedStopIds([]);
+      return;
     }
-  }, [selectedYearFilter, selectedRoundFilter]);
+    const effYr = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+    const effRd = selectedRoundFilter;
+    const planKey = `${effYr}_${effRd}`;
+    const pKey = getActivePeriodKey(selectedYearFilter, selectedRoundFilter);
+    const savedPlan = roundPlans[planKey];
+
+    // If this round has NO saved plan ("ยังไม่มีแผน"), the delivery queue MUST be strictly empty (0 stops)!
+    if (!savedPlan || !Array.isArray(savedPlan.stops) || savedPlan.stops.length === 0) {
+      setSelectedStopIds([]);
+      setLiveConvoyState({
+        isActive: false,
+        targetStopId: null,
+      });
+      // Also clean up any stale local period queue or convoy cache for this unplanned round
+      if (periodQueues[pKey] && periodQueues[pKey].length > 0) {
+        setPeriodQueues((prev) => {
+          const next = { ...prev };
+          delete next[pKey];
+          return next;
+        });
+      }
+      try {
+        localStorage.removeItem(`bangpao_live_convoy_${planKey}`);
+      } catch {}
+      return;
+    }
+
+    const existingQueue = periodQueues[pKey];
+    const sourceIds =
+      existingQueue && existingQueue.length > 0
+        ? existingQueue
+        : savedPlan.stops.map((ps) => {
+            const found = stops.find((s) => s.patientId === ps.patientId);
+            return found ? found.id : ps.patientId;
+          });
+
+    // Filter out any stops that have already been delivered in this period
+    const validPending = sourceIds.filter((id) => {
+      const targetStop = stops.find((s) => s.id === id || s.patientId === id);
+      if (!targetStop) return false;
+      return getStopDeliveryStatus(targetStop.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending';
+    });
+    setSelectedStopIds(validPending);
+  }, [selectedYearFilter, selectedRoundFilter, Boolean(roundPlans[`${selectedYearFilter === 'all' ? '2569' : selectedYearFilter}_${selectedRoundFilter === 'all' ? '1' : selectedRoundFilter}`])]);
 
   // Send a stop directly to the delivery queue for the active Year & Round ("ส่งไปจัดรอบแจก")
   const sendStopToRoundQueue = (stop: DeliveryStop, scrollToSequencer = false) => {
@@ -2718,7 +2772,17 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     };
   };
 
-  const filteredStops = stops.filter((s) => {
+  // Stops scoped to the current round plan if a saved plan exists for this specific round; otherwise all stops
+  const roundScopedStops = useMemo(() => {
+    if (selectedRoundFilter !== 'all' && currentPlan?.stops && currentPlan.stops.length > 0) {
+      const plannedPatientIds = new Set(currentPlan.stops.map((ps) => ps.patientId));
+      const matched = stops.filter((s) => plannedPatientIds.has(s.patientId));
+      if (matched.length > 0) return matched;
+    }
+    return stops;
+  }, [stops, selectedRoundFilter, currentPlan]);
+
+  const filteredStops = roundScopedStops.filter((s) => {
     if (selectedMooFilter !== 'all' && s.moo !== selectedMooFilter) return false;
     if (adlFilter !== 'all' && s.adlCategory !== adlFilter) return false;
     const currentDeliveryStatus = getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status;
@@ -2734,15 +2798,24 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   });
 
   // KPI metrics computed from the active filters & selected round/year
-  const baseSummaryStops = selectedMooFilter === 'all' && adlFilter === 'all' ? stops : filteredStops;
+  const hasActiveRoundPlan = Boolean(
+    selectedRoundFilter === 'all' ||
+      (currentPlan?.stops && currentPlan.stops.length > 0) ||
+      selectedStopIds.length > 0
+  );
+  const baseSummaryStops = selectedMooFilter === 'all' && adlFilter === 'all' ? roundScopedStops : filteredStops;
   const deliveredCount = baseSummaryStops.filter(
     (s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'delivered'
   ).length;
-  const pendingCount = baseSummaryStops.filter(
-    (s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending'
-  ).length;
+  const pendingCount = hasActiveRoundPlan
+    ? baseSummaryStops.filter(
+        (s) => getStopDeliveryStatus(s.patientId, selectedYearFilter, selectedRoundFilter).status === 'pending'
+      ).length
+    : 0;
   const deliveryRate =
-    baseSummaryStops.length > 0 ? Math.round((deliveredCount / baseSummaryStops.length) * 100) : 0;
+    hasActiveRoundPlan && baseSummaryStops.length > 0
+      ? Math.round((deliveredCount / baseSummaryStops.length) * 100)
+      : 0;
 
   const bedriddenCount = baseSummaryStops.filter((s) => s.adlCategory === 'ติดเตียง').length;
   const homeboundCount = baseSummaryStops.filter((s) => s.adlCategory === 'ติดบ้าน').length;
@@ -3736,9 +3809,17 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
             {/* Card 3: Pending Delivery */}
             <div
-              onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
+              onClick={() => {
+                if (!hasActiveRoundPlan) {
+                  setPlannerInitialYear(selectedYearFilter === 'all' ? '2569' : selectedYearFilter);
+                  setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
+                  setIsRoundPlannerOpen(true);
+                } else {
+                  setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending');
+                }
+              }}
               className="bg-white p-4 rounded-2xl border border-amber-200 bg-amber-50/30 shadow-xs flex flex-col justify-between cursor-pointer hover:border-amber-400 transition-colors"
-              title="คลิกเพื่อกรองเฉพาะรายที่รอส่งมอบ"
+              title={hasActiveRoundPlan ? 'คลิกเพื่อกรองเฉพาะรายที่รอส่งมอบ' : 'คลิกเพื่อเริ่มวางแผนจัดรอบแจกของในงวดนี้'}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-amber-800">รอลงพื้นที่ส่งมอบ</span>
@@ -3747,11 +3828,20 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                 </span>
               </div>
               <div className="text-2xl font-black text-amber-700 mt-1.5">
-                {pendingCount} <span className="text-xs font-bold text-amber-600">จุดพิกัดบ้าน</span>
+                {pendingCount}{' '}
+                <span className="text-xs font-bold text-amber-600">
+                  {hasActiveRoundPlan ? 'จุดพิกัดบ้าน' : 'คิว (ยังไม่มีแผนรอบนี้)'}
+                </span>
               </div>
               <div className="text-[11px] text-amber-700 font-semibold mt-2 pt-2 border-t border-amber-100 flex items-center justify-between">
-                <span>{selectedMooFilter === 'all' ? 'ครบทั้ง 7 หมู่บ้าน' : `เฉพาะหมู่ที่ ${selectedMooFilter}`}</span>
-                <span className="underline">คลิกกรอง</span>
+                <span>
+                  {!hasActiveRoundPlan
+                    ? 'ยังไม่ได้จัดแผนรอบนี้'
+                    : selectedMooFilter === 'all'
+                    ? 'ครบทั้ง 7 หมู่บ้าน'
+                    : `เฉพาะหมู่ที่ ${selectedMooFilter}`}
+                </span>
+                <span className="underline">{hasActiveRoundPlan ? 'คลิกกรอง' : '+ จัดแผนรอบนี้'}</span>
               </div>
             </div>
 
@@ -4176,7 +4266,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     </p>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[11px] font-extrabold shrink-0">
-                    ในคิว {orderedSelectedStops.length} / {stops.length} บ้าน
+                    ในคิว {orderedSelectedStops.length} / {roundScopedStops.length} บ้าน
                   </span>
                 </div>
 
@@ -4223,7 +4313,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                           setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
                           setIsRoundPlannerOpen(true);
                         }}
-                        className="px-2 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-[11px] shadow-2xs cursor-pointer flex items-center gap-1 transition-colors"
+                        className="px-2 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-[11px] shadow-2xs cursor-pointer flex items-center gap-1 transition-colors whitespace-nowrap"
                         title="เปิดสตูดิโอวางแผนเพื่อแก้ไขรายละเอียด ลำดับคิว และสิ่งของของรอบนี้"
                       >
                         <Edit3 className="w-3 h-3" />
@@ -4236,11 +4326,13 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                           setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
                           setIsRoundPlannerOpen(true);
                         }}
-                        className="px-2 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-extrabold text-[11px] cursor-pointer flex items-center gap-1 transition-colors"
-                        title="คัดลอกแผนนี้ไปจัดรอบที่ 2"
+                        className="px-2 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-extrabold text-[11px] cursor-pointer flex items-center gap-1 transition-colors whitespace-nowrap"
+                        title="คัดลอกแผนนี้ไปจัดรอบถัดไป"
                       >
                         <Copy className="w-3 h-3 text-indigo-700" />
-                        <span>คัดลอกไปรอบ 2</span>
+                        <span>
+                          คัดลอกไปรอบ {selectedRoundFilter === 'all' ? '2' : String(Number(selectedRoundFilter) + 1)}
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -4255,7 +4347,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                             handleDeleteRoundPlan(effYr, effRd, effRd !== '1');
                           }
                         }}
-                        className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-200 font-extrabold text-[11px] cursor-pointer flex items-center gap-1 transition-colors"
+                        className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-200 font-extrabold text-[11px] cursor-pointer flex items-center gap-1 transition-colors whitespace-nowrap"
                         title="ลบแผนที่จัดไว้ของรอบนี้"
                       >
                         <Trash2 className="w-3 h-3 text-rose-600" />
@@ -4759,8 +4851,8 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                   <span className="truncate">
                     🖨️ พิมพ์รายงานใบลงทะเบียนผู้รับของ (ให้ผู้รับเซ็นชื่อแบบ 100% •{' '}
                     {orderedSelectedStops.length > 0
-                      ? `คิวที่เลือก ${orderedSelectedStops.length} ราย / ทั้งรอบ ${stops.length} ราย`
-                      : `ครบทั้งรอบ ${stops.length} ราย`}
+                      ? `คิวที่เลือก ${orderedSelectedStops.length} ราย / ทั้งรอบ ${roundScopedStops.length} ราย`
+                      : `ครบทั้งรอบ ${roundScopedStops.length} ราย`}
                     )
                   </span>
                 </button>
@@ -4809,13 +4901,49 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                         </span>
                       </div>
                       <span className="text-[11px] font-extrabold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">
-                        ⏳ รอจัดส่ง: {pendingSequencerStops.length} ราย
+                        {hasActiveRoundPlan
+                          ? `⏳ รอจัดส่ง: ${pendingSequencerStops.length} ราย`
+                          : '📋 ยังไม่มีแผนรอบนี้ (0 คิว)'}
                       </span>
                     </div>
 
                     {/* Scrollable Patient Pin Cards with Free Reordering Controls (Only Pending Stops in Queue) */}
                     <div className="space-y-2.5 max-h-[540px] overflow-y-auto pr-1 flex-1">
-                      {pendingSequencerStops.length === 0 ? (
+                      {!hasActiveRoundPlan && orderedSelectedStops.length === 0 ? (
+                        <div className="p-8 text-center text-slate-600 text-xs border-2 border-dashed border-amber-300 bg-amber-50/40 rounded-2xl space-y-3">
+                          <div className="text-3xl">📋</div>
+                          <div className="font-black text-amber-950 text-sm">
+                            {activeYearLabel} • {activeRoundLabel} ยังไม่ได้ดำเนินการจัดแผนส่งมอบ (คิวว่าง 0 บ้าน)
+                          </div>
+                          <p className="text-[11px] text-slate-600 max-w-md mx-auto leading-relaxed">
+                            งวดรอบนี้ยังไม่มีแผนการจัดคิวส่งมอบพัสดุ ท่านสามารถกดปุ่ม{' '}
+                            <strong>&ldquo;วางแผนจัดรอบแจกของ (LTC Planner)&rdquo;</strong> ด้านล่างเพื่อเลือกโครงการ กำหนดวันแจก และจัดลำดับคิวส่งมอบ หรือกดปุ่ม{' '}
+                            <strong>&ldquo;+ จัดรอบ&rdquo;</strong> จากตารางรายชื่อด้านล่างได้ทันที
+                          </p>
+                          <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPlannerInitialYear(selectedYearFilter === 'all' ? '2569' : selectedYearFilter);
+                                setPlannerInitialRound(selectedRoundFilter === 'all' ? '1' : selectedRoundFilter);
+                                setIsRoundPlannerOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs shadow-sm transition-colors cursor-pointer"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                              <span>✨ วางแผนจัดรอบแจกของ ({activeRoundLabel})</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={selectOnlyPendingStops}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-teal-50 text-teal-800 border border-teal-300 font-bold text-xs transition-colors cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>ดึงรายชื่อทั้งหมด ({pendingSequencerStops.length} ราย) เข้าคิวทันที</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : pendingSequencerStops.length === 0 ? (
                         <div className="p-8 text-center text-slate-500 text-xs border border-dashed border-emerald-300 bg-emerald-50/40 rounded-xl space-y-1.5">
                           <div className="text-3xl">🎉</div>
                           <div className="font-extrabold text-emerald-800 text-sm">

@@ -1492,7 +1492,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {existingPlans[periodKey] && onDeleteRoundPlan && (
               <button
                 type="button"
@@ -1507,10 +1507,10 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     showToast(`🗑️ ลบแผนจัดรอบ ปีงบ ${planYear} รอบที่ ${planRound} เรียบร้อยแล้ว`);
                   }
                 }}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/90 hover:bg-rose-600 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer border border-rose-300/40"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/90 hover:bg-rose-600 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer border border-rose-300/40 whitespace-nowrap shrink-0"
                 title="ลบแผนที่จัดไว้ในรอบนี้"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
                 <span>ลบแผนรอบนี้</span>
               </button>
             )}
@@ -1518,17 +1518,17 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             <button
               type="button"
               onClick={() => setIsCloneModalOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-extrabold text-xs shadow-xs transition-all cursor-pointer"
-              title="คัดลอกแผนจัดรอบนี้ไปเป็นรอบถัดไป (เช่น รอบ 2)"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-extrabold text-xs shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
+              title="คัดลอกแผนจัดรอบนี้ไปเป็นรอบถัดไป"
             >
-              <Copy className="w-3.5 h-3.5" />
-              <span>📋 คัดลอกไปจัดรอบ 2</span>
+              <Copy className="w-3.5 h-3.5 shrink-0" />
+              <span>📋 คัดลอกไปจัดรอบ {String(Number(planRound) + 1)}</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-sm cursor-pointer transition-colors"
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-sm cursor-pointer transition-colors shrink-0"
               title="ปิดหน้าต่าง"
             >
               ✕
