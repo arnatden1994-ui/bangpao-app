@@ -759,13 +759,48 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     setLiveConvoyState((prev) => {
       const next = { ...prev, ...patch };
       try {
+        const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+        const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+        const activeIds = patch.queueIds || selectedStopIds;
+        const snapshotStops = (activeIds.length > 0
+          ? activeIds
+              .map((id) => stops.find((s) => s.id === id || s.patientId === id))
+              .filter((s): s is DeliveryStop => Boolean(s))
+          : orderedSelectedStops
+        ).map((s, idx) => {
+          const matchedPt = effectivePatients.find((p) => p.id === s.patientId);
+          const rInfo = getStopRoundInfo(s, effRound, effYear);
+          return {
+            id: s.id,
+            patientId: s.patientId,
+            queueOrder: idx + 1,
+            patientName: s.patientName,
+            age: matchedPt?.age,
+            moo: s.moo,
+            village: s.village,
+            address: s.address,
+            landmark: s.landmark || matchedPt?.landmark || '',
+            phone: matchedPt?.caregiverPhone || matchedPt?.phone || '-',
+            caregiverName: matchedPt?.caregiverName || 'ญาติผู้ดูแล',
+            lat: s.lat,
+            lng: s.lng,
+            adlCategory: s.adlCategory,
+            itemsSummary: rInfo.text,
+            itemsList: rInfo.itemsList || [],
+          };
+        });
+
         saveToFirestore(
           COLLECTIONS.LTC_QUEUES,
           {
             id: `LIVE_CONVOY_${activePlanKey}`,
             planKey: activePlanKey,
+            fiscalYear: effYear,
+            round: effRound,
+            projectSourceType: patch.projectSourceType || currentPlan?.projectSourceType || 'both',
             ...next,
-            queueIds: patch.queueIds || selectedStopIds,
+            queueIds: activeIds,
+            stopsSnapshot: snapshotStops,
             updatedAt: new Date().toISOString(),
           },
           `LIVE_CONVOY_${activePlanKey}`
@@ -1405,6 +1440,12 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       ...prev,
       [pKey]: nextIds,
     }));
+    // Automatically broadcast updated queue order & stopsSnapshot to Cloud Firestore so all mobile followers see the exact same queue!
+    setTimeout(() => {
+      broadcastConvoyStateToCloud({
+        queueIds: nextIds,
+      });
+    }, 50);
   };
 
   // Handlers for Saving and Cloning Interactive LTC Round Plans
@@ -4361,6 +4402,68 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                           </div>
                         </div>
                       )}
+
+                      {/* Direct Share Bar for Live Mobile Convoy App Link (ไม่ต้องล็อกอิน) */}
+                      <div className="pt-2.5 border-t border-white/15 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                        <div className="text-[11px] text-teal-200 flex items-center gap-1.5">
+                          <span>📱</span>
+                          <span>
+                            ส่งลิงก์แอปติดตามขบวนรอบนี้ให้ทีมงาน/ผู้บริหารเปิดดูบนมือถือสดๆ <strong className="text-amber-300">(ไม่ต้องล็อกอิน)</strong>:
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              broadcastConvoyStateToCloud({ isActive: true });
+                              const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
+                              navigator.clipboard.writeText(convoyUrl);
+                              setQueueToastMsg('✅ คัดลอกลิงก์แอปติดตามขบวนสดเรียบร้อย! ส่งให้ทีมงานเปิดในมือถือได้เลย (ไม่ต้องล็อกอิน)');
+                              setTimeout(() => setQueueToastMsg(null), 4500);
+                            }}
+                            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-extrabold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-all"
+                            title="คัดลอกลิงก์แอปมือถือสำหรับรอบนี้"
+                          >
+                            <Copy className="w-3 h-3" />
+                            <span>คัดลอกลิงก์แอปมือถือ</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              broadcastConvoyStateToCloud({ isActive: true });
+                              const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
+                              const lineMsg = [
+                                `🛰️ ลิงก์ติดตามขบวนแจกพัสดุ สปสช. LTC ทต.บางเป้า (สด Real-Time)`,
+                                `📅 ${activeYearLabel} • ${activeRoundLabel}`,
+                                `📍 จำนวนในคิว: ${orderedSelectedStops.length} บ้าน (ส่งแล้ว ${deliveredCount} บ้าน)`,
+                                `🎯 บ้านเป้าหมายปัจจุบัน: คิว #${currentTargetIdx + 1} ${currentTargetStop.patientName} (ม.${currentTargetStop.moo} ${currentTargetStop.village})`,
+                                ``,
+                                `📲 กดลิงก์ด้านล่างเพื่อเปิดแอปแผนที่นำทางและดูคิวสดบนมือถือ (ไม่ต้องเข้าระบบ):`,
+                                convoyUrl,
+                              ].join('\n');
+                              window.open(`https://line.me/R/msg/text/?${encodeURIComponent(lineMsg)}`, '_blank');
+                            }}
+                            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-black text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs transition-all"
+                            title="แชร์ลิงก์แอปติดตามขบวนเข้ากลุ่ม LINE ทันที"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>💬 แชร์เข้า LINE</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              broadcastConvoyStateToCloud({ isActive: true });
+                              window.open(`${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`, '_blank');
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-slate-950 font-black text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs transition-all"
+                            title="เปิดดูหน้าแอปมือถือของรอบนี้"
+                          >
+                            <span>📱 เปิดดูแอป</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   );
                 })()}
@@ -6707,6 +6810,79 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                   <span>{shareCopyFeedback}</span>
                 </div>
               )}
+
+              {/* Featured Section: No-Login Live Convoy Mobile App Link & QR Code */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 bg-gradient-to-br from-slate-900 via-teal-950 to-emerald-950 text-white border border-teal-700/60 rounded-2xl p-4 items-center shadow-lg">
+                <div className="sm:col-span-4 flex flex-col items-center justify-center bg-white p-3 rounded-xl border border-teal-300 shadow-xs">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                      `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`
+                    )}`}
+                    alt="QR Code แอปมือถือติดตามขบวนสด"
+                    className="w-32 h-32 sm:w-36 sm:h-36 object-contain"
+                  />
+                  <span className="text-[10px] font-extrabold text-teal-900 mt-1.5 text-center">
+                    🛰️ สแกนเปิดแอปติดตามขบวนสด (ไม่ต้องล็อกอิน)
+                  </span>
+                </div>
+
+                <div className="sm:col-span-8 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">
+                      แนะนำสำหรับทีมงาน & คณะผู้ติดตาม
+                    </span>
+                  </div>
+                  <div className="font-extrabold text-white text-sm">
+                    📱 แอปมือถือติดตามขบวนส่งของสด ({activeYearLabel} • {activeRoundLabel})
+                  </div>
+                  <p className="text-[11px] text-teal-100/90 leading-relaxed">
+                    ส่งลิงก์นี้เข้ากลุ่ม LINE ให้ <strong>คนขับรถ ทีมมอบของ คณะผู้บริหาร และผู้ติดตามทุกคน</strong> เปิดบนมือถือได้ทันทีโดยไม่ต้องเข้าระบบ! เห็นตรงกันแบบเรียลไทม์ว่าขบวนอยู่บ้านไหน ส่งแล้วกี่หลัง และกดนำทางตามไปสมทบหรือลัดไปดักรอบ้านถัดไปได้ทันที
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        broadcastConvoyStateToCloud({ isActive: true });
+                        const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
+                        navigator.clipboard.writeText(convoyUrl);
+                        setShareCopyFeedback('✅ คัดลอกลิงก์แอปติดตามขบวนสดเรียบร้อย! ส่งให้ทีมงานเปิดในมือถือได้เลย (ไม่ต้องล็อกอิน)');
+                        setTimeout(() => setShareCopyFeedback(null), 4000);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      คัดลอกลิงก์แอปติดตามขบวน
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        broadcastConvoyStateToCloud({ isActive: true });
+                        const convoyUrl = `${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`;
+                        const lineMsg = [
+                          `🛰️ แอปติดตามขบวนแจกพัสดุ สปสช./LTC สด (${activeYearLabel} • ${activeRoundLabel})`,
+                          `📍 จำนวนในคิว: ${orderedSelectedStops.length} บ้าน`,
+                          `📲 กดลิงก์ด้านล่างเพื่อเปิดดูพิกัดขบวนและนำทางตามไปสมทบได้ทันที (ไม่ต้องล็อกอิน):`,
+                          convoyUrl,
+                        ].join('\n');
+                        window.open(`https://line.me/R/msg/text/?${encodeURIComponent(lineMsg)}`, '_blank');
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      💬 ส่งเข้ากลุ่ม LINE ทันที
+                    </button>
+                    <a
+                      href={`${window.location.origin}${window.location.pathname}?convoy=${activePlanKey}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => broadcastConvoyStateToCloud({ isActive: true })}
+                      className="px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      ทดลองเปิดแอป
+                    </a>
+                  </div>
+                </div>
+              </div>
 
               {/* Top Section: QR Code for Mobile Google Maps App + Direct Action Buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 bg-slate-50 border border-slate-200 rounded-2xl p-4 items-center">

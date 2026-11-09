@@ -130,6 +130,7 @@ import {
 import { FirebaseSyncModal } from './components/FirebaseSyncModal.tsx';
 import { CitizenPortalShareModal } from './components/CitizenPortalShareModal.tsx';
 import { FieldJobActionView } from './components/FieldJobActionView.tsx';
+import { LiveConvoyMobileApp } from './components/LiveConvoyMobileApp.tsx';
 import { MunicipalOfficialFooter } from './components/MunicipalOfficialFooter.tsx';
 import {
   buildPetitionNotificationPayload,
@@ -232,6 +233,10 @@ export default function App() {
       }
     }
     return j;
+  });
+  const [activeConvoyCode, setActiveConvoyCode] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('convoy');
   });
   // Current logged in officer (Default: พันจ่าเอกอานัส เด็นหมาด / นายตรวจ ตามคำสั่งผู้ใช้งาน)
   const [currentUser, setCurrentUserState] = useState<User | null>(() => {
@@ -1087,7 +1092,23 @@ unsubLicenses();
     ltcPatients: ltcPatients.length,
   };
 
-  // 0. If Field Officer opened a Job Action Link (?job=...), show FieldJobActionView directly without requiring login
+  // 0a. If anyone opened a Live Convoy Mobile App Link (?convoy=2569_1), show LiveConvoyMobileApp directly without requiring login
+  if (activeConvoyCode) {
+    return (
+      <LiveConvoyMobileApp
+        convoyParam={activeConvoyCode}
+        patients={ltcPatients}
+        onExitToMainSystem={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('convoy');
+          window.history.replaceState({}, '', url.toString());
+          setActiveConvoyCode(null);
+        }}
+      />
+    );
+  }
+
+  // 0b. If Field Officer opened a Job Action Link (?job=...), show FieldJobActionView directly without requiring login
   if (activeFieldJobCode) {
     return (
       <div className="relative min-h-screen">
