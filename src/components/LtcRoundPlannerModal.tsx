@@ -190,6 +190,7 @@ export interface LtcRoundPlannerModalProps {
   onAddNewRound?: () => void;
   existingPlans: Record<string, LtcRoundPlan>;
   onSavePlan: (plan: LtcRoundPlan) => void;
+  onDeleteRoundPlan?: (fiscalYear: string, round: string, removeRoundSlot?: boolean) => void;
   onClonePlanToRound?: (
     sourcePlan: LtcRoundPlan,
     targetYear: string,
@@ -210,6 +211,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   onAddNewRound,
   existingPlans,
   onSavePlan,
+  onDeleteRoundPlan,
   onClonePlanToRound,
 }) => {
   if (!isOpen) return null;
@@ -1491,6 +1493,28 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {existingPlans[periodKey] && onDeleteRoundPlan && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `ยืนยันการลบแผนที่จัดไว้ของ "ปีงบประมาณ ${planYear} • งวดรอบที่ ${planRound}" หรือไม่?\n(รายชื่อผู้ป่วยในฐานข้อมูลหลักจะไม่ถูกลบ ลบเฉพาะแผนและคิวของรอบนี้)`
+                    )
+                  ) {
+                    onDeleteRoundPlan(planYear, planRound, false);
+                    setPlannedStops([]);
+                    showToast(`🗑️ ลบแผนจัดรอบ ปีงบ ${planYear} รอบที่ ${planRound} เรียบร้อยแล้ว`);
+                  }
+                }}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/90 hover:bg-rose-600 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer border border-rose-300/40"
+                title="ลบแผนที่จัดไว้ในรอบนี้"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ลบแผนรอบนี้</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setIsCloneModalOpen(true)}
@@ -1708,9 +1732,8 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     const isSelected = planRound === rd;
 
                     return (
-                      <button
+                      <div
                         key={rd}
-                        type="button"
                         onClick={() => setPlanRound(rd)}
                         className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                           isSelected
@@ -1723,9 +1746,53 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                             <span className="font-extrabold text-sm text-slate-900">
                               งวดรอบที่ {rd}
                             </span>
-                            {isSelected && (
-                              <CheckCircle2 className="w-4 h-4 text-teal-700" />
-                            )}
+                            <div className="flex items-center gap-1">
+                              {isSelected && (
+                                <CheckCircle2 className="w-4 h-4 text-teal-700" />
+                              )}
+                              {onDeleteRoundPlan && (hasPlan || (configuredRounds.length > 1 && rd !== '1')) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (hasPlan) {
+                                      const shouldRemoveSlot =
+                                        rd !== '1' &&
+                                        window.confirm(
+                                          `ยืนยันการลบแผนที่จัดไว้ของ "ปีงบประมาณ ${planYear} • งวดรอบที่ ${rd}" (${stopCount} ราย) หรือไม่?\n\n(กด ตกลง เพื่อลบแผนรอบนี้ — รายชื่อผู้ป่วยในฐานข้อมูลหลักจะไม่ถูกลบ)`
+                                        );
+                                      if (rd === '1') {
+                                        if (
+                                          window.confirm(
+                                            `ยืนยันการลบแผนที่จัดไว้ของ "ปีงบประมาณ ${planYear} • งวดรอบที่ 1" (${stopCount} ราย) หรือไม่?\n\n(กด ตกลง เพื่อลบแผนและล้างคิวของรอบที่ 1)`
+                                          )
+                                        ) {
+                                          onDeleteRoundPlan(planYear, rd, false);
+                                          if (planRound === rd) setPlannedStops([]);
+                                          showToast(`🗑️ ลบแผนจัดรอบที่ ${rd} (ปีงบ ${planYear}) เรียบร้อยแล้ว`);
+                                        }
+                                      } else if (shouldRemoveSlot) {
+                                        onDeleteRoundPlan(planYear, rd, true);
+                                        if (planRound === rd) {
+                                          setPlanRound('1');
+                                        }
+                                        showToast(`🗑️ ลบแผนและงวดรอบที่ ${rd} เรียบร้อยแล้ว`);
+                                      }
+                                    } else if (rd !== '1') {
+                                      if (window.confirm(`ต้องการลบ "งวดรอบที่ ${rd}" ออกจากรายการรอบหรือไม่?`)) {
+                                        onDeleteRoundPlan(planYear, rd, true);
+                                        if (planRound === rd) setPlanRound('1');
+                                        showToast(`🗑️ ลบงวดรอบที่ ${rd} เรียบร้อยแล้ว`);
+                                      }
+                                    }
+                                  }}
+                                  className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
+                                  title={hasPlan ? `ลบแผนที่จัดไว้ของรอบที่ ${rd}` : `ลบรอบที่ ${rd}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5">
                             {hasPlan && existingPlans[rdKey]?.deliveryDate
@@ -1741,7 +1808,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                           )}
                         </div>
 
-                        <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                        <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-[11px]">
                           {hasPlan ? (
                             <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                               ✓ มีแผนบันทึกแล้ว ({stopCount} ราย)
@@ -1752,7 +1819,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                             </span>
                           )}
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

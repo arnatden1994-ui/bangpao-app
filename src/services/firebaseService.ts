@@ -99,8 +99,10 @@ export async function saveToFirestore<T extends { id?: string }>(
 ): Promise<string> {
   const docId = customId || data.id || `${Date.now()}`;
   const docRef = doc(db, collectionName, docId);
-  const payload = { ...data, id: docId, updatedAt: new Date().toISOString() };
-  await setDoc(docRef, payload, { merge: true });
+  const rawPayload = { ...data, id: docId, updatedAt: new Date().toISOString() };
+  // Strip any `undefined` properties recursively so Firebase setDoc never throws Unsupported field value: undefined
+  const cleanPayload = JSON.parse(JSON.stringify(rawPayload));
+  await setDoc(docRef, cleanPayload, { merge: true });
   return docId;
 }
 

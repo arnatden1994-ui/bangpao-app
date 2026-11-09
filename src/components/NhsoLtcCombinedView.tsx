@@ -61,6 +61,7 @@ import {
   saveLtcQueueToFirestore,
   subscribeCollection,
   saveToFirestore,
+  deleteFromFirestore,
   COLLECTIONS,
 } from '../services/firebaseService.ts';
 import { INITIAL_LTC_PATIENTS } from '../data/mockData.ts';
@@ -761,48 +762,86 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       try {
         const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
         const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
-        const activeIds = patch.queueIds || selectedStopIds;
-        const snapshotStops = (activeIds.length > 0
-          ? activeIds
-              .map((id) => stops.find((s) => s.id === id || s.patientId === id))
-              .filter((s): s is DeliveryStop => Boolean(s))
-          : orderedSelectedStops
-        ).map((s, idx) => {
+        const pKey = `${effYear}_${effRound}`;
+        const savedPlan = roundPlans[pKey];
+        const activeIds =
+          patch.queueIds && patch.queueIds.length > 0
+            ? patch.queueIds
+            : selectedStopIds.length > 0
+            ? selectedStopIds
+            : savedPlan?.stops?.map((ps) => ps.patientId) || [];
+
+        const rawRoundStops =
+          activeIds.length > 0
+            ? activeIds
+                .map((id) => stops.find((s) => s.id === id || s.patientId === id))
+                .filter((s): s is DeliveryStop => Boolean(s))
+            : [];
+
+        const snapshotStops = rawRoundStops.map((s, idx) => {
           const matchedPt = effectivePatients.find((p) => p.id === s.patientId);
-          const rInfo = getStopRoundInfo(s, effRound, effYear);
+          const planStopMatch = savedPlan?.stops?.find((ps) => ps.patientId === s.patientId);
+          const ptRoundItems =
+            planStopMatch?.items && planStopMatch.items.length > 0
+              ? planStopMatch.items
+              : matchedPt?.yearRoundItems?.[effYear]?.[effRound] ||
+                matchedPt?.roundItems?.[effRound] ||
+                [];
+          const itemsSummaryText =
+            ptRoundItems.length > 0
+              ? ptRoundItems.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ')
+              : matchedPt?.equipmentNeeded ||
+                `ผ้าอ้อม Size ${s.diaperSize || 'L'} (${s.diaperQuantity || 90} ชิ้น)`;
+
           return {
             id: s.id,
             patientId: s.patientId,
             queueOrder: idx + 1,
             patientName: s.patientName,
-            age: matchedPt?.age,
+            age: matchedPt?.age || 75,
             moo: s.moo,
             village: s.village,
             address: s.address,
-            landmark: s.landmark || matchedPt?.landmark || '',
+            landmark: s.landmark || planStopMatch?.landmark || matchedPt?.landmark || '',
             phone: matchedPt?.caregiverPhone || matchedPt?.phone || '-',
             caregiverName: matchedPt?.caregiverName || 'ญาติผู้ดูแล',
             lat: s.lat,
             lng: s.lng,
             adlCategory: s.adlCategory,
-            itemsSummary: rInfo.text,
-            itemsList: rInfo.itemsList || [],
+            itemsSummary: itemsSummaryText,
+            itemsList: ptRoundItems,
           };
         });
 
+        const convoyPayload = {
+          id: `LIVE_CONVOY_${activePlanKey}`,
+          planKey: activePlanKey,
+          fiscalYear: effYear,
+          round: effRound,
+          planTitle: savedPlan?.planTitle || `แผนจัดรอบแจกพัสดุ ปีงบ ${effYear} (รอบที่ ${effRound})`,
+          deliveryDate: savedPlan?.deliveryDate || '',
+          deliveryTimeWindow: savedPlan?.deliveryTimeWindow || '',
+          driverName: savedPlan?.driverName || '',
+          staffNames: savedPlan?.staffNames || '',
+          vehiclePlate: savedPlan?.vehiclePlate || '',
+          projectSourceType: patch.projectSourceType || savedPlan?.projectSourceType || 'both',
+          isActive: next.isActive,
+          targetStopId: next.targetStopId || (snapshotStops[0]?.id ?? null),
+          ...(next.leadLat !== undefined ? { leadLat: next.leadLat } : {}),
+          ...(next.leadLng !== undefined ? { leadLng: next.leadLng } : {}),
+          ...(next.leadUpdatedAt ? { leadUpdatedAt: next.leadUpdatedAt } : {}),
+          queueIds: activeIds,
+          stopsSnapshot: snapshotStops,
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          localStorage.setItem(`bangpao_live_convoy_${activePlanKey}`, JSON.stringify(convoyPayload));
+        } catch {}
+
         saveToFirestore(
           COLLECTIONS.LTC_QUEUES,
-          {
-            id: `LIVE_CONVOY_${activePlanKey}`,
-            planKey: activePlanKey,
-            fiscalYear: effYear,
-            round: effRound,
-            projectSourceType: patch.projectSourceType || currentPlan?.projectSourceType || 'both',
-            ...next,
-            queueIds: activeIds,
-            stopsSnapshot: snapshotStops,
-            updatedAt: new Date().toISOString(),
-          },
+          convoyPayload,
           `LIVE_CONVOY_${activePlanKey}`
         );
       } catch (e) {
@@ -811,6 +850,13 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       return next;
     });
   };
+
+  // Automatically keep LIVE_CONVOY_${activePlanKey} synced whenever the round's selectedStopIds or saved plan exists
+  useEffect(() => {
+    if (selectedStopIds.length > 0 || currentPlan?.stops?.length) {
+      broadcastConvoyStateToCloud({});
+    }
+  }, [activePlanKey, selectedStopIds.length, currentPlan?.updatedAt]);
 
   // Toggle Live Lead Vehicle GPS Broadcasting
   const handleToggleLeadGpsShare = () => {
@@ -1569,6 +1615,80 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         'success',
         `คัดลอกแผนจากรอบที่ ${sourcePlan.round} ไปจัดเป็นรอบที่ ${targetRound} เรียบร้อยแล้ว พร้อมแก้ไขข้อมูลต่อได้ทันที!`
       );
+    }
+  };
+
+  // Handler for Deleting a Saved Round Plan (and optionally removing an extra round slot)
+  const handleDeleteRoundPlan = (
+    targetYear: string,
+    targetRound: string,
+    removeRoundSlot = false
+  ) => {
+    const planKey = `${targetYear}_${targetRound}`;
+    const periodKeyHyphen = `${targetYear}-${targetRound}`;
+
+    // 1. Remove from roundPlans state & localStorage
+    setRoundPlans((prev) => {
+      const next = { ...prev };
+      delete next[planKey];
+      try {
+        localStorage.setItem('bangpao_ltc_round_plans_v1', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // 2. Remove from periodQueues state & localStorage
+    setPeriodQueues((prev) => {
+      const next = { ...prev };
+      delete next[periodKeyHyphen];
+      try {
+        localStorage.setItem('bangpao_ltc_period_queues_v2', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // 3. Remove local live convoy cache
+    try {
+      localStorage.removeItem(`bangpao_live_convoy_${planKey}`);
+    } catch {}
+
+    // 4. Clear active selectedStopIds if currently viewing the deleted round
+    const effYr = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+    const effRd = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+    if (effYr === targetYear && effRd === targetRound) {
+      setSelectedStopIds([]);
+      setIsRouteDrawn(false);
+      setRouteMetrics(null);
+    }
+
+    // 5. Optionally remove the round tab if it's Round > 1 and requested
+    if (removeRoundSlot && targetRound !== '1') {
+      setConfiguredRounds((prev) => {
+        const updated = prev.filter((r) => r !== targetRound);
+        const safeUpdated = updated.length > 0 ? updated : ['1'];
+        try {
+          localStorage.setItem('bangpao_ltc_configured_rounds_v2', JSON.stringify(safeUpdated));
+        } catch {}
+        return safeUpdated;
+      });
+      if (selectedRoundFilter === targetRound) {
+        setSelectedRoundFilter('1');
+      }
+    }
+
+    // 6. Delete corresponding documents in Cloud Firestore
+    try {
+      deleteFromFirestore(COLLECTIONS.LTC_QUEUES, `PLAN-${targetYear}-R${targetRound}`).catch(() => {});
+      deleteFromFirestore(COLLECTIONS.LTC_QUEUES, `LTC-${targetYear}-R${targetRound}`).catch(() => {});
+      deleteFromFirestore(COLLECTIONS.LTC_QUEUES, `PLAN_${targetYear}_R${targetRound}`).catch(() => {});
+      deleteFromFirestore(COLLECTIONS.LTC_QUEUES, `LTC_${targetYear}_R${targetRound}`).catch(() => {});
+      deleteFromFirestore(COLLECTIONS.LTC_QUEUES, `LIVE_CONVOY_${planKey}`).catch(() => {});
+    } catch {}
+
+    setQueueToastMsg(`🗑️ ลบแผนจัดรอบ "ปีงบประมาณ ${targetYear} • งวดรอบที่ ${targetRound}" เรียบร้อยแล้ว`);
+    setTimeout(() => setQueueToastMsg(null), 4000);
+    if (onShowToast) {
+      onShowToast('info', `ลบแผนจัดรอบ ปีงบ ${targetYear} รอบที่ ${targetRound} เรียบร้อยแล้ว`);
     }
   };
 
@@ -3692,7 +3812,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                 className={
                   isOverviewMapFullscreen
                     ? 'fixed inset-2 sm:inset-5 bg-white rounded-2xl border-2 border-slate-300 p-4 sm:p-5 shadow-2xl flex flex-col'
-                    : 'bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col justify-between space-y-3 h-full'
+                    : 'bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col justify-start space-y-3 h-full'
                 }
                 style={isOverviewMapFullscreen ? { zIndex: 9999 } : undefined}
               >
@@ -3844,7 +3964,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                   className={`relative w-full rounded-xl border border-slate-300 overflow-hidden shadow-inner bg-slate-100 ${
                     isOverviewMapFullscreen
                       ? 'flex-1 min-h-[420px]'
-                      : 'h-[420px] sm:h-[500px] lg:h-[540px]'
+                      : 'flex-1 min-h-[480px] sm:min-h-[560px] lg:min-h-[660px]'
                   }`}
                   style={{
                     height: isOverviewMapFullscreen ? 'calc(100vh - 230px)' : undefined,
@@ -3854,7 +3974,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                   <div
                     ref={overviewMapContainerRef}
                     className="w-full h-full"
-                    style={{ width: '100%', height: '100%', position: 'relative' }}
+                    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%' }}
                   />
                 </div>
 
@@ -4041,7 +4161,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
             {/* Right 5 Cols: Clean, Symmetrical Route Sequencer & Patient Pin Directory */}
             <div
               ref={routeSequencerBoxRef}
-              className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col justify-between space-y-3"
+              className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col justify-start space-y-3"
             >
               <div className="space-y-3 border-b border-slate-100 pb-3">
                 {/* Header */}
@@ -4121,6 +4241,25 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                       >
                         <Copy className="w-3 h-3 text-indigo-700" />
                         <span>คัดลอกไปรอบ 2</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const effYr = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+                          const effRd = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+                          if (
+                            window.confirm(
+                              `ยืนยันการลบแผนที่จัดไว้ของ "ปีงบประมาณ ${effYr} • งวดรอบที่ ${effRd}" หรือไม่?\n(รายชื่อผู้ป่วยในระบบหลักจะไม่ถูกลบ ลบเฉพาะแผนและคิวของรอบนี้)`
+                            )
+                          ) {
+                            handleDeleteRoundPlan(effYr, effRd, effRd !== '1');
+                          }
+                        }}
+                        className="px-2 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-200 font-extrabold text-[11px] cursor-pointer flex items-center gap-1 transition-colors"
+                        title="ลบแผนที่จัดไว้ของรอบนี้"
+                      >
+                        <Trash2 className="w-3 h-3 text-rose-600" />
+                        <span>ลบแผนรอบนี้</span>
                       </button>
                     </div>
                   </div>
@@ -7156,6 +7295,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         onAddNewRound={handleAddNewRound}
         existingPlans={roundPlans}
         onSavePlan={handleSaveRoundPlan}
+        onDeleteRoundPlan={handleDeleteRoundPlan}
         onClonePlanToRound={handleCloneRoundPlan}
         userRole={userRole}
       />

@@ -109,14 +109,18 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
   const [activeRound, setActiveRound] = useState<string>(parsedPeriod.round);
   const activePlanKey = `${activeYear}_${activeRound}`;
 
-  // Role mode: Default 'follower' so executives / followers opening from LINE immediately see catch-up buttons
+  // Role mode: Strictly 'follower' (Read-Only) by default when opened via shared link!
+  // Only unlocks 'lead' (Driver/Staff control mode) if opened with ?role=lead&pin=2569 or unlocked via Officer PIN modal
   const [roleMode, setRoleMode] = useState<'follower' | 'lead'>(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
-      if (p.get('role') === 'lead') return 'lead';
+      if (p.get('role') === 'lead' && p.get('pin') === '2569') return 'lead';
     }
     return 'follower';
   });
+  const [isStaffPinModalOpen, setIsStaffPinModalOpen] = useState(false);
+  const [staffPinInput, setStaffPinInput] = useState('');
+  const [staffPinError, setStaffPinError] = useState('');
 
   const [remotePatients, setRemotePatients] = useState<LtcPatient[]>([]);
   const effectivePatients = useMemo(() => {
@@ -207,12 +211,16 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
         setCloudConvoyDoc(null);
       }
 
-      // 3. Saved Round Plan Document for activePlanKey
+      // 3. Saved Round Plan Document for activePlanKey (match all ID conventions & fiscalYear/round fields)
       const planDoc = docs.find(
         (d) =>
           d.id === `PLAN_${activeYear}_R${activeRound}` ||
           d.id === `LTC_${activeYear}_R${activeRound}` ||
-          d.id === `PLAN-${activeYear}-R${activeRound}`
+          d.id === `PLAN-${activeYear}-R${activeRound}` ||
+          d.id === `LTC-${activeYear}-R${activeRound}` ||
+          (String(d.fiscalYear) === String(activeYear) &&
+            String(d.round) === String(activeRound) &&
+            (Array.isArray(d.stops) || Array.isArray(d.fullPlanData?.stops)))
       );
       if (planDoc) {
         setCloudPlanDoc(planDoc);
@@ -227,88 +235,152 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
     };
   }, [activePlanKey, activeYear, activeRound]);
 
-  // Build complete list of stops in this round's convoy queue
+  // Helper to enrich any stop item with latest landmark & round items from effectivePatients
+  const enrichStopWithPatientData = (rawStop: any, idx: number): ConvoyStopItem => {
+    const ptId = rawStop.patientId || rawStop.id || `STOP-${idx + 1}`;
+    const ptName = rawStop.patientName || rawStop.fullName || 'ผู้มีภาวะพึ่งพิง';
+    const matchedPt = effectivePatients.find(
+      (p) => p.id === ptId || (p.fullName && ptName && p.fullName.trim() === ptName.trim())
+    );
+    const moo = String(rawStop.moo || matchedPt?.moo || '1');
+    const fallbackCoord = BANGPAO_COORDS[moo] || BANGPAO_MUNICIPALITY_COORDS;
+
+    const rawItemsList: LtcRoundItem[] = Array.isArray(rawStop.itemsList) && rawStop.itemsList.length > 0
+      ? rawStop.itemsList
+      : Array.isArray(rawStop.items) && rawStop.items.length > 0
+      ? rawStop.items
+      : matchedPt?.yearRoundItems?.[activeYear]?.[activeRound] ||
+        matchedPt?.roundItems?.[activeRound] ||
+        [];
+
+    const rawSummary =
+      rawStop.itemsSummary && rawStop.itemsSummary !== '-' && rawStop.itemsSummary !== 'ชุดดูแลสุขภาพ สปสช. LTC'
+        ? rawStop.itemsSummary.replace(/^รอบที่\s*\d+\s*:\s*/, '')
+        : rawItemsList.length > 0
+        ? rawItemsList.map((it: any) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ')
+        : matchedPt?.equipmentNeeded || `ผ้าอ้อมผู้ใหญ่ (${matchedPt?.monthlyDiaperAllowance || 90} ชิ้น)`;
+
+    return {
+      id: rawStop.id || ptId,
+      patientId: ptId,
+      queueOrder: idx + 1,
+      patientName: ptName,
+      age: rawStop.age ?? matchedPt?.age,
+      moo,
+      village: rawStop.village || BANGPAO_VILLAGES[moo] || '',
+      address: rawStop.address || matchedPt?.address || '',
+      landmark: rawStop.landmark || matchedPt?.landmark || '',
+      phone: rawStop.phone || rawStop.caregiverPhone || matchedPt?.caregiverPhone || matchedPt?.phone || '-',
+      caregiverName: rawStop.caregiverName || matchedPt?.caregiverName || 'ญาติผู้ดูแล',
+      lat: Number(rawStop.lat ?? rawStop.latitude ?? matchedPt?.latitude ?? fallbackCoord.lat),
+      lng: Number(rawStop.lng ?? rawStop.longitude ?? matchedPt?.longitude ?? fallbackCoord.lng),
+      adlCategory: rawStop.adlCategory || matchedPt?.adlCategory || 'ติดเตียง',
+      itemsSummary: rawSummary,
+      itemsList: rawItemsList,
+    };
+  };
+
+  // Build complete list of stops strictly from this round's arranged plan/queue!
   const allConvoyStops: ConvoyStopItem[] = useMemo(() => {
-    // Priority 1: Explicit stops snapshot inside LIVE_CONVOY_${activePlanKey}
-    if (cloudConvoyDoc?.stopsSnapshot && Array.isArray(cloudConvoyDoc.stopsSnapshot) && cloudConvoyDoc.stopsSnapshot.length > 0) {
-      return cloudConvoyDoc.stopsSnapshot.map((s: any, idx: number) => ({
-        id: s.id || s.stopId || `STOP-${idx + 1}`,
-        patientId: s.patientId || s.id,
-        queueOrder: idx + 1,
-        patientName: s.patientName || s.fullName || 'ผู้มีภาวะพึ่งพิง',
-        age: s.age,
-        moo: String(s.moo || '1'),
-        village: s.village || BANGPAO_VILLAGES[String(s.moo || '1')] || '',
-        address: s.address || '',
-        landmark: s.landmark || '',
-        phone: s.phone || '-',
-        caregiverName: s.caregiverName || 'ญาติผู้ดูแล',
-        lat: Number(s.lat ?? s.latitude ?? BANGPAO_MUNICIPALITY_COORDS.lat),
-        lng: Number(s.lng ?? s.longitude ?? BANGPAO_MUNICIPALITY_COORDS.lng),
-        adlCategory: s.adlCategory || 'ติดเตียง',
-        itemsSummary: s.itemsSummary || 'ชุดดูแลสุขภาพ สปสช. LTC',
-        itemsList: Array.isArray(s.itemsList) ? s.itemsList : [],
-      }));
+    // Priority 1: Explicit stops snapshot inside Cloud LIVE_CONVOY_${activePlanKey}
+    if (
+      cloudConvoyDoc?.stopsSnapshot &&
+      Array.isArray(cloudConvoyDoc.stopsSnapshot) &&
+      cloudConvoyDoc.stopsSnapshot.length > 0
+    ) {
+      return cloudConvoyDoc.stopsSnapshot.map((s: any, idx: number) => enrichStopWithPatientData(s, idx));
     }
 
-    // Priority 2: Saved Round Plan stops from Firestore or localStorage
-    const planStops = cloudPlanDoc?.fullPlanData?.stops || cloudPlanDoc?.stops;
-    if (Array.isArray(planStops) && planStops.length > 0) {
-      return planStops.map((s: any, idx: number) => ({
-        id: s.patientId || `STOP-${idx + 1}`,
-        patientId: s.patientId,
-        queueOrder: idx + 1,
-        patientName: s.fullName || s.patientName || 'ผู้มีภาวะพึ่งพิง',
-        age: s.age,
-        moo: String(s.moo || '1'),
-        village: BANGPAO_VILLAGES[String(s.moo || '1')] || '',
-        address: s.address || '',
-        landmark: s.landmark || '',
-        phone: s.phone || s.caregiverPhone || '-',
-        caregiverName: s.caregiverName || 'ญาติผู้ดูแล',
-        lat: Number(s.latitude ?? s.lat ?? BANGPAO_MUNICIPALITY_COORDS.lat),
-        lng: Number(s.longitude ?? s.lng ?? BANGPAO_MUNICIPALITY_COORDS.lng),
-        adlCategory: s.adlCategory || 'ติดเตียง',
-        itemsSummary:
-          s.itemsSummary ||
-          (Array.isArray(s.items)
-            ? s.items.map((it: any) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ')
-            : 'ผ้าอ้อมผู้ใหญ่ / พัสดุ LTC'),
-        itemsList: Array.isArray(s.items) ? s.items : [],
-      }));
+    // Priority 2: Saved Round Plan stops from Cloud Firestore (PLAN-2569-R1 / LTC-2569-R1)
+    const cloudPlanStops = cloudPlanDoc?.fullPlanData?.stops || cloudPlanDoc?.stops;
+    if (Array.isArray(cloudPlanStops) && cloudPlanStops.length > 0) {
+      return cloudPlanStops.map((s: any, idx: number) => enrichStopWithPatientData(s, idx));
     }
 
-    // Priority 3: Fallback to effectivePatients
+    // Priority 3: LocalStorage live convoy cache (`bangpao_live_convoy_${activePlanKey}`)
+    try {
+      const localConvoyRaw = localStorage.getItem(`bangpao_live_convoy_${activePlanKey}`);
+      if (localConvoyRaw) {
+        const parsed = JSON.parse(localConvoyRaw);
+        if (Array.isArray(parsed?.stopsSnapshot) && parsed.stopsSnapshot.length > 0) {
+          return parsed.stopsSnapshot.map((s: any, idx: number) => enrichStopWithPatientData(s, idx));
+        }
+      }
+    } catch {}
+
+    // Priority 4: LocalStorage saved round plans (`bangpao_ltc_round_plans_v1`)
+    try {
+      const localPlansRaw = localStorage.getItem('bangpao_ltc_round_plans_v1');
+      if (localPlansRaw) {
+        const plansMap = JSON.parse(localPlansRaw);
+        const targetPlan = plansMap?.[activePlanKey];
+        if (Array.isArray(targetPlan?.stops) && targetPlan.stops.length > 0) {
+          return targetPlan.stops.map((s: any, idx: number) => enrichStopWithPatientData(s, idx));
+        }
+      }
+    } catch {}
+
+    // Priority 5: LocalStorage period queues (`bangpao_ltc_period_queues_v2`)
+    try {
+      const localQueuesRaw = localStorage.getItem('bangpao_ltc_period_queues_v2');
+      if (localQueuesRaw) {
+        const queuesMap = JSON.parse(localQueuesRaw);
+        const queueIds: string[] = queuesMap?.[`${activeYear}-${activeRound}`] || [];
+        if (Array.isArray(queueIds) && queueIds.length > 0) {
+          const matchedStops = queueIds
+            .map((qid) =>
+              effectivePatients.find(
+                (p) => p.id === qid || `STOP-${p.id}` === qid || qid.endsWith(p.id)
+              )
+            )
+            .filter((p): p is LtcPatient => Boolean(p));
+          if (matchedStops.length > 0) {
+            return matchedStops.map((p, idx) => enrichStopWithPatientData(p, idx));
+          }
+        }
+      }
+    } catch {}
+
+    // Priority 6: If cloudConvoyDoc has queueIds, filter strictly by queueIds
+    if (Array.isArray(cloudConvoyDoc?.queueIds) && cloudConvoyDoc.queueIds.length > 0) {
+      const matched = cloudConvoyDoc.queueIds
+        .map((qid: string) =>
+          effectivePatients.find((p) => p.id === qid || `STOP-${p.id}` === qid || qid.endsWith(p.id))
+        )
+        .filter((p: LtcPatient | undefined): p is LtcPatient => Boolean(p));
+      if (matched.length > 0) {
+        return matched.map((p: LtcPatient, idx: number) => enrichStopWithPatientData(p, idx));
+      }
+    }
+
+    // Fallback if no round plan exists yet
     return effectivePatients
       .filter((p) => p.status !== 'deceased')
-      .map((p, idx) => {
-        const moo = p.moo || '1';
-        const fallbackCoord = BANGPAO_COORDS[moo] || BANGPAO_MUNICIPALITY_COORDS;
-        const rItems = p.yearRoundItems?.[activeYear]?.[activeRound] || p.roundItems?.[activeRound] || [];
-        const summary =
-          rItems.length > 0
-            ? rItems.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ')
-            : p.equipmentNeeded || `ผ้าอ้อมผู้ใหญ่ (${p.monthlyDiaperAllowance || 90} ชิ้น)`;
-        return {
-          id: p.id,
-          patientId: p.id,
-          queueOrder: idx + 1,
-          patientName: p.fullName,
-          age: p.age,
-          moo,
-          village: BANGPAO_VILLAGES[moo] || '',
-          address: p.address,
-          landmark: p.landmark || '',
-          phone: p.caregiverPhone || p.phone || '-',
-          caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
-          lat: Number(p.latitude ?? fallbackCoord.lat),
-          lng: Number(p.longitude ?? fallbackCoord.lng),
-          adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
-          itemsSummary: summary,
-          itemsList: rItems,
-        };
-      });
-  }, [cloudConvoyDoc, cloudPlanDoc, effectivePatients, activeYear, activeRound]);
+      .map((p, idx) => enrichStopWithPatientData(p, idx));
+  }, [cloudConvoyDoc, cloudPlanDoc, effectivePatients, activeYear, activeRound, activePlanKey]);
+
+  // Auto-heal Cloud Firestore: if this device has the round's stops from localStorage/Plan but LIVE_CONVOY_${activePlanKey} in Firestore doesn't have stopsSnapshot yet, push it once!
+  useEffect(() => {
+    if (
+      allConvoyStops.length > 0 &&
+      (!cloudConvoyDoc || !Array.isArray(cloudConvoyDoc.stopsSnapshot) || cloudConvoyDoc.stopsSnapshot.length === 0)
+    ) {
+      saveToFirestore(
+        COLLECTIONS.LTC_QUEUES,
+        {
+          id: `LIVE_CONVOY_${activePlanKey}`,
+          planKey: activePlanKey,
+          fiscalYear: activeYear,
+          round: activeRound,
+          isActive: true,
+          targetStopId: cloudConvoyDoc?.targetStopId || allConvoyStops[0].id,
+          stopsSnapshot: allConvoyStops,
+          updatedAt: new Date().toISOString(),
+        },
+        `LIVE_CONVOY_${activePlanKey}`
+      ).catch(() => {});
+    }
+  }, [allConvoyStops.length, activePlanKey, cloudConvoyDoc?.stopsSnapshot?.length]);
 
   // Check if a stop is delivered in this year & round
   const getStopDeliveryInfo = (patientId: string) => {
@@ -1013,52 +1085,53 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
 
       {/* Main Container */}
       <div className="max-w-3xl mx-auto px-3 sm:px-4 pt-3 space-y-3.5">
-        {/* Role Switcher + Round Switcher Bar */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-          <div className="grid grid-cols-2 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 flex-1">
-            <button
-              type="button"
-              onClick={() => setRoleMode('follower')}
-              className={`py-2 px-3 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                roleMode === 'follower'
-                  ? 'bg-amber-400 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>🚗 คณะผู้ติดตาม (ตามสมทบ)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setRoleMode('lead')}
-              className={`py-2 px-3 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                roleMode === 'lead'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span>🚚 รถขนของ / ทีมมอบของ</span>
-            </button>
-          </div>
+        {/* Top Status Banner: Clean Follower Read-Only Mode by default; Officer Mode only when unlocked with PIN */}
+        {roleMode === 'follower' ? (
+          <div className="bg-slate-900/95 border border-teal-800/60 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-black text-[11px] flex items-center gap-1">
+                🚗 สำหรับคณะผู้ติดตาม / ผู้บริหาร
+              </span>
+              <span className="text-teal-200 text-[11px] font-semibold">
+                ดูสถานะสดว่าขบวนอยู่บ้านไหน • แจกอะไรบ้าง • จุดสังเกตใกล้ที่ไหน และกดนำทางตามได้ทันที
+              </span>
+            </div>
 
-          {/* Quick Round Switcher */}
-          <div className="flex items-center justify-end gap-1.5 text-xs">
-            <span className="text-[11px] text-slate-400 font-bold">สลับรอบ:</span>
-            {['1', '2', '3'].map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setActiveRound(r)}
-                className={`px-2.5 py-1.5 rounded-lg font-extrabold text-xs cursor-pointer transition-all ${
-                  activeRound === r
-                    ? 'bg-teal-600 text-white shadow-2xs'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                รอบ {r}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setStaffPinInput('');
+                setStaffPinError('');
+                setIsStaffPinModalOpen(true);
+              }}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+              title="เฉพาะเจ้าหน้าที่ประจำรถขนของ (ต้องใช้รหัสยืนยันเพื่อป้องกันการกดผิด)"
+            >
+              <span>🔒 สำหรับเจ้าหน้าที่รถส่งของ</span>
+            </button>
           </div>
-        </div>
+        ) : (
+          <div className="bg-emerald-950/90 border-2 border-emerald-400 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-400 text-slate-950 font-black text-[11px]">
+                🚚 โหมดเจ้าหน้าที่รถขนของ / ทีมมอบของ (ปลดล็อกแล้ว)
+              </span>
+              <span className="text-emerald-200 text-[11px] font-semibold">
+                สามารถกดบันทึกส่งมอบสำเร็จ เปลี่ยนคิวเป้าหมาย และแชร์พิกัดรถหลักได้
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setRoleMode('follower');
+                showToast('🔒 สลับกลับเป็นโหมดผู้ติดตาม (ป้องกันการกดปุ่มโดยไม่ตั้งใจ)');
+              }}
+              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-400/50 text-[11px] font-extrabold cursor-pointer shrink-0"
+            >
+              🔒 ล็อกกลับเป็นหน้าผู้ติดตาม
+            </button>
+          </div>
+        )}
 
         {/* Live Progress & Mission Status Card */}
         <div className="bg-gradient-to-br from-teal-950 via-slate-900 to-slate-900 border-2 border-teal-600/70 rounded-3xl p-4 shadow-xl space-y-3.5">
@@ -1068,12 +1141,12 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
               <span className="text-teal-200 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 <span>
-                  ส่งมอบแล้ว <strong className="text-emerald-400 text-sm">{deliveredStops.length}</strong> /{' '}
-                  {allConvoyStops.length} หลัง ({progressPercent}%)
+                  ส่งมอบแล้วในรอบนี้ <strong className="text-emerald-400 text-sm">{deliveredStops.length}</strong> /{' '}
+                  {allConvoyStops.length} บ้าน ({progressPercent}%)
                 </span>
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 font-black text-[11px]">
-                ⏳ เหลืออีก {pendingStops.length} หลังในคิว
+                ⏳ เหลืออีก {pendingStops.length} บ้านในรอบนี้
               </span>
             </div>
             <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
@@ -1083,129 +1156,147 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
               />
             </div>
             {roadRouteMetrics && (
-              <div className="flex items-center justify-between text-[11px] text-sky-300 font-semibold pt-0.5">
+              <div className="flex items-center justify-between text-[11px] text-sky-300 font-semibold pt-0.5 flex-wrap gap-1">
                 <span>
-                  🛣️ ระยะทางถนนจริงรวม: <strong>~{roadRouteMetrics.distanceKm} กม.</strong> (~{roadRouteMetrics.durationMin} นาที)
+                  🛣️ ระยะทางตามถนนรวมรอบนี้ ({allConvoyStops.length} บ้าน): <strong>~{roadRouteMetrics.distanceKm} กม.</strong> (~{roadRouteMetrics.durationMin} นาที)
                 </span>
-                {cloudPlanDoc?.driverName && (
-                  <span className="text-slate-300">🚚 คนขับ: {cloudPlanDoc.driverName}</span>
+                {(cloudConvoyDoc?.driverName || cloudPlanDoc?.driverName) && (
+                  <span className="text-slate-300">
+                    🚚 ทีมส่ง: {cloudConvoyDoc?.driverName || cloudPlanDoc?.driverName}
+                  </span>
                 )}
               </div>
             )}
           </div>
 
-          {/* Current Target & Next Target Highlight Boxes */}
+          {/* Current Target & Next Target Highlight Boxes (Simple, Clear, Prominent Landmark & Supplies) */}
           {currentTargetStop ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Box 1: Current Target House */}
                 <div
                   onClick={() => focusStopOnMap(currentTargetStop)}
-                  className="p-3.5 rounded-2xl bg-slate-950/90 border-2 border-emerald-400/80 shadow-md cursor-pointer hover:border-emerald-300 transition-all space-y-1.5"
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px]">
-                      🎯 ตอนนี้ขบวนอยู่ที่ / มุ่งหน้าไป
-                    </span>
-                    <span className="text-[11px] font-extrabold text-rose-300">
-                      {currentTargetStop.adlCategory}
-                    </span>
-                  </div>
-                  <div className="font-black text-base text-white">
-                    คิว #{currentTargetStop.queueOrder}: {currentTargetStop.patientName}
-                  </div>
-                  <div className="text-xs text-teal-200 font-semibold">
-                    🏡 หมู่ที่ {currentTargetStop.moo} {currentTargetStop.village} • {currentTargetStop.address}
-                  </div>
-                  {currentTargetStop.landmark && (
-                    <div className="text-[11px] text-amber-300 font-bold">
-                      🚩 จุดสังเกต: ใกล้{currentTargetStop.landmark}
-                    </div>
-                  )}
-                  <div className="text-[11px] text-emerald-300/90 bg-emerald-950/60 border border-emerald-700/50 rounded-lg px-2 py-1 font-semibold">
-                    📦 {currentTargetStop.itemsSummary}
-                  </div>
-                  {myGps?.distToTargetKm !== undefined && (
-                    <div className="text-xs font-black text-amber-300 pt-0.5">
-                      🛣️ ห่างจากพิกัดของคุณ: {myGps.distToTargetKm} กม. (~{myGps.durToTargetMin} นาที)
-                    </div>
-                  )}
-                </div>
-
-                {/* Box 2: Next Target House (For Followers who missed the current house) */}
-                <div
-                  onClick={() => nextTargetStop && focusStopOnMap(nextTargetStop)}
-                  className="p-3.5 rounded-2xl bg-slate-950/80 border border-sky-400/50 cursor-pointer hover:border-sky-300 transition-all flex flex-col justify-between space-y-1.5"
+                  className="p-3.5 rounded-2xl bg-slate-950/95 border-2 border-emerald-400 shadow-md cursor-pointer hover:border-emerald-300 transition-all flex flex-col justify-between space-y-2.5"
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="px-2 py-0.5 rounded-full bg-sky-400/25 text-sky-200 border border-sky-400/40 font-black text-[10px]">
-                        ⏭️ บ้านถัดไปตามแผน (กรณีไปบ้านแรกไม่ทัน)
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[11px]">
+                        🎯 ตอนนี้ขบวนอยู่ที่ / มุ่งหน้าไป
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-400/30 text-[10px] font-extrabold">
+                        {currentTargetStop.adlCategory}
                       </span>
                     </div>
-                    {nextTargetStop ? (
-                      <>
-                        <div className="font-black text-base text-white">
-                          คิว #{nextTargetStop.queueOrder}: {nextTargetStop.patientName}
-                        </div>
-                        <div className="text-xs text-teal-200 font-semibold">
-                          🏡 หมู่ที่ {nextTargetStop.moo} {nextTargetStop.village} • {nextTargetStop.address}
-                        </div>
-                        {nextTargetStop.landmark && (
-                          <div className="text-[11px] text-amber-300 font-bold">
-                            🚩 จุดสังเกต: ใกล้{nextTargetStop.landmark}
-                          </div>
-                        )}
-                        <div className="text-[11px] text-sky-200/90 bg-sky-950/50 border border-sky-800/50 rounded-lg px-2 py-1 font-semibold">
-                          📦 {nextTargetStop.itemsSummary}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="py-6 text-center text-xs text-slate-400">
-                        บ้านปัจจุบันเป็นคิวสุดท้ายของรอบนี้แล้ว
+
+                    <div className="font-black text-base sm:text-lg text-white pt-0.5">
+                      คิว #{currentTargetStop.queueOrder}: {currentTargetStop.patientName}
+                    </div>
+
+                    <div className="text-xs text-teal-200 font-semibold">
+                      🏡 หมู่ที่ {currentTargetStop.moo} {currentTargetStop.village} • บ้านเลขที่ {currentTargetStop.address}
+                    </div>
+
+                    {/* Prominent Landmark Badge */}
+                    <div className="p-2 rounded-xl bg-amber-400/15 border border-amber-400/50 text-amber-300 text-xs font-extrabold flex items-start gap-1.5">
+                      <span className="shrink-0">📍 จุดอ้างอิงใกล้เคียง:</span>
+                      <span className="text-white">
+                        {currentTargetStop.landmark
+                          ? currentTargetStop.landmark
+                          : `พื้นที่หมู่ที่ ${currentTargetStop.moo} ${currentTargetStop.village}`}
+                      </span>
+                    </div>
+
+                    {/* Prominent Supplies Badge */}
+                    <div className="p-2 rounded-xl bg-emerald-950/80 border border-emerald-600/60 text-emerald-200 text-xs font-bold flex items-start gap-1.5">
+                      <span className="shrink-0 text-emerald-400">📦 สิ่งของที่แจก:</span>
+                      <span className="text-white">{currentTargetStop.itemsSummary}</span>
+                    </div>
+
+                    {myGps?.distToTargetKm !== undefined && (
+                      <div className="text-xs font-black text-amber-300 pt-0.5">
+                        🛣️ ห่างจากคุณตอนนี้: {myGps.distToTargetKm} กม. (~{myGps.durToTargetMin} นาที)
                       </div>
                     )}
                   </div>
-                  {nextTargetStop && myGps?.distToNextKm !== undefined && (
-                    <div className="text-xs font-black text-sky-300 pt-1">
-                      🛣️ ห่างจากพิกัดของคุณ: {myGps.distToNextKm} กม. (~{myGps.durToNextMin} นาที)
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons according to Role Mode */}
-              {roleMode === 'follower' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    disabled={isLocatingMyGps}
-                    onClick={handleLocateMyGps}
-                    className="py-3 px-3 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
-                  >
-                    <Crosshair className={`w-4 h-4 shrink-0 ${isLocatingMyGps ? 'animate-spin' : ''}`} />
-                    <span>{isLocatingMyGps ? 'กำลังดึงพิกัดของคุณ...' : '📍 ดึงพิกัดฉัน & คำนวณทางตาม'}</span>
-                  </button>
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       const origin = myGps ? `&origin=${myGps.lat},${myGps.lng}` : '';
                       window.open(
                         `https://www.google.com/maps/dir/?api=1${origin}&destination=${currentTargetStop.lat},${currentTargetStop.lng}&travelmode=driving`,
                         '_blank'
                       );
                     }}
-                    className="py-3 px-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-98"
                   >
                     <Navigation className="w-4 h-4 shrink-0" />
-                    <span>🚗 นำทางตามไปบ้านปัจจุบัน (#{currentTargetStop.queueOrder})</span>
+                    <span>🚗 กดนำทางตามไปบ้านนี้ (คิว #{currentTargetStop.queueOrder})</span>
                   </button>
+                </div>
+
+                {/* Box 2: Next Target House (For Followers who missed the current house) */}
+                <div
+                  onClick={() => nextTargetStop && focusStopOnMap(nextTargetStop)}
+                  className="p-3.5 rounded-2xl bg-slate-950/90 border-2 border-sky-400/60 cursor-pointer hover:border-sky-300 transition-all flex flex-col justify-between space-y-2.5"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="px-2.5 py-0.5 rounded-full bg-sky-400 text-slate-950 font-black text-[11px]">
+                        ⏭️ ต่อไปคือที่ไหน (บ้านถัดไปตามแผน)
+                      </span>
+                      {nextTargetStop && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[10px] font-extrabold">
+                          {nextTargetStop.adlCategory}
+                        </span>
+                      )}
+                    </div>
+
+                    {nextTargetStop ? (
+                      <>
+                        <div className="font-black text-base sm:text-lg text-white pt-0.5">
+                          คิว #{nextTargetStop.queueOrder}: {nextTargetStop.patientName}
+                        </div>
+
+                        <div className="text-xs text-teal-200 font-semibold">
+                          🏡 หมู่ที่ {nextTargetStop.moo} {nextTargetStop.village} • บ้านเลขที่ {nextTargetStop.address}
+                        </div>
+
+                        {/* Prominent Landmark Badge */}
+                        <div className="p-2 rounded-xl bg-amber-400/15 border border-amber-400/50 text-amber-300 text-xs font-extrabold flex items-start gap-1.5">
+                          <span className="shrink-0">📍 จุดอ้างอิงใกล้เคียง:</span>
+                          <span className="text-white">
+                            {nextTargetStop.landmark
+                              ? nextTargetStop.landmark
+                              : `พื้นที่หมู่ที่ ${nextTargetStop.moo} ${nextTargetStop.village}`}
+                          </span>
+                        </div>
+
+                        {/* Prominent Supplies Badge */}
+                        <div className="p-2 rounded-xl bg-sky-950/80 border border-sky-700/60 text-sky-200 text-xs font-bold flex items-start gap-1.5">
+                          <span className="shrink-0 text-sky-400">📦 สิ่งของที่แจก:</span>
+                          <span className="text-white">{nextTargetStop.itemsSummary}</span>
+                        </div>
+
+                        {myGps?.distToNextKm !== undefined && (
+                          <div className="text-xs font-black text-sky-300 pt-0.5">
+                            🛣️ ห่างจากคุณตอนนี้: {myGps.distToNextKm} กม. (~{myGps.durToNextMin} นาที)
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="py-8 text-center text-xs text-slate-400">
+                        บ้านปัจจุบันเป็นคิวสุดท้ายของรอบนี้แล้ว
+                      </div>
+                    )}
+                  </div>
 
                   <button
                     type="button"
                     disabled={!nextTargetStop}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (!nextTargetStop) return;
                       const origin = myGps ? `&origin=${myGps.lat},${myGps.lng}` : '';
                       window.open(
@@ -1213,34 +1304,41 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                         '_blank'
                       );
                     }}
-                    className="py-3 px-3 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-98"
                   >
                     <Navigation className="w-4 h-4 shrink-0" />
                     <span>
                       {nextTargetStop
-                        ? `⏭️ ลัดไปดักรอบ้านถัดไป (#${nextTargetStop.queueOrder})`
+                        ? `⏭️ ไปไม่ทัน? กดนำทางลัดไปดักรอบ้านถัดไป (#${nextTargetStop.queueOrder})`
                         : 'ไม่มีบ้านถัดไป'}
                     </span>
                   </button>
                 </div>
-              ) : (
-                /* Lead Vehicle / Officer Mode Buttons */
-                <div className="space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.open(
-                          `https://www.google.com/maps/dir/?api=1&destination=${currentTargetStop.lat},${currentTargetStop.lng}&travelmode=driving`,
-                          '_blank'
-                        );
-                      }}
-                      className="py-3 px-3 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all"
-                    >
-                      <Navigation className="w-4 h-4 shrink-0" />
-                      <span>🚗 นำทางไปบ้านคิว #{currentTargetStop.queueOrder}</span>
-                    </button>
+              </div>
 
+              {/* Helper GPS Button for Follower OR Officer Control Bar */}
+              {roleMode === 'follower' ? (
+                <div className="flex items-center justify-between gap-2 bg-slate-950/70 border border-slate-800 rounded-2xl p-2.5 flex-wrap">
+                  <span className="text-xs text-slate-300">
+                    💡 อยากรู้ว่าคุณอยู่ห่างจากขบวนกี่กิโลเมตร/กี่นาที?
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isLocatingMyGps}
+                    onClick={handleLocateMyGps}
+                    className="py-2 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                  >
+                    <Crosshair className={`w-3.5 h-3.5 shrink-0 ${isLocatingMyGps ? 'animate-spin' : ''}`} />
+                    <span>{isLocatingMyGps ? 'กำลังคำนวณระยะห่าง...' : '📍 เช็คระยะห่างจากจุดที่ฉันยืนอยู่'}</span>
+                  </button>
+                </div>
+              ) : (
+                /* Lead Vehicle / Officer Mode Buttons (Only visible when unlocked via Officer PIN!) */
+                <div className="p-3 rounded-2xl bg-emerald-950/60 border border-emerald-500/50 space-y-2">
+                  <div className="text-xs font-extrabold text-emerald-300 flex items-center justify-between">
+                    <span>🛠️ แผงควบคุมสำหรับเจ้าหน้าที่รถขนของ (เมื่อส่งมอบของถึงมือผู้ป่วยแล้ว):</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -1250,7 +1348,7 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                       className="py-3 px-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all ring-2 ring-emerald-300"
                     >
                       <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>✅ ส่งมอบสำเร็จ & ไปบ้านถัดไป</span>
+                      <span>✅ บันทึกส่งมอบสำเร็จ & เลื่อนไปบ้านถัดไป</span>
                     </button>
 
                     <button
@@ -1264,7 +1362,7 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                     >
                       <Compass className="w-4 h-4 shrink-0" />
                       <span>
-                        {isSharingLeadGps ? 'กำลังแชร์พิกัดรถหลักสด...' : '🛰️ แชร์พิกัดรถคันหลัก'}
+                        {isSharingLeadGps ? 'กำลังแชร์พิกัดรถหลักสด...' : '🛰️ แชร์พิกัด GPS รถคันหลัก'}
                       </span>
                     </button>
                   </div>
@@ -1455,16 +1553,17 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                             )}
                           </div>
                           <div className="text-xs text-slate-300 mt-0.5">
-                            หมู่ที่ {stop.moo} {stop.village} • {stop.address}
+                            🏡 หมู่ที่ {stop.moo} {stop.village} • บ้านเลขที่ {stop.address}
                           </div>
-                          {stop.landmark && (
-                            <div className="text-[11px] text-amber-300 font-bold mt-0.5">
-                              🚩 ใกล้: {stop.landmark}
-                            </div>
-                          )}
+                          <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-400/15 border border-amber-400/40 text-[11px] text-amber-300 font-bold">
+                            <span>📍 จุดอ้างอิงใกล้เคียง:</span>
+                            <span className="text-white">
+                              {stop.landmark || `หมู่ที่ ${stop.moo} ${stop.village}`}
+                            </span>
+                          </div>
                           {legInfo && !deliv.isDelivered && (
-                            <div className="text-[11px] text-sky-300 font-bold mt-0.5">
-                              🛣️ ระยะทางช่วงนี้: {legInfo.distanceKm} กม. (~{legInfo.durationMin} นาที)
+                            <div className="text-[11px] text-sky-300 font-bold mt-1">
+                              🛣️ ระยะทางจากจุดก่อนหน้า: {legInfo.distanceKm} กม. (~{legInfo.durationMin} นาที)
                             </div>
                           )}
                         </div>
@@ -1482,10 +1581,11 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                     </div>
 
                     <div className="text-xs bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-2 text-teal-200 font-semibold">
-                      📦 {stop.itemsSummary}
+                      <span className="text-emerald-400 font-extrabold mr-1">📦 สิ่งของที่แจก:</span>
+                      <span className="text-white">{stop.itemsSummary}</span>
                     </div>
 
-                    {/* Action Row per Stop */}
+                    {/* Action Row per Stop: Strict Role Separation! Followers ONLY get Navigation & Phone (cannot accidentally click Deliver or Change Target!) */}
                     <div
                       className="flex items-center justify-between gap-2 pt-1 flex-wrap"
                       onClick={(e) => e.stopPropagation()}
@@ -1500,7 +1600,7 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                             <span>โทร {stop.phone}</span>
                           </a>
                         )}
-                        {!deliv.isDelivered && !isTarget && (
+                        {roleMode === 'lead' && !deliv.isDelivered && !isTarget && (
                           <button
                             type="button"
                             onClick={() => handleSelectTargetStop(stop)}
@@ -1521,32 +1621,34 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                               '_blank'
                             );
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs"
+                          className="px-3.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs"
                         >
                           <Navigation className="w-3.5 h-3.5" />
-                          <span>นำทางไปบ้านนี้</span>
+                          <span>นำทาง Google Maps</span>
                         </button>
 
-                        {!deliv.isDelivered ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReceiverName(stop.caregiverName || 'ญาติผู้ดูแลผู้ป่วย');
-                              setHandoverModalStop(stop);
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>ส่งมอบแล้ว</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleRevertStopDelivery(stop)}
-                            className="px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-700/50 font-bold text-xs cursor-pointer"
-                          >
-                            ↩️ ยกเลิก
-                          </button>
+                        {roleMode === 'lead' && (
+                          !deliv.isDelivered ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReceiverName(stop.caregiverName || 'ญาติผู้ดูแลผู้ป่วย');
+                                setHandoverModalStop(stop);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>ส่งมอบแล้ว</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRevertStopDelivery(stop)}
+                              className="px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-700/50 font-bold text-xs cursor-pointer"
+                            >
+                              ↩️ ยกเลิก
+                            </button>
+                          )
                         )}
                       </div>
                     </div>
@@ -1557,6 +1659,77 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal: Officer PIN Verification to Unlock Lead Vehicle Controls */}
+      {isStaffPinModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-teal-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-[11px] font-black text-amber-400">
+                  🔒 ยืนยันสิทธิ์เจ้าหน้าที่ประจำรถขนของ
+                </span>
+                <h3 className="font-black text-base text-white mt-0.5">
+                  เข้าสู่โหมดควบคุมขบวน & บันทึกส่งของ
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsStaffPinModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              เพื่อป้องกันไม่ให้คณะผู้ติดตามเผลอกดปุ่มส่งมอบของหรือเปลี่ยนคิวโดยไม่ตั้งใจ กรุณากรอกรหัสเจ้าหน้าที่ประจำรถขนของ (รหัสมาตรฐาน: <strong className="text-amber-300">2569</strong>)
+            </p>
+
+            <div className="space-y-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                value={staffPinInput}
+                onChange={(e) => {
+                  setStaffPinInput(e.target.value);
+                  setStaffPinError('');
+                }}
+                placeholder="กรอกรหัสเจ้าหน้าที่ 4 หลัก (เช่น 2569)"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-black text-center text-base tracking-widest outline-none focus:border-emerald-400"
+              />
+              {staffPinError && (
+                <div className="text-xs text-rose-400 font-bold text-center">{staffPinError}</div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsStaffPinModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (staffPinInput.trim() === '2569' || staffPinInput.trim() === '1234') {
+                    setRoleMode('lead');
+                    setIsStaffPinModalOpen(false);
+                    showToast('🔓 ปลดล็อกโหมดเจ้าหน้าที่รถขนของเรียบร้อยแล้ว');
+                  } else {
+                    setStaffPinError('รหัสไม่ถูกต้อง (รหัสเจ้าหน้าที่คือ 2569)');
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer shadow-md"
+              >
+                🔓 ยืนยันเข้าโหมดรถส่งของ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: Handover Confirmation */}
       {handoverModalStop && (
