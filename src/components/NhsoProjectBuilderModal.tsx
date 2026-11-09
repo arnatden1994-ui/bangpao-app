@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Save,
@@ -17,6 +17,8 @@ import {
   ChevronDown,
   ChevronUp,
   Coins,
+  Upload,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   NhsoProject,
@@ -27,7 +29,9 @@ import {
 } from '../types/index.ts';
 import {
   generateSmartNhsoProjectDraft,
+  generateSmartContextActivityGroup,
   generateNhsoDraftWithFreeGemini,
+  analyzeUploadedProjectFileWithAi,
   getStoredFreeGeminiKey,
   saveStoredFreeGeminiKey,
 } from '../utils/nhsoAiAssistant.ts';
@@ -137,6 +141,9 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
   const [showGeminiKeyBox, setShowGeminiKeyBox] = useState<boolean>(false);
   const [freeGeminiKey, setFreeGeminiKey] = useState<string>(() => getStoredFreeGeminiKey());
   const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
+  const [isAnalyzingFile, setIsAnalyzingFile] = useState<boolean>(false);
+  const [fileImportSummary, setFileImportSummary] = useState<string[] | null>(null);
+  const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   // Activity Groups State (Multiple Activities support - starts BLANK for new project!)
   const [activityGroups, setActivityGroups] = useState<NhsoActivityGroup[]>(() => {
@@ -274,6 +281,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       setAiSnackMeals(pCount > 0 ? String(inferredSnacks) : '');
       setAiStatusBanner(null);
       setAiValidationError(null);
+      setFileImportSummary(null);
       setActiveStep(1);
     } else {
       // RESET TO 100% CLEAN BLANK NEW PROJECT (All fields empty, examples shown via placeholders!)
@@ -292,6 +300,7 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       setAiHours('');
       setAiSnackMeals('');
       setAiValidationError(null);
+      setFileImportSummary(null);
 
       setActivityGroups([
         {
@@ -443,10 +452,17 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
     }
   };
 
-  // Individual Field AI Generator inside an Activity Card ( strictly checks projectName & target counts first! )
+  // Individual Field / Full Card AI Generator inside an Activity Card (Context-Aware for Activity 1, 2, 3+)
   const handleAiSuggestSingleField = (
     groupId: string,
-    field: 'activities' | 'objectives' | 'targetGroup' | 'kpi' | 'location_duration' | 'budgetLines'
+    field:
+      | 'all_in_group'
+      | 'activities'
+      | 'objectives'
+      | 'targetGroup'
+      | 'kpi'
+      | 'location_duration'
+      | 'budgetLines'
   ) => {
     const errMsg = validateRequiredProjectInputs();
     if (errMsg) {
@@ -457,54 +473,128 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
     setAiValidationError(null);
 
     const params = getAiParams();
-    const result = generateSmartNhsoProjectDraft(params);
-    const sampleGroup = result.activityGroups[0];
-    if (!sampleGroup) return;
+    let updatedActTitle = '';
 
     setActivityGroups((prev) =>
       prev.map((g, idx) => {
         if (g.id !== groupId) return g;
-        const matchedGroup = result.activityGroups[idx] || sampleGroup;
+        const smartGroup = generateSmartContextActivityGroup(params, idx, g.activityName);
+        updatedActTitle = smartGroup.activityName;
+
+        if (field === 'all_in_group') {
+          return {
+            ...g,
+            activityName: smartGroup.activityName,
+            activities: smartGroup.activities,
+            objectives: smartGroup.objectives,
+            targetGroup: smartGroup.targetGroup,
+            targetParticipants: smartGroup.targetParticipants,
+            kpi: smartGroup.kpi,
+            location: g.location || smartGroup.location,
+            duration: g.duration || smartGroup.duration,
+            budgetLines: smartGroup.budgetLines,
+            subtotal: smartGroup.subtotal,
+          };
+        }
         if (field === 'activities') {
           return {
             ...g,
-            activityName: g.activityName || matchedGroup.activityName,
-            activities: matchedGroup.activities,
+            activityName: g.activityName || smartGroup.activityName,
+            activities: smartGroup.activities,
           };
         }
         if (field === 'objectives') {
-          return { ...g, objectives: matchedGroup.objectives };
+          return { ...g, objectives: smartGroup.objectives };
         }
         if (field === 'targetGroup') {
           return {
             ...g,
-            targetGroup: matchedGroup.targetGroup,
-            targetParticipants: matchedGroup.targetParticipants,
+            targetGroup: smartGroup.targetGroup,
+            targetParticipants: smartGroup.targetParticipants,
           };
         }
         if (field === 'kpi') {
-          return { ...g, kpi: matchedGroup.kpi };
+          return { ...g, kpi: smartGroup.kpi };
         }
         if (field === 'location_duration') {
           return {
             ...g,
-            location: g.location || matchedGroup.location,
-            duration: g.duration || matchedGroup.duration,
+            location: g.location || smartGroup.location,
+            duration: g.duration || smartGroup.duration,
           };
         }
         if (field === 'budgetLines') {
           return {
             ...g,
-            budgetLines: matchedGroup.budgetLines,
-            subtotal: matchedGroup.subtotal,
+            budgetLines: smartGroup.budgetLines,
+            subtotal: smartGroup.subtotal,
           };
         }
         return g;
       })
     );
     setAiStatusBanner(
-      `✨ AI เติมข้อมูลช่องที่เลือกให้สอดคล้องกับโครงการ "${projectName.trim()}" และกลุ่มเป้าหมาย ${params.participantsCount} คน เรียบร้อยแล้ว`
+      `✨ AI วิเคราะห์และเติมข้อมูลให้สอดคล้องกับ "${updatedActTitle || 'กิจกรรมที่เลือก'}" และโครงการ "${projectName.trim()}" เรียบร้อยแล้ว`
     );
+  };
+
+  // Upload external project file -> AI parses & distills into form -> Immediately discards file to save space
+  const handleUploadExternalProjectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAnalyzingFile(true);
+    setAiValidationError(null);
+    try {
+      const result = await analyzeUploadedProjectFileWithAi(
+        file,
+        fiscalYear,
+        settings,
+        freeGeminiKey.trim()
+      );
+
+      setProjectName(result.projectName);
+      setCategoryNumber(result.categoryNumber);
+
+      if (result.proposingOrg) {
+        if (PRESET_ORGS.includes(result.proposingOrg)) {
+          setSelectedOrgPreset(result.proposingOrg);
+          setCustomOrgText('');
+        } else {
+          setSelectedOrgPreset('custom');
+          setCustomOrgText(result.proposingOrg);
+        }
+        const matchedProposer =
+          settings.orgProposerDefaults?.[result.proposingOrg] ||
+          KNOWN_PROPOSERS.find((kp) => kp.org === result.proposingOrg);
+        if (matchedProposer) {
+          setResponsiblePerson(matchedProposer.name);
+          setProposerName(matchedProposer.name);
+          setProposerTitle(matchedProposer.title);
+        } else {
+          setResponsiblePerson(result.responsiblePerson);
+        }
+      }
+
+      setAiParticipants(String(result.participantsCount));
+      setAiObservers(String(result.observersCount));
+      setAiHours(String(result.hoursCount));
+      setAiSnackMeals(String(result.snackMealsCount));
+      setActivityGroups(result.activityGroups);
+      setFileImportSummary(result.summaryReport);
+      setAiStatusBanner(
+        `✅ AI กลั่นกรองข้อมูลจากไฟล์ "${file.name}" และสร้างเป็นร่างโครงการใหม่เรียบร้อยแล้ว (ลบไฟล์ต้นฉบับออกทันทีเพื่อประหยัดพื้นที่ 100%)`
+      );
+    } catch (err) {
+      console.error('File analysis error:', err);
+      alert('ไม่สามารถอ่านข้อมูลจากไฟล์นี้ได้ กรุณาตรวจสอบว่าเป็นไฟล์ Word (.docx), Excel (.xlsx), CSV หรือข้อความ');
+    } finally {
+      // Immediately clear file input value so the file reference is garbage collected (0 bytes stored)
+      if (fileUploadInputRef.current) {
+        fileUploadInputRef.current.value = '';
+      }
+      setIsAnalyzingFile(false);
+    }
   };
 
   const handleRemoveActivityGroup = (groupId: string) => {
@@ -763,6 +853,26 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Hidden file input for zero-storage AI Project File Analyzer */}
+            <input
+              ref={fileUploadInputRef}
+              type="file"
+              accept=".docx,.xlsx,.csv,.txt,.json,.pdf"
+              onChange={handleUploadExternalProjectFile}
+              className="hidden"
+            />
+            <button
+              type="button"
+              disabled={isAnalyzingFile}
+              onClick={() => fileUploadInputRef.current?.click()}
+              className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] disabled:opacity-60"
+              title="อัปโหลดไฟล์โครงการที่ส่งมาจากหน่วยงานอื่น ให้ AI สกัดข้อมูลลงฟอร์มทันทีโดยไม่เก็บไฟล์ไว้ในระบบ"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {isAnalyzingFile
+                ? 'AI กำลังอ่านไฟล์...'
+                : '📂 อัปโหลดไฟล์โครงการให้ AI กลั่นกรอง (ไม่เก็บไฟล์)'}
+            </button>
             {existingProjects.length > 0 && (
               <button
                 type="button"
@@ -847,6 +957,54 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
           {/* STEP 1: GENERAL INFO */}
           {activeStep === 1 && (
             <div className="space-y-5 animate-in fade-in-50 duration-150">
+              {/* Zero-Storage External Project File Upload & AI Analyzer Box */}
+              <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-yellow-950/30 border-2 border-amber-300 dark:border-amber-700/80 rounded-xl p-4 shadow-sm space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="p-2 rounded-xl bg-amber-500 text-white shadow-sm mt-0.5">
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-xs font-extrabold text-amber-950 dark:text-amber-200">
+                          📂 อัปโหลดไฟล์โครงการที่ส่งมาจากหน่วยงานอื่น ให้ AI ตรวจสอบและกลั่นกรองข้อมูลอัตโนมัติ
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+                          ประหยัดพื้นที่ 100% (ไม่เก็บไฟล์)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                        รองรับไฟล์ Word (<code>.docx</code>), Excel (<code>.xlsx</code>), <code>.csv</code>, <code>.txt</code> • AI จะช่วยเช็คข้อมูลในไฟล์ กลั่นกรองเป็นชื่อโครงการ ประเภท กลุ่มเป้าหมาย กิจกรรม วัตถุประสงค์ KPI และงบประมาณเติมลงฟอร์มทันที แล้วลบทิ้งจากหน่วยความจำอัตโนมัติ
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isAnalyzingFile}
+                    onClick={() => fileUploadInputRef.current?.click()}
+                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.01] disabled:opacity-60 whitespace-nowrap"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {isAnalyzingFile
+                      ? 'AI กำลังอ่านและกลั่นกรองไฟล์...'
+                      : 'เลือกไฟล์โครงการเพื่อสกัดข้อมูล'}
+                  </button>
+                </div>
+
+                {fileImportSummary && (
+                  <div className="p-3 rounded-xl bg-white/95 dark:bg-slate-900/95 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-line flex items-start justify-between gap-2 shadow-sm">
+                    <span>{fileImportSummary}</span>
+                    <button
+                      type="button"
+                      onClick={() => setFileImportSummary(null)}
+                      className="text-slate-400 hover:text-slate-600 font-bold px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* 1. Category Dropdown (All 8 categories) - FIRST ITEM */}
               <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border-2 border-emerald-200 dark:border-emerald-800/70 rounded-xl p-4 shadow-sm">
                 <label className="block text-xs font-bold text-emerald-900 dark:text-emerald-300 mb-1.5 flex items-center gap-1.5">
@@ -1376,37 +1534,83 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     className="border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-5 bg-slate-50/60 dark:bg-slate-800/30 space-y-4 shadow-sm relative"
                   >
                     {/* Activity Header Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
-                      <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-                        <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
-                          {gIdx + 1}
-                        </span>
-                        <input
-                          type="text"
-                          value={group.activityName}
-                          onChange={(e) =>
-                            handleUpdateActivityGroup(group.id, 'activityName', e.target.value)
-                          }
-                          placeholder={`ตัวอย่าง: ${gIdx + 1}. กิจกรรมอบรมให้ความรู้และปรับเปลี่ยนพฤติกรรม`}
-                          className="font-bold text-sm px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-1"
-                        />
-                      </div>
+                    <div className="space-y-2 pb-3 border-b border-slate-200 dark:border-slate-700">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                          <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
+                            {gIdx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            value={group.activityName}
+                            onChange={(e) =>
+                              handleUpdateActivityGroup(group.id, 'activityName', e.target.value)
+                            }
+                            placeholder={
+                              gIdx === 0
+                                ? `ตัวอย่าง: 1. กิจกรรมอบรมให้ความรู้และปรับเปลี่ยนพฤติกรรม`
+                                : `ตัวอย่าง: ${gIdx + 1}. กิจกรรมการติดตามผล หรือ กิจกรรมฝึกปฏิบัติฐานการเรียนรู้`
+                            }
+                            className="font-bold text-sm px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-1"
+                          />
+                        </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-3 py-1 rounded-lg">
-                          งบกิจกรรมนี้: {groupSubtotal.toLocaleString()} บาท
-                        </span>
-                        {activityGroups.length > 1 && (
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleRemoveActivityGroup(group.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                            title="ลบกิจกรรมนี้"
+                            onClick={() => handleAiSuggestSingleField(group.id, 'all_in_group')}
+                            className="px-3 py-1 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all"
+                            title="ให้ AI วิเคราะห์จากชื่อกิจกรรมของใบนี้และชื่อโครงการ เพื่อเติมครบทั้ง กิจกรรม + วัตถุประสงค์ + กลุ่มเป้าหมาย + KPI + รายการค่าใช้จ่าย"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Sparkles className="w-3.5 h-3.5" />
+                            ✨ AI เติมข้อมูลกิจกรรมที่ {gIdx + 1} ให้สอดคล้องกับชื่อกิจกรรม
                           </button>
-                        )}
+
+                          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-3 py-1 rounded-lg">
+                            งบกิจกรรมนี้: {groupSubtotal.toLocaleString()} บาท
+                          </span>
+                          {activityGroups.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveActivityGroup(group.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                              title="ลบกิจกรรมนี้"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Quick Activity Name Suggestions for Activity 2+ */}
+                      {gIdx >= 1 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pl-8 text-[11px]">
+                          <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                            💡 เลือกชื่อกิจกรรมที่ {gIdx + 1} ยอดนิยม (คลิกเพื่อตั้งชื่อและให้ AI เติมข้อมูลให้ตรงกัน):
+                          </span>
+                          {[
+                            `${gIdx + 1}. กิจกรรมการติดตามผล`,
+                            `${gIdx + 1}. กิจกรรมฝึกปฏิบัติและฐานการเรียนรู้`,
+                            `${gIdx + 1}. กิจกรรมรณรงค์และตรวจคัดกรองเชิงรุกในชุมชน`,
+                            `${gIdx + 1}. กิจกรรมการทำหัตถการ`,
+                          ].map((presetActName) => (
+                            <button
+                              key={presetActName}
+                              type="button"
+                              onClick={() => {
+                                handleUpdateActivityGroup(group.id, 'activityName', presetActName);
+                              }}
+                              className={`px-2 py-0.5 rounded-full border font-semibold transition-colors ${
+                                group.activityName === presetActName
+                                  ? 'bg-violet-600 text-white border-violet-600'
+                                  : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-violet-400'
+                              }`}
+                            >
+                              {presetActName}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Columns 2 to 7 Form */}
@@ -1626,6 +1830,66 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                             className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-emerald-500"
                           >
                             + ไวนิล (450 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าเครื่องวัดความดันโลหิต`,
+                                'เครื่อง',
+                                3500,
+                                1
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 hover:border-blue-500"
+                          >
+                            + เครื่องวัดความดัน (3,500 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าเครื่องชั่งน้ำหนัก`,
+                                'เครื่อง',
+                                1000,
+                                1
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 hover:border-blue-500"
+                          >
+                            + เครื่องชั่งน้ำหนัก (1,000 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าเครื่องเจาะน้ำตาล`,
+                                'เครื่อง',
+                                1800,
+                                3
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 hover:border-blue-500"
+                          >
+                            + เครื่องเจาะน้ำตาล (1,800 บ.)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddBudgetLineToGroup(
+                                group.id,
+                                `${gIdx + 1}.${(group.budgetLines?.length || 0) + 1}) ค่าวัสดุอุปกรณ์ประจำฐานการเรียนรู้`,
+                                'ฐาน',
+                                1500,
+                                3
+                              )
+                            }
+                            className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 hover:border-blue-500"
+                          >
+                            + วัสดุฐานการเรียนรู้ (1,500 บ.)
                           </button>
                           <button
                             type="button"
