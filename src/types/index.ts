@@ -732,6 +732,7 @@ export interface LtcPlanStop {
   caregiverPhone: string;
   relationshipWithPatient?: string;
   address: string;
+  landmark?: string; // จุดสังเกตใกล้เคียง เช่น ร้านข้าวแกง, บ้านผู้ใหญ่
   moo: string;
   subdistrict?: string;
   latitude: number;
@@ -739,6 +740,7 @@ export interface LtcPlanStop {
   adlScore?: number;
   adlCategory: string; // 'ติดเตียง' | 'ติดบ้าน' | 'สูงอายุ'
   items: LtcRoundItem[];
+  projectType?: 'nhso' | 'ltc' | 'both';
   scheduledTime?: string;
   deliveryStatus: 'pending' | 'delivered';
   deliveredAt?: string;
@@ -749,11 +751,14 @@ export interface LtcPlanStop {
   projectEndDateNote?: string; // หมายเหตุ สิ้นสุดโครงการ เช่น "30 ธ.ค.", "18 ธ.ค.", "-", "21 ม.ค."
 }
 
+export type LtcProjectSourceType = 'nhso' | 'ltc' | 'both';
+
 export interface LtcRoundPlan {
   id: string; // e.g. "PLAN-2569-1"
   fiscalYear: string; // "2569"
   round: string; // "1", "2", "3", "urgent"
   roundName?: string; // "งวดรอบที่ 1 (ต.ค. - มี.ค.)"
+  projectSourceType?: LtcProjectSourceType; // 'nhso' = โครงการ สปสช., 'ltc' = โครงการ LTC, 'both' = แจกพร้อมกันทั้ง 2 โครงการ
   planTitle: string; // "แผนจัดรอบส่งมอบพัสดุ LTC งวดที่ 1 ปีงบ 2569"
   deliveryDate: string; // "2026-11-15" (กำหนดวันแจก)
   deliveryTimeWindow: string; // "09:00 - 16:30 น."
@@ -761,6 +766,11 @@ export interface LtcRoundPlan {
   staffNames: string; // "พันจ่าเอกอานัส เด็นหมาด (เจ้าพนักงานสาธารณสุข), CG"
   vehiclePlate: string; // "ผก-4512 ตรัง"
   status?: string;
+  convoyStatus?: 'idle' | 'active' | 'completed'; // สถานะขบวนรถลงพื้นที่จริง
+  activeTargetStopId?: string; // บ้านเป้าหมายที่ขบวนรถกำลังมุ่งหน้าไป/กำลังมอบของ
+  leadVehicleLat?: number; // พิกัดรถคันหลักแบบ Real-time
+  leadVehicleLng?: number;
+  leadVehicleUpdatedAt?: string;
   stops: LtcPlanStop[];
   totalDistanceKm?: number;
   totalDurationMin?: number;

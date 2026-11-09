@@ -35,17 +35,53 @@ import {
   CheckSquare,
   Square,
   ShieldCheck,
+  Compass,
 } from 'lucide-react';
 import {
   LtcPatient,
   LtcRoundPlan,
   LtcPlanStop,
   LtcRoundItem,
+  LtcProjectSourceType,
   UserRole,
 } from '../types/index.ts';
 import { PrintLtcRegistrationModal } from './PrintLtcRegistrationModal.tsx';
 import { INITIAL_LTC_PATIENTS } from '../data/mockData.ts';
 import { mergeLtcWithMaster } from '../services/sheetsSync.ts';
+
+export const getProjectSourceInfo = (type: LtcProjectSourceType = 'both') => {
+  if (type === 'nhso') {
+    return {
+      code: 'nhso' as const,
+      shortLabel: '🏥 โครงการ สปสช.',
+      fullLabel: 'โครงการกองทุนหลักประกันสุขภาพ (สปสช.)',
+      desc: 'แจกผ้าอ้อมผู้ใหญ่ แผ่นรองซับ และเวชภัณฑ์ตามโครงการ สปสช. ทต.บางเป้า',
+      badgeClass: 'bg-blue-100 text-blue-900 border-blue-300',
+      activeCardClass: 'bg-blue-50 border-blue-600 ring-2 ring-blue-300',
+      titlePrefix: 'แผนจัดรอบแจกพัสดุโครงการ สปสช.',
+    };
+  }
+  if (type === 'ltc') {
+    return {
+      code: 'ltc' as const,
+      shortLabel: '👵 โครงการ LTC',
+      fullLabel: 'โครงการการดูแลระยะยาวด้านสาธารณสุข (LTC)',
+      desc: 'แจกนมผงสุขภาพ อาหารเสริมทางการแพทย์ และสิ่งของตาม Care Plan (LTC)',
+      badgeClass: 'bg-purple-100 text-purple-900 border-purple-300',
+      activeCardClass: 'bg-purple-50 border-purple-600 ring-2 ring-purple-300',
+      titlePrefix: 'แผนจัดรอบแจกพัสดุโครงการ LTC',
+    };
+  }
+  return {
+    code: 'both' as const,
+    shortLabel: '🤝 แจกพร้อมกัน (สปสช. + LTC)',
+    fullLabel: 'บูรณาการแจกพร้อมกันทั้งโครงการ สปสช. และโครงการ LTC',
+    desc: 'ออกลงพื้นที่ครั้งเดียว ส่งมอบพัสดุครบทั้งโครงการ สปสช. และโครงการ LTC พร้อมกัน',
+    badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+    activeCardClass: 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-300',
+    titlePrefix: 'แผนจัดรอบแจกพัสดุบูรณาการ (สปสช. + LTC)',
+  };
+};
 
 // Central Municipality Coordinates (Bangpao HQ) - พิกัดจริงสำนักงานเทศบาลตำบลบางเป้า
 export const BANGPAO_HQ_COORDS = {
@@ -187,6 +223,15 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   // Core plan settings state
   const [planYear, setPlanYear] = useState<string>(initialYear);
   const [planRound, setPlanRound] = useState<string>(initialRound);
+  const [projectSourceType, setProjectSourceType] = useState<LtcProjectSourceType>('both');
+
+  // Real OSRM road routing metrics for Step 4
+  const [osrmRouteMetrics, setOsrmRouteMetrics] = useState<{
+    distanceKm: number;
+    drivingMin: number;
+    legMetrics: { distanceKm: number; durationMin: number }[];
+  } | null>(null);
+  const [isCalculatingRoadRoute, setIsCalculatingRoadRoute] = useState<boolean>(false);
 
   // Sync state if props change when opening modal
   useEffect(() => {
@@ -283,59 +328,104 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   // Period key helper
   const periodKey = `${planYear}_${planRound}`;
 
-  // Helper to extract default items for a patient for the given round
+  // Helper to extract default items for a patient for the given round & project source type
   const extractPatientRoundItems = (
     p: LtcPatient,
     roundKey: string,
-    yearKey: string
+    yearKey: string,
+    sourceOverride?: LtcProjectSourceType
   ): LtcRoundItem[] => {
+    const activeSource = sourceOverride || projectSourceType || 'both';
+    let baseItems: LtcRoundItem[] = [];
+
     // 1. Check yearRoundItems
     if (p.yearRoundItems?.[yearKey]?.[roundKey] && p.yearRoundItems[yearKey][roundKey].length > 0) {
-      return p.yearRoundItems[yearKey][roundKey].map((it) => ({ ...it }));
-    }
-    // 2. Check roundItems
-    if (p.roundItems?.[roundKey] && p.roundItems[roundKey].length > 0) {
-      return p.roundItems[roundKey].map((it) => ({ ...it }));
-    }
-    // 3. Fallback based on patient's monthly diaper allowance or ADL
-    const diaperSize = p.equipmentNeeded?.includes('XL')
-      ? 'XL'
-      : p.equipmentNeeded?.includes('L')
-      ? 'L'
-      : 'M';
-    const diaperQty = (p.monthlyDiaperAllowance || 90) * 3; // 3 months per round
+      baseItems = p.yearRoundItems[yearKey][roundKey].map((it) => ({ ...it }));
+    } else if (p.roundItems?.[roundKey] && p.roundItems[roundKey].length > 0) {
+      // 2. Check roundItems
+      baseItems = p.roundItems[roundKey].map((it) => ({ ...it }));
+    } else {
+      // 3. Fallback based on patient's monthly diaper allowance or ADL
+      const diaperSize = p.equipmentNeeded?.includes('XL')
+        ? 'XL'
+        : p.equipmentNeeded?.includes('L')
+        ? 'L'
+        : 'M';
+      const diaperQty = (p.monthlyDiaperAllowance || 90) * 3; // 3 months per round
 
-    const items: LtcRoundItem[] = [
-      {
-        itemId: `INV-LTC-DIA-${diaperSize}`,
-        itemName: `ผ้าอ้อมผู้ใหญ่ (Size ${diaperSize})`,
-        quantity: diaperQty,
-        unit: 'ชิ้น',
-      },
-    ];
+      baseItems = [
+        {
+          itemId: `INV-LTC-DIA-${diaperSize}`,
+          itemName: `ผ้าอ้อมผู้ใหญ่ (Size ${diaperSize})`,
+          quantity: diaperQty,
+          unit: 'ชิ้น',
+        },
+      ];
 
-    if (p.adlCategory === 'ติดเตียง') {
-      items.push({
-        itemId: 'INV-LTC-08',
-        itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ',
-        quantity: 2,
-        unit: 'กระป๋อง',
+      if (p.adlCategory === 'ติดเตียง') {
+        baseItems.push({
+          itemId: 'INV-LTC-08',
+          itemName: 'นมผงสุขภาพ / อาหารเสริมโภชนาการ',
+          quantity: 2,
+          unit: 'กระป๋อง',
+        });
+        baseItems.push({
+          itemId: 'INV-LTC-06',
+          itemName: 'แผ่นรองซับสิ่งขับถ่าย (Underpads)',
+          quantity: 60,
+          unit: 'แผ่น',
+        });
+      }
+    }
+
+    if (activeSource === 'nhso') {
+      const nhsoFiltered = baseItems.filter(
+        (it) => it.itemName.includes('ผ้าอ้อม') || it.itemName.includes('แผ่นรองซับ')
+      );
+      return nhsoFiltered.length > 0 ? nhsoFiltered : baseItems;
+    }
+
+    if (activeSource === 'ltc') {
+      const ltcFiltered = baseItems.filter(
+        (it) =>
+          it.itemName.includes('นม') ||
+          it.itemName.includes('อาหารเสริม') ||
+          it.itemName.includes('แผ่นรองซับ') ||
+          it.itemName.includes('เวชภัณฑ์')
+      );
+      return ltcFiltered.length > 0 ? ltcFiltered : baseItems;
+    }
+
+    return baseItems;
+  };
+
+  // Switch Project Source Type ('nhso' | 'ltc' | 'both') and update title + stop items
+  const handleSwitchProjectSourceType = (nextType: LtcProjectSourceType) => {
+    setProjectSourceType(nextType);
+    const info = getProjectSourceInfo(nextType);
+    setPlanTitle(`${info.titlePrefix} ปีงบ ${planYear} (รอบที่ ${planRound})`);
+
+    if (plannedStops.length > 0) {
+      const updatedStops = plannedStops.map((stop) => {
+        const matched = safePatients.find((p) => matchPlanStopWithPatient(stop, p));
+        if (!matched) return { ...stop, projectType: nextType };
+        return {
+          ...stop,
+          projectType: nextType,
+          items: extractPatientRoundItems(matched, planRound, planYear, nextType),
+        };
       });
-      items.push({
-        itemId: 'INV-LTC-06',
-        itemName: 'แผ่นรองซับสิ่งขับถ่าย (Underpads)',
-        quantity: 60,
-        unit: 'แผ่น',
-      });
+      setPlannedStops(updatedStops);
+      showToast(`สลับเป็น "${info.shortLabel}" และอัปเดตรายการสิ่งของตามโครงการแล้ว`);
     }
-
-    return items;
   };
 
   // Load existing plan or initialize from registered patients when Year or Round changes
   useEffect(() => {
     const existing = existingPlans[periodKey];
     if (existing) {
+      const existingSource = existing.projectSourceType || 'both';
+      setProjectSourceType(existingSource);
       setPlanTitle(existing.planTitle);
       setDeliveryDate(existing.deliveryDate || '');
       setDeliveryTimeWindow(existing.deliveryTimeWindow || '09:00 - 16:30 น.');
@@ -363,12 +453,17 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             caregiverName: matched.caregiverName || stop.caregiverName,
             caregiverPhone: matched.caregiverPhone || stop.caregiverPhone,
             address: matched.address || stop.address,
+            landmark: matched.landmark || stop.landmark,
             moo: matched.moo || stop.moo,
             latitude: realLat,
             longitude: realLng,
             adlScore: matched.adlScore ?? stop.adlScore,
             adlCategory: matched.adlCategory || stop.adlCategory,
-            items: stop.items && stop.items.length > 0 ? stop.items : extractPatientRoundItems(matched, planRound, planYear),
+            projectType: stop.projectType || existingSource,
+            items:
+              stop.items && stop.items.length > 0
+                ? stop.items
+                : extractPatientRoundItems(matched, planRound, planYear, existingSource),
           };
         }
         return stop;
@@ -376,34 +471,44 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       setPlannedStops(reconciled);
     } else {
       // Default: create fresh title and start with empty queue so user can selectively pick villages (e.g. Moo 1 -> Moo 4 -> Moo 6)
-      const title = `แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ ${planYear} (รอบที่ ${planRound})`;
+      const info = getProjectSourceInfo(projectSourceType);
+      const title = `${info.titlePrefix} ปีงบ ${planYear} (รอบที่ ${planRound})`;
       setPlanTitle(title);
       setPlannedStops([]);
     }
   }, [planYear, planRound, existingPlans, safePatients]);
 
-  // Total route metrics
+  // Total route metrics (uses real OSRM road distance & driving time when available)
   const routeMetrics = useMemo(() => {
-    if (plannedStops.length === 0) return { distanceKm: 0, durationMin: 0 };
+    if (plannedStops.length === 0) return { distanceKm: 0, durationMin: 0, drivingMin: 0 };
+    if (osrmRouteMetrics) {
+      const serviceMinutes = plannedStops.length * 10; // ~10 mins handover per stop
+      return {
+        distanceKm: osrmRouteMetrics.distanceKm,
+        drivingMin: osrmRouteMetrics.drivingMin,
+        durationMin: osrmRouteMetrics.drivingMin + serviceMinutes,
+      };
+    }
+
     let totalDist = 0;
     let prevLat = BANGPAO_HQ_COORDS.lat;
     let prevLng = BANGPAO_HQ_COORDS.lng;
 
     plannedStops.forEach((stop) => {
-      const d = calculateHaversineKm(prevLat, prevLng, stop.latitude, stop.longitude);
+      const d = calculateHaversineKm(prevLat, prevLng, stop.latitude, stop.longitude) * 1.28;
       totalDist += d;
       prevLat = stop.latitude;
       prevLng = stop.longitude;
     });
 
-    // Estimate: 30 km/h average speed in rural/village roads + 20 mins per patient stop
-    const drivingMinutes = Math.round((totalDist / 30) * 60);
-    const serviceMinutes = plannedStops.length * 20;
+    const drivingMinutes = Math.max(2, Math.round((totalDist / 35) * 60));
+    const serviceMinutes = plannedStops.length * 10;
     return {
       distanceKm: Number(totalDist.toFixed(1)),
+      drivingMin: drivingMinutes,
       durationMin: drivingMinutes + serviceMinutes,
     };
-  }, [plannedStops]);
+  }, [plannedStops, osrmRouteMetrics]);
 
   // Requisition items total summary for Step 5
   const suppliesSummary = useMemo(() => {
@@ -424,7 +529,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
     return Object.values(summaryMap);
   }, [plannedStops]);
 
-  // Leaflet satellite hybrid map renderer in Step 4
+  // Leaflet satellite hybrid map renderer in Step 4 with Real OSRM Road Routing
   useEffect(() => {
     if (activeStep !== 4) {
       if (plannerMapInstanceRef.current) {
@@ -438,6 +543,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       return;
     }
 
+    let isCancelled = false;
     const timer = setTimeout(() => {
       const L = (window as any).L;
       const container = plannerMapContainerRef.current;
@@ -519,37 +625,151 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         });
 
         const itemsDesc = stop.items.map((i) => `${i.itemName} (${i.quantity})`).join(', ');
+        const landmarkHtml = stop.landmark
+          ? `<div style="margin-top:2px;color:#b45309;background:#fffbeb;padding:2px 6px;border-radius:4px;border:1px solid #fde68a;font-weight:700;font-size:11px;">📍 ใกล้: ${stop.landmark}</div>`
+          : '';
 
         L.marker(pt, { icon: stopIcon })
           .bindPopup(`
-            <div style="font-family:'Prompt',sans-serif;font-size:12px;min-width:200px;">
+            <div style="font-family:'Prompt',sans-serif;font-size:12px;min-width:210px;">
               <div style="font-weight:800;color:#0f172a;font-size:13px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:4px;">
                 คิว #${idx + 1} — ${stop.fullName}
               </div>
-              <div>หมู่ที่ ${stop.moo} ${BANGPAO_VILLAGES[stop.moo] || ''}</div>
-              <div>เบอร์โทร: <strong>${stop.phone}</strong></div>
+              <div>หมู่ที่ ${stop.moo} ${BANGPAO_VILLAGES[stop.moo] || ''} • ${stop.address}</div>
+              ${landmarkHtml}
+              <div style="margin-top:2px;">เบอร์โทร: <strong>${stop.phone}</strong></div>
               <div style="margin-top:4px;color:#047857;font-weight:700;">📦 สิ่งของ: ${itemsDesc}</div>
             </div>
           `)
           .addTo(markersLayer);
       });
 
-      // 3. Draw Connecting Route Polyline
+      // 3. Draw Real Road Route via OSRM Driving API (with driveway snap connectors)
       if (latLngPoints.length > 1) {
+        map.fitBounds(L.latLngBounds(latLngPoints), { padding: [40, 40], maxZoom: 16 });
+
+        // Temporary subtle loading line while OSRM calculates actual roads
         L.polyline(latLngPoints, {
-          color: '#10b981',
-          weight: 4.5,
-          opacity: 0.88,
-          dashArray: '8, 8',
+          color: '#38bdf8',
+          weight: 3.5,
+          opacity: 0.6,
+          dashArray: '6, 8',
         }).addTo(routeLayer);
 
-        map.fitBounds(L.latLngBounds(latLngPoints), { padding: [40, 40], maxZoom: 16 });
+        setIsCalculatingRoadRoute(true);
+        const coordStr = latLngPoints.map((pt) => `${pt[1]},${pt[0]}`).join(';');
+        fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson&steps=true`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (isCancelled || !plannerRouteLayerRef.current) return;
+            if (data && data.code === 'Ok' && data.routes && data.routes[0]) {
+              const route = data.routes[0];
+              const roadCoords: [number, number][] = route.geometry.coordinates.map(
+                (c: [number, number]) => [c[1], c[0]]
+              );
+
+              routeLayer.clearLayers();
+
+              // Draw short driveway/alley connectors ONLY from snapped road access point to house pin
+              if (Array.isArray(data.waypoints)) {
+                data.waypoints.forEach((wp: any, wpIdx: number) => {
+                  if (wp && Array.isArray(wp.location) && latLngPoints[wpIdx]) {
+                    const roadSnapPt: [number, number] = [wp.location[1], wp.location[0]];
+                    const actualPinPt = latLngPoints[wpIdx];
+                    L.polyline([roadSnapPt, actualPinPt], {
+                      color: '#fbbf24',
+                      weight: 3,
+                      opacity: 0.9,
+                      dashArray: '4, 5',
+                    }).addTo(routeLayer);
+                  }
+                });
+              }
+
+              // Road Outer White Casing
+              L.polyline(roadCoords, {
+                color: '#ffffff',
+                weight: 9,
+                opacity: 0.92,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }).addTo(routeLayer);
+
+              // Road Main Blue/Teal Path
+              L.polyline(roadCoords, {
+                color: '#0284c7',
+                weight: 5.5,
+                opacity: 0.96,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }).addTo(routeLayer);
+
+              // Road Directional Flow Dashes
+              L.polyline(roadCoords, {
+                color: '#e0f2fe',
+                weight: 2,
+                opacity: 0.9,
+                dashArray: '8, 12',
+              }).addTo(routeLayer);
+
+              // Render leg distance badges along each road leg
+              const legs: any[] = route.legs || [];
+              const parsedLegs = legs.map((leg: any, legIdx: number) => {
+                const legKm = Number(((leg.distance || 0) / 1000).toFixed(1));
+                const legMin = Math.max(1, Math.round((leg.duration || 0) / 60));
+
+                // Find midpoint coordinate of this leg from steps if available
+                let midCoord: [number, number] | null = null;
+                if (leg.steps && leg.steps.length > 0) {
+                  const midStep = leg.steps[Math.floor(leg.steps.length / 2)];
+                  if (midStep?.maneuver?.location) {
+                    midCoord = [midStep.maneuver.location[1], midStep.maneuver.location[0]];
+                  }
+                }
+                if (!midCoord && latLngPoints[legIdx] && latLngPoints[legIdx + 1]) {
+                  midCoord = [
+                    (latLngPoints[legIdx][0] + latLngPoints[legIdx + 1][0]) / 2,
+                    (latLngPoints[legIdx][1] + latLngPoints[legIdx + 1][1]) / 2,
+                  ];
+                }
+                if (midCoord) {
+                  const legBadge = L.divIcon({
+                    className: '',
+                    html: `<div style="background:#0f766e;color:#ffffff;font-family:'Prompt',sans-serif;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;border:1.5px solid #ffffff;box-shadow:0 2px 5px rgba(0,0,0,0.35);white-space:nowrap;transform:translate(-50%,-50%);">➔ #${legIdx + 1} (${legKm} กม.)</div>`,
+                    iconSize: [0, 0],
+                  });
+                  L.marker(midCoord, { icon: legBadge, interactive: false }).addTo(routeLayer);
+                }
+
+                return { distanceKm: legKm, durationMin: legMin };
+              });
+
+              const totalRoadKm = Number(((route.distance || 0) / 1000).toFixed(1));
+              const totalDrivingMin = Math.max(2, Math.round((route.duration || 0) / 60));
+              setOsrmRouteMetrics({
+                distanceKm: totalRoadKm,
+                drivingMin: totalDrivingMin,
+                legMetrics: parsedLegs,
+              });
+            }
+          })
+          .catch(() => {
+            // Keep fallback straight line if offline
+          })
+          .finally(() => {
+            if (!isCancelled) setIsCalculatingRoadRoute(false);
+          });
+      } else {
+        setOsrmRouteMetrics(null);
       }
 
       setTimeout(() => map.invalidateSize(), 100);
     }, 60);
 
-    return () => clearTimeout(timer);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
   }, [activeStep, plannedStops]);
 
   // Multi-stop Google Maps URL generator
@@ -603,9 +823,89 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
     showToast('นำรายชื่อออกจากคิวจัดรอบแล้ว');
   };
 
-  // 🚀 Auto-Optimize Nearest Neighbor from HQ
-  const handleAutoSortNearest = () => {
+  // 🚀 Auto-Optimize Nearest Neighbor + 2-Opt using Real Road Driving Distance Matrix (OSRM Table API)
+  const handleAutoSortNearest = async () => {
     if (plannedStops.length <= 1) return;
+    setIsCalculatingRoadRoute(true);
+
+    try {
+      // Index 0 = Bangpao HQ, Index 1..N = plannedStops[0..N-1]
+      const allCoords = [
+        `${BANGPAO_HQ_COORDS.lng},${BANGPAO_HQ_COORDS.lat}`,
+        ...plannedStops.map((s) => `${s.longitude},${s.latitude}`),
+      ].join(';');
+
+      const res = await fetch(
+        `https://router.project-osrm.org/table/v1/driving/${allCoords}?annotations=duration,distance`
+      );
+      const data = await res.json();
+
+      if (data && data.code === 'Ok' && Array.isArray(data.durations)) {
+        const durations: number[][] = data.durations; // durations[fromIdx][toIdx] in seconds
+        const n = plannedStops.length;
+        const visited = new Array(n).fill(false);
+        const order: number[] = []; // stores 0-based index into plannedStops
+        let curNode = 0; // Start at HQ (node 0)
+
+        for (let step = 0; step < n; step++) {
+          let bestIdx = -1;
+          let minCost = Infinity;
+          for (let j = 0; j < n; j++) {
+            if (!visited[j]) {
+              const cost = durations[curNode]?.[j + 1] ?? Infinity;
+              if (cost < minCost) {
+                minCost = cost;
+                bestIdx = j;
+              }
+            }
+          }
+          if (bestIdx === -1) {
+            bestIdx = visited.findIndex((v) => !v);
+          }
+          visited[bestIdx] = true;
+          order.push(bestIdx);
+          curNode = bestIdx + 1;
+        }
+
+        // 2-Opt local refinement to untangle any crossing road segments
+        let improved = true;
+        let iter = 0;
+        const routeNodes = [0, ...order.map((idx) => idx + 1)];
+        while (improved && iter < 40) {
+          improved = false;
+          iter++;
+          for (let i = 1; i < routeNodes.length - 2; i++) {
+            for (let k = i + 1; k < routeNodes.length - 1; k++) {
+              const a = routeNodes[i - 1];
+              const b = routeNodes[i];
+              const c = routeNodes[k];
+              const d = routeNodes[k + 1];
+              const currentCost = (durations[a]?.[b] ?? 0) + (durations[c]?.[d] ?? 0);
+              const swappedCost = (durations[a]?.[c] ?? 0) + (durations[b]?.[d] ?? 0);
+              if (swappedCost + 1 < currentCost) {
+                const rev = routeNodes.slice(i, k + 1).reverse();
+                routeNodes.splice(i, k - i + 1, ...rev);
+                improved = true;
+              }
+            }
+          }
+        }
+
+        const sortedStops = routeNodes.slice(1).map((nodeIdx, i) => ({
+          ...plannedStops[nodeIdx - 1],
+          queueOrder: i + 1,
+        }));
+        setPlannedStops(sortedStops);
+        showToast('🚀 จัดลำดับเส้นทางตามถนนจริงที่สั้นและเร็วที่สุดจาก ทต.บางเป้า เรียบร้อยแล้ว!');
+        return;
+      }
+    } catch {
+      // Fallback to Haversine below if offline
+    } finally {
+      setIsCalculatingRoadRoute(false);
+    }
+
+    // Fallback: Haversine Nearest Neighbor
     const unvisited = [...plannedStops];
     const sorted: LtcPlanStop[] = [];
     let curLat = BANGPAO_HQ_COORDS.lat;
@@ -669,11 +969,13 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
         caregiverPhone: p.caregiverPhone || p.phone || '-',
         address: p.address,
+        landmark: p.landmark,
         moo: p.moo || '1',
         latitude: lat,
         longitude: lng,
         adlScore: p.adlScore,
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
+        projectType: projectSourceType,
         items: extractPatientRoundItems(p, planRound, planYear),
         scheduledTime: `0${9 + Math.floor(plannedStops.length / 2)}:${(plannedStops.length % 2) * 30 || '00'} น.`,
         deliveryStatus: 'pending',
@@ -706,12 +1008,14 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
         caregiverPhone: p.caregiverPhone || p.phone || '-',
         address: p.address,
+        landmark: p.landmark,
         moo: p.moo || '1',
         latitude: lat,
         longitude: lng,
         adlScore: p.adlScore,
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
-        items: extractPatientRoundItems(p, planRound, planYear),
+        projectType: projectSourceType,
+        items: extractPatientRoundItems(p, planRound, planYear, projectSourceType),
         scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
@@ -750,12 +1054,14 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
         caregiverPhone: p.caregiverPhone || p.phone || '-',
         address: p.address,
+        landmark: p.landmark,
         moo: p.moo || mooNum,
         latitude: lat,
         longitude: lng,
         adlScore: p.adlScore,
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
-        items: extractPatientRoundItems(p, planRound, planYear),
+        projectType: projectSourceType,
+        items: extractPatientRoundItems(p, planRound, planYear, projectSourceType),
         scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
@@ -799,12 +1105,14 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         caregiverName: p.caregiverName || 'ญาติผู้ดูแล',
         caregiverPhone: p.caregiverPhone || p.phone || '-',
         address: p.address,
+        landmark: p.landmark,
         moo: p.moo || '1',
         latitude: lat,
         longitude: lng,
         adlScore: p.adlScore,
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
-        items: extractPatientRoundItems(p, planRound, planYear),
+        projectType: projectSourceType,
+        items: extractPatientRoundItems(p, planRound, planYear, projectSourceType),
         scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
@@ -845,12 +1153,17 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       round: planRound,
       roundName: `งวดรอบที่ ${planRound}`,
       planTitle: planTitle.trim(),
+      projectSourceType: projectSourceType,
       deliveryDate: deliveryDate,
       deliveryTimeWindow: deliveryTimeWindow,
       driverName: driverName,
       staffNames: staffNames,
       vehiclePlate: vehiclePlate,
-      stops: plannedStops,
+      stops: plannedStops.map((s, idx) => ({
+        ...s,
+        queueOrder: idx + 1,
+        projectType: s.projectType || projectSourceType,
+      })),
       totalDistanceKm: routeMetrics.distanceKm,
       totalDurationMin: routeMetrics.durationMin,
       notes: planNotes,
@@ -869,19 +1182,23 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       return;
     }
 
+    const projMeta = getProjectSourceInfo(projectSourceType);
     const clonedPlan: LtcRoundPlan = {
       id: `PLAN-${cloneTargetYear}-${cloneTargetRound}`,
       fiscalYear: cloneTargetYear,
       round: cloneTargetRound,
       roundName: `งวดรอบที่ ${cloneTargetRound}`,
-      planTitle: `แผนจัดรอบแจกพัสดุ สปสช. LTC ปีงบ ${cloneTargetYear} (รอบที่ ${cloneTargetRound})`,
+      planTitle: `แผนจัดรอบแจกพัสดุ (${projMeta.shortLabel}) ปีงบ ${cloneTargetYear} (รอบที่ ${cloneTargetRound})`,
+      projectSourceType: projectSourceType,
       deliveryDate: cloneDeliveryDate,
       deliveryTimeWindow: deliveryTimeWindow,
       driverName: driverName,
       staffNames: staffNames,
       vehiclePlate: vehiclePlate,
-      stops: plannedStops.map((s) => ({
+      stops: plannedStops.map((s, idx) => ({
         ...s,
+        queueOrder: idx + 1,
+        projectType: s.projectType || projectSourceType,
         deliveryStatus: 'pending',
         deliveredAt: undefined,
         receiverName: undefined,
@@ -981,7 +1298,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
       <body>
         <div class="header">
           <div class="title">เทศบาลตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง</div>
-          <div style="font-weight: 700; font-size: 14px; margin-top: 2px;">ใบสรุปแผนการจัดรอบและใบส่งมอบพัสดุ สปสช. LTC (กองทุนสุขภาพตำบล)</div>
+          <div style="font-weight: 700; font-size: 14px; margin-top: 2px;">ใบสรุปแผนการจัดรอบและใบส่งมอบพัสดุ (${getProjectSourceInfo(projectSourceType).fullLabel})</div>
           <div class="subtitle">${planTitle} • ประจำปีงบประมาณ ${planYear}</div>
         </div>
 
@@ -1157,6 +1474,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-400 text-emerald-950 font-black text-xs">
                   ปีงบ {planYear} • รอบที่ {planRound}
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-full font-extrabold text-[11px] border ${getProjectSourceInfo(projectSourceType).badgeClass}`}>
+                  {getProjectSourceInfo(projectSourceType).shortLabel}
                 </span>
                 {existingPlans[periodKey] && (
                   <span className="px-2 py-0.5 rounded-full bg-white/20 text-white font-bold text-[11px]">
@@ -1384,6 +1704,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                     const rdKey = `${planYear}_${rd}`;
                     const hasPlan = Boolean(existingPlans[rdKey]);
                     const stopCount = existingPlans[rdKey]?.stops.length || 0;
+                    const rdProjType = existingPlans[rdKey]?.projectSourceType || 'both';
                     const isSelected = planRound === rd;
 
                     return (
@@ -1411,6 +1732,13 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                               ? `กำหนดแจก: ${existingPlans[rdKey].deliveryDate}`
                               : `รอบการแจกจ่ายประจำปี ${planYear}`}
                           </div>
+                          {hasPlan && (
+                            <div className="mt-1">
+                              <span className={`inline-block text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${getProjectSourceInfo(rdProjType).badgeClass}`}>
+                                {getProjectSourceInfo(rdProjType).shortLabel}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
@@ -1423,6 +1751,65 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                               ยังไม่มีแผนรอบนี้
                             </span>
                           )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2.5 Project Source Type Picker (สปสช. / LTC / แจกพร้อมกันทั้งคู่) */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="block text-xs font-extrabold text-slate-800">
+                    🎯 เลือกโครงการที่แจกจ่ายในรอบนี้ (แยกตามแหล่งงบ/โครงการ หรือแจกพร้อมกัน):
+                  </label>
+                  <span className="text-[11px] text-teal-700 font-bold">
+                    ✨ ระบบจะดึงรายการพัสดุและออกใบสรุปแยกตามโครงการที่เลือกอัตโนมัติ
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {(['nhso', 'ltc', 'both'] as LtcProjectSourceType[]).map((pType) => {
+                    const info = getProjectSourceInfo(pType);
+                    const isSelected = projectSourceType === pType;
+                    return (
+                      <button
+                        key={pType}
+                        type="button"
+                        onClick={() => handleSwitchProjectSourceType(pType)}
+                        className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? pType === 'nhso'
+                              ? 'bg-sky-50/90 border-sky-600 ring-2 ring-sky-200 shadow-xs'
+                              : pType === 'ltc'
+                              ? 'bg-purple-50/90 border-purple-600 ring-2 ring-purple-200 shadow-xs'
+                              : 'bg-teal-50/90 border-teal-600 ring-2 ring-teal-200 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-black text-xs sm:text-sm text-slate-900">
+                              {info.fullLabel}
+                            </span>
+                            {isSelected && (
+                              <span className="w-5 h-5 rounded-full bg-teal-700 text-white flex items-center justify-center text-[10px] font-black shrink-0">
+                                ✓
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
+                            {info.desc}
+                          </p>
+                        </div>
+                        <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px] font-extrabold">
+                          <span className={`px-2 py-0.5 rounded-md border ${info.badgeClass}`}>
+                            {info.shortLabel}
+                          </span>
+                          <span className="text-slate-500">
+                            {isSelected ? 'กำลังใช้งานโหมดนี้' : 'คลิกเพื่อเลือก'}
+                          </span>
                         </div>
                       </button>
                     );
@@ -2139,9 +2526,16 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                 {/* Left 7 Cols: Map Preview */}
                 <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-3 shadow-xs space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-600 font-bold px-1">
-                    <span>🗺️ แผนที่ดาวเทียมจุดส่งมอบ ({plannedStops.length} จุด)</span>
-                    <span className="text-[11px] text-teal-800 font-extrabold">🏢 เริ่มต้น: ทต.บางเป้า</span>
+                  <div className="flex items-center justify-between text-xs text-slate-600 font-bold px-1 flex-wrap gap-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <span>🛣️ แผนที่วาดเส้นทางถนนจริง ({plannedStops.length} จุด)</span>
+                      {isCalculatingRoadRoute && (
+                        <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-extrabold animate-pulse">
+                          ⏳ กำลังคำนวณเส้นทางถนนจริง...
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11px] text-teal-800 font-extrabold">🏢 เริ่มต้น: ทต.บางเป้า (วาดตามถนนที่รถเข้าถึงได้จริง)</span>
                   </div>
 
                   <div className="w-full h-[400px] sm:h-[460px] rounded-xl overflow-hidden border border-slate-300 relative bg-slate-100">
@@ -2159,7 +2553,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   </div>
 
                   <div className="space-y-2 max-h-[410px] overflow-y-auto pr-1">
-                    {plannedStops.map((stop, idx) => (
+                    {plannedStops.map((stop, idx) => {
+                      const legInfo = osrmRouteMetrics?.legMetrics?.[idx];
+                      return (
                       <div
                         key={stop.patientId}
                         draggable
@@ -2185,9 +2581,19 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                               <div className="font-extrabold text-slate-900 text-xs truncate">
                                 {stop.fullName}
                               </div>
-                              <div className="text-[10px] text-slate-500 truncate">
-                                ม.{stop.moo} {BANGPAO_VILLAGES[stop.moo] || ''} • 📞 {stop.phone}
+                              <div className="text-[10px] text-slate-500 truncate flex items-center gap-1 flex-wrap">
+                                <span>ม.{stop.moo} {BANGPAO_VILLAGES[stop.moo] || ''} • 📞 {stop.phone}</span>
+                                {legInfo && (
+                                  <span className="px-1.5 py-0.2 rounded bg-sky-100 text-sky-900 font-extrabold text-[9px]">
+                                    🛣️ {legInfo.distanceKm} กม. (~{legInfo.durationMin} นาที)
+                                  </span>
+                                )}
                               </div>
+                              {stop.landmark && (
+                                <div className="text-[10px] text-amber-800 font-bold truncate">
+                                  📍 ใกล้: {stop.landmark}
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -2239,7 +2645,8 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                           📦 {stop.items.map((it) => `${it.itemName} (${it.quantity})`).join(', ')}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>

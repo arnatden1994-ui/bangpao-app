@@ -48,6 +48,7 @@ import {
   UserRole,
   SignerSettings,
   LtcRoundPlan,
+  LtcProjectSourceType,
 } from '../types/index.ts';
 import {
   buildLtcDeliveryQueueNotificationPayload,
@@ -56,7 +57,12 @@ import {
   downloadAttachmentDocx,
   NotificationLogItem,
 } from '../services/notificationService.ts';
-import { saveLtcQueueToFirestore } from '../services/firebaseService.ts';
+import {
+  saveLtcQueueToFirestore,
+  subscribeCollection,
+  saveToFirestore,
+  COLLECTIONS,
+} from '../services/firebaseService.ts';
 import { INITIAL_LTC_PATIENTS } from '../data/mockData.ts';
 import { mergeLtcWithMaster } from '../services/sheetsSync.ts';
 import { LtcRoundPlannerModal } from './LtcRoundPlannerModal.tsx';
@@ -577,6 +583,32 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const activePlanKey = `${selectedYearFilter === 'all' ? '2569' : selectedYearFilter}_${selectedRoundFilter === 'all' ? '1' : selectedRoundFilter}`;
   const currentPlan = roundPlans[activePlanKey];
 
+  // Live Convoy & Follower Catch-Up Navigation State (Real-time Sync via Firestore)
+  const [convoyPanelMode, setConvoyPanelMode] = useState<'lead' | 'follower'>('lead');
+  const [liveConvoyState, setLiveConvoyState] = useState<{
+    isActive: boolean;
+    targetStopId: string | null;
+    leadLat?: number;
+    leadLng?: number;
+    leadUpdatedAt?: string;
+    projectSourceType?: LtcProjectSourceType;
+  }>({
+    isActive: false,
+    targetStopId: null,
+  });
+  const [followerGps, setFollowerGps] = useState<{
+    lat: number;
+    lng: number;
+    updatedAt: string;
+    distToTargetKm?: number;
+    durToTargetMin?: number;
+    distToNextKm?: number;
+    durToNextMin?: number;
+  } | null>(null);
+  const [isTrackingFollowerGps, setIsTrackingFollowerGps] = useState(false);
+  const [isSharingLeadGps, setIsSharingLeadGps] = useState(false);
+  const leadGpsTimerRef = useRef<any>(null);
+
   // Provide robust registered patients fallback for Planner Modal (guaranteed 14 patients)
   const availablePatientsForPlanner: LtcPatient[] = useMemo(() => {
     return effectivePatients;
@@ -667,6 +699,197 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       localStorage.setItem('bangpao_ltc_round_deliveries_v2', JSON.stringify(deliveryRecords));
     } catch {}
   }, [deliveryRecords]);
+
+  // Real-time Firestore listener for LTC Convoy & Delivery Records across devices (Lead Vehicle & Followers)
+  useEffect(() => {
+    const unsub = subscribeCollection<any>(COLLECTIONS.LTC_QUEUES, (docs) => {
+      if (!docs || docs.length === 0) return;
+
+      // 1. Sync shared delivery records map across devices
+      const sharedDelivDoc = docs.find((d) => d.id === 'LTC_SHARED_DELIVERY_RECORDS');
+      if (sharedDelivDoc && sharedDelivDoc.recordsMap && typeof sharedDelivDoc.recordsMap === 'object') {
+        setDeliveryRecords((prev) => ({
+          ...prev,
+          ...sharedDelivDoc.recordsMap,
+        }));
+      }
+
+      // 2. Sync live convoy state for activePlanKey
+      const convoyDoc = docs.find((d) => d.id === `LIVE_CONVOY_${activePlanKey}`);
+      if (convoyDoc) {
+        setLiveConvoyState({
+          isActive: Boolean(convoyDoc.isActive),
+          targetStopId: convoyDoc.targetStopId || null,
+          leadLat: convoyDoc.leadLat,
+          leadLng: convoyDoc.leadLng,
+          leadUpdatedAt: convoyDoc.leadUpdatedAt,
+          projectSourceType: convoyDoc.projectSourceType,
+        });
+        if (Array.isArray(convoyDoc.queueIds) && convoyDoc.queueIds.length > 0) {
+          setSelectedStopIds((prev) => {
+            if (prev.length === 0) return convoyDoc.queueIds;
+            return prev;
+          });
+        }
+      }
+
+      // 3. Sync saved round plan for activePlanKey
+      const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+      const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+      const planDoc = docs.find((d) => d.id === `PLAN_${effYear}_R${effRound}` || d.id === `LTC_${effYear}_R${effRound}`);
+      if (planDoc && planDoc.fullPlanData) {
+        setRoundPlans((prev) => ({
+          ...prev,
+          [`${effYear}_${effRound}`]: planDoc.fullPlanData,
+        }));
+      }
+    });
+    return () => unsub();
+  }, [activePlanKey, selectedYearFilter, selectedRoundFilter]);
+
+  const broadcastConvoyStateToCloud = (patch: Partial<{
+    isActive: boolean;
+    targetStopId: string | null;
+    leadLat?: number;
+    leadLng?: number;
+    leadUpdatedAt?: string;
+    projectSourceType?: LtcProjectSourceType;
+    queueIds?: string[];
+  }>) => {
+    setLiveConvoyState((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        saveToFirestore(
+          COLLECTIONS.LTC_QUEUES,
+          {
+            id: `LIVE_CONVOY_${activePlanKey}`,
+            planKey: activePlanKey,
+            ...next,
+            queueIds: patch.queueIds || selectedStopIds,
+            updatedAt: new Date().toISOString(),
+          },
+          `LIVE_CONVOY_${activePlanKey}`
+        );
+      } catch (e) {
+        console.warn('Convoy sync warning:', e);
+      }
+      return next;
+    });
+  };
+
+  // Toggle Live Lead Vehicle GPS Broadcasting
+  const handleToggleLeadGpsShare = () => {
+    if (isSharingLeadGps) {
+      if (leadGpsTimerRef.current) clearInterval(leadGpsTimerRef.current);
+      leadGpsTimerRef.current = null;
+      setIsSharingLeadGps(false);
+      setQueueToastMsg('หยุดแชร์พิกัด GPS รถคันหลักแล้ว');
+      setTimeout(() => setQueueToastMsg(null), 3000);
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      alert('อุปกรณ์นี้ไม่รองรับ GPS');
+      return;
+    }
+
+    setIsSharingLeadGps(true);
+    const pushLeadPos = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          broadcastConvoyStateToCloud({
+            isActive: true,
+            leadLat: Number(pos.coords.latitude.toFixed(6)),
+            leadLng: Number(pos.coords.longitude.toFixed(6)),
+            leadUpdatedAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          });
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 7000 }
+      );
+    };
+    pushLeadPos();
+    leadGpsTimerRef.current = setInterval(pushLeadPos, 12000);
+    setQueueToastMsg('🛰️ เริ่มแชร์พิกัด GPS รถขนของคันหลักแบบ Real-time ให้คณะผู้ติดตามแล้ว!');
+    setTimeout(() => setQueueToastMsg(null), 4000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (leadGpsTimerRef.current) clearInterval(leadGpsTimerRef.current);
+    };
+  }, []);
+
+  // Fetch Follower Current GPS & Calculate Catch-Up Distance/ETA to Current Target & Next Target
+  const handleLocateFollowerCatchUp = (targetStop?: DeliveryStop | null, nextStop?: DeliveryStop | null) => {
+    if (!navigator.geolocation) {
+      alert('เบราว์เซอร์ไม่รองรับการดึงพิกัด GPS ปัจจุบัน');
+      return;
+    }
+    setIsTrackingFollowerGps(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        const nowStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        let distToTargetKm: number | undefined;
+        let durToTargetMin: number | undefined;
+        let distToNextKm: number | undefined;
+        let durToNextMin: number | undefined;
+
+        try {
+          if (targetStop) {
+            const r1 = await fetch(
+              `https://router.project-osrm.org/route/v1/driving/${lng},${lat};${targetStop.lng},${targetStop.lat}?overview=false`
+            ).then((r) => r.json());
+            if (r1?.routes?.[0]) {
+              distToTargetKm = Number((r1.routes[0].distance / 1000).toFixed(1));
+              durToTargetMin = Math.max(1, Math.round(r1.routes[0].duration / 60));
+            }
+          }
+          if (nextStop) {
+            const r2 = await fetch(
+              `https://router.project-osrm.org/route/v1/driving/${lng},${lat};${nextStop.lng},${nextStop.lat}?overview=false`
+            ).then((r) => r.json());
+            if (r2?.routes?.[0]) {
+              distToNextKm = Number((r2.routes[0].distance / 1000).toFixed(1));
+              durToNextMin = Math.max(1, Math.round(r2.routes[0].duration / 60));
+            }
+          }
+        } catch {}
+
+        setFollowerGps({
+          lat,
+          lng,
+          updatedAt: nowStr,
+          distToTargetKm,
+          durToTargetMin,
+          distToNextKm,
+          durToNextMin,
+        });
+        setIsTrackingFollowerGps(false);
+        setIsRouteDrawn(true);
+        setQueueToastMsg(`📍 ดึงพิกัดปัจจุบันของคุณสำเร็จ (${lat}, ${lng}) พร้อมคำนวณเส้นทางตามสมทบแล้ว!`);
+        setTimeout(() => setQueueToastMsg(null), 4000);
+      },
+      () => {
+        setIsTrackingFollowerGps(false);
+        // Fallback to Bangpao HQ if user denies permission on desktop
+        const lat = BANGPAO_MUNICIPALITY_COORDS.lat;
+        const lng = BANGPAO_MUNICIPALITY_COORDS.lng;
+        setFollowerGps({
+          lat,
+          lng,
+          updatedAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        });
+        setIsRouteDrawn(true);
+        setQueueToastMsg('📍 ใช้พิกัดเริ่มต้น ทต.บางเป้า สำหรับคำนวณเส้นทางสมทบ');
+        setTimeout(() => setQueueToastMsg(null), 3500);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
 
   // Tab filter inside the Round Recipient Table: 'all' | 'pending' | 'delivered'
   const [roundRecipientFilter, setRoundRecipientFilter] = useState<'all' | 'pending' | 'delivered'>('all');
@@ -1226,22 +1449,26 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
         fiscalYear: plan.fiscalYear,
         round: plan.round,
         planTitle: plan.planTitle,
+        projectSourceType: plan.projectSourceType || 'both',
         deliveryDate: plan.deliveryDate,
         deliveryTimeWindow: plan.deliveryTimeWindow,
         driverName: plan.driverName,
         staffNames: plan.staffNames,
         vehiclePlate: plan.vehiclePlate,
         stopsCount: plan.stops.length,
+        fullPlanData: plan,
         stops: plan.stops.map((s) => ({
           patientId: s.patientId,
           queueOrder: s.queueOrder,
           fullName: s.fullName,
           phone: s.phone,
           address: s.address,
+          landmark: s.landmark || '',
           moo: s.moo,
           latitude: s.latitude,
           longitude: s.longitude,
           adlCategory: s.adlCategory,
+          projectType: s.projectType || plan.projectSourceType || 'both',
           deliveryStatus: s.deliveryStatus,
           itemsSummary: s.items?.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ') || '-',
         })),
@@ -1626,14 +1853,39 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       itemsDelivered: deliveredItems,
     };
 
-    setDeliveryRecords((prev) => ({
-      ...prev,
-      [recordKey]: newRecord,
-    }));
+    setDeliveryRecords((prev) => {
+      const updated = {
+        ...prev,
+        [recordKey]: newRecord,
+      };
+      try {
+        saveToFirestore(
+          COLLECTIONS.LTC_QUEUES,
+          {
+            id: 'LTC_SHARED_DELIVERY_RECORDS',
+            recordsMap: updated,
+            updatedAt: new Date().toISOString(),
+          },
+          'LTC_SHARED_DELIVERY_RECORDS'
+        );
+      } catch {}
+      return updated;
+    });
 
-    // CRITICAL: Filter out from delivery queue for this round immediately
+    // CRITICAL: Filter out from delivery queue for this round immediately & advance live convoy to next house!
     const nextQueue = selectedStopIds.filter((id) => id !== deliveryModalStop.id);
     updateSelectedQueueForPeriod(nextQueue, effYear, effRound);
+
+    const remainingOrdered = orderedSelectedStops.filter((s) => s.id !== deliveryModalStop.id);
+    const nextTargetStop = remainingOrdered.length > 0 ? remainingOrdered[0] : null;
+    broadcastConvoyStateToCloud({
+      isActive: remainingOrdered.length > 0,
+      targetStopId: nextTargetStop ? nextTargetStop.id : null,
+      queueIds: nextQueue,
+    });
+    if (nextTargetStop) {
+      setActiveStop(nextTargetStop);
+    }
 
     const matchedPatient = effectivePatients.find((p) => p.id === deliveryModalStop.patientId);
     if (matchedPatient && onRecordVisit) {
@@ -2827,13 +3079,28 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
           routeLayer.clearLayers();
 
-          // Subtle dashed line connecting exact house pins to road
-          L.polyline(directLatLngs, {
-            color: '#fbbf24',
-            weight: 2.5,
-            opacity: 0.75,
-            dashArray: '5, 6',
-          }).addTo(routeLayer);
+          // Short dashed access lines from road snap point to each house pin (no cutting across fields/rivers!)
+          if (Array.isArray(data.waypoints)) {
+            data.waypoints.forEach((wp: any, idx: number) => {
+              if (idx > 0 && wp && Array.isArray(wp.location)) {
+                const targetPt = waypoints[idx];
+                const snapLat = wp.location[1];
+                const snapLng = wp.location[0];
+                L.polyline(
+                  [
+                    [snapLat, snapLng],
+                    [targetPt.lat, targetPt.lng],
+                  ],
+                  {
+                    color: '#fbbf24',
+                    weight: 3,
+                    opacity: 0.9,
+                    dashArray: '4, 5',
+                  }
+                ).addTo(routeLayer);
+              }
+            });
+          }
 
           // Road Outer White Casing
           L.polyline(roadCoords, {
@@ -2863,6 +3130,56 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
           renderLegSequenceBadges();
 
+          // If Lead Vehicle is broadcasting GPS, render live truck marker on the route layer
+          if (liveConvoyState.leadLat && liveConvoyState.leadLng) {
+            const leadTruckIcon = L.divIcon({
+              className: '',
+              html: `<div style="background:#dc2626;color:#fff;font-family:'Prompt',sans-serif;font-size:11px;font-weight:900;padding:3px 9px;border-radius:999px;border:2px solid #fff;box-shadow:0 3px 10px rgba(220,38,38,0.5);white-space:nowrap;transform:translate(-50%,-50%);">🚚 รถขนของคันหลัก (${liveConvoyState.leadUpdatedAt || 'สด'})</div>`,
+              iconSize: [0, 0],
+            });
+            L.marker([liveConvoyState.leadLat, liveConvoyState.leadLng], {
+              icon: leadTruckIcon,
+              zIndexOffset: 2000,
+            }).addTo(routeLayer);
+          }
+
+          // If Follower has fetched their GPS, render Follower Marker + Catch-up Road Line to Current Target!
+          if (followerGps) {
+            const followerIcon = L.divIcon({
+              className: '',
+              html: `<div style="background:#7c3aed;color:#fff;font-family:'Prompt',sans-serif;font-size:11px;font-weight:900;padding:3px 9px;border-radius:999px;border:2px solid #fff;box-shadow:0 3px 10px rgba(124,58,237,0.5);white-space:nowrap;transform:translate(-50%,-50%);">🚗 พิกัดผู้ติดตาม (คุณ)</div>`,
+              iconSize: [0, 0],
+            });
+            L.marker([followerGps.lat, followerGps.lng], {
+              icon: followerIcon,
+              zIndexOffset: 2100,
+            }).addTo(routeLayer);
+
+            const catchUpStop =
+              orderedSelectedStops.find((s) => s.id === liveConvoyState.targetStopId) || orderedSelectedStops[0];
+            if (catchUpStop) {
+              fetch(
+                `https://router.project-osrm.org/route/v1/driving/${followerGps.lng},${followerGps.lat};${catchUpStop.lng},${catchUpStop.lat}?overview=full&geometries=geojson`
+              )
+                .then((r) => r.json())
+                .then((catchData) => {
+                  if (isCancelled || !overviewRouteLayerRef.current) return;
+                  if (catchData?.routes?.[0]) {
+                    const catchCoords: [number, number][] = catchData.routes[0].geometry.coordinates.map(
+                      (c: [number, number]) => [c[1], c[0]]
+                    );
+                    L.polyline(catchCoords, {
+                      color: '#7c3aed',
+                      weight: 5,
+                      opacity: 0.9,
+                      dashArray: '8, 6',
+                    }).addTo(routeLayer);
+                  }
+                })
+                .catch(() => {});
+            }
+          }
+
           const distKm = Number((route.distance / 1000).toFixed(1));
           const durMin = Math.max(2, Math.round(route.duration / 60));
           setRouteMetrics({ distanceKm: distKm, durationMin: durMin });
@@ -2878,7 +3195,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [subTab, isRouteDrawn, selectedStopIds, stops]);
+  }, [subTab, isRouteDrawn, selectedStopIds, stops, liveConvoyState, followerGps]);
 
   // Trigger drawing the route and fit the map bounds to all stops in the route
   const handleDrawRouteOnMap = () => {
@@ -3704,7 +4021,22 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
                 {currentPlan && (
                   <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-gradient-to-r from-teal-50 via-emerald-50 to-sky-50 border border-teal-200 text-xs">
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-extrabold text-[11px] border ${
+                          currentPlan.projectSourceType === 'nhso'
+                            ? 'bg-sky-100 text-sky-900 border-sky-300'
+                            : currentPlan.projectSourceType === 'ltc'
+                            ? 'bg-purple-100 text-purple-900 border-purple-300'
+                            : 'bg-teal-100 text-teal-950 border-teal-300'
+                        }`}
+                      >
+                        {currentPlan.projectSourceType === 'nhso'
+                          ? '🏥 โครงการ สปสช.'
+                          : currentPlan.projectSourceType === 'ltc'
+                          ? '👵 โครงการ LTC'
+                          : '🤝 แจกพร้อมกัน (สปสช. + LTC)'}
+                      </span>
                       <div className="flex items-center gap-1.5 font-black text-teal-950">
                         <Calendar className="w-3.5 h-3.5 text-teal-700" />
                         <span>วันแจก: {currentPlan.deliveryDate ? new Date(currentPlan.deliveryDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : 'ยังไม่ระบุ'}</span>
@@ -3752,6 +4084,286 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* 🛰️ Live Convoy & Follower Catch-Up Navigation System (ระบบนำทางขบวนส่งของ & คณะผู้ติดตามแบบ Real-Time) */}
+                {orderedSelectedStops.length > 0 && (() => {
+                  const currentTargetIdx = liveConvoyState.targetStopId
+                    ? Math.max(0, orderedSelectedStops.findIndex((s) => s.id === liveConvoyState.targetStopId))
+                    : 0;
+                  const currentTargetStop = orderedSelectedStops[currentTargetIdx] || orderedSelectedStops[0];
+                  const nextTargetStop = orderedSelectedStops[currentTargetIdx + 1] || null;
+                  const totalRoundCount = deliveredCount + orderedSelectedStops.length;
+
+                  return (
+                    <div className="rounded-2xl border-2 border-teal-600/80 bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 text-white p-3.5 shadow-md space-y-3">
+                      {/* Top Header & Mode Switcher */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap border-b border-white/15 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                          <span className="font-black text-xs sm:text-sm tracking-tight text-emerald-300">
+                            🛰️ ระบบนำทางขบวนส่งของ & ติดตามคณะทำงานสด (Live Convoy)
+                          </span>
+                        </div>
+                        <div className="inline-flex rounded-xl bg-white/10 p-0.5 border border-white/15 text-[11px] font-extrabold">
+                          <button
+                            type="button"
+                            onClick={() => setConvoyPanelMode('lead')}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                              convoyPanelMode === 'lead'
+                                ? 'bg-emerald-500 text-slate-950 shadow-2xs font-black'
+                                : 'text-teal-100 hover:text-white'
+                            }`}
+                          >
+                            🚚 รถขนของ / ทีมมอบของ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConvoyPanelMode('follower')}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                              convoyPanelMode === 'follower'
+                                ? 'bg-amber-400 text-slate-950 shadow-2xs font-black'
+                                : 'text-teal-100 hover:text-white'
+                            }`}
+                          >
+                            🚗 คณะผู้ติดตาม (ตามสมทบ)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar: Delivered vs Remaining */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-bold">
+                          <span className="text-teal-200">
+                            ความคืบหน้าขบวน: ส่งแล้ว <strong className="text-emerald-400">{deliveredCount}</strong> / {totalRoundCount} หลัง
+                          </span>
+                          <span className="text-amber-300 font-extrabold">
+                            เหลืออีก {orderedSelectedStops.length} หลังในคิว
+                          </span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-white/15 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${totalRoundCount > 0 ? Math.round((deliveredCount / totalRoundCount) * 100) : 0}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {convoyPanelMode === 'lead' ? (
+                        /* MODE 1: Lead Vehicle / Delivery Team Mode */
+                        <div className="space-y-2.5">
+                          <div className="p-2.5 rounded-xl bg-white/10 border border-white/15 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px]">
+                                🎯 เป้าหมายปัจจุบัน (คิวที่ #{currentTargetIdx + 1})
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={currentTargetStop.id}
+                                  onChange={(e) => {
+                                    const picked = orderedSelectedStops.find((s) => s.id === e.target.value);
+                                    if (picked) {
+                                      broadcastConvoyStateToCloud({
+                                        isActive: true,
+                                        targetStopId: picked.id,
+                                      });
+                                      focusStopOnOverviewMap(picked);
+                                    }
+                                  }}
+                                  className="bg-slate-800 text-white border border-white/25 rounded-lg px-2 py-0.5 text-[10px] font-bold outline-none cursor-pointer"
+                                  title="เลือกเปลี่ยนบ้านเป้าหมายปัจจุบัน"
+                                >
+                                  {orderedSelectedStops.map((s, idx) => (
+                                    <option key={s.id} value={s.id}>
+                                      คิว #{idx + 1}: {s.patientName} (ม.{s.moo})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="font-black text-sm text-white flex items-center justify-between gap-2">
+                              <span>{currentTargetStop.patientName}</span>
+                              <span className="text-xs font-bold text-amber-300 shrink-0">
+                                ม.{currentTargetStop.moo} {currentTargetStop.village}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-teal-100">
+                              📍 {currentTargetStop.address}
+                              {currentTargetStop.landmark ? ` (ใกล้: ${currentTargetStop.landmark})` : ''}
+                            </div>
+                            {nextTargetStop && (
+                              <div className="text-[10px] text-sky-300 pt-1 border-t border-white/10 font-semibold">
+                                ⏭️ บ้านถัดไป (คิว #{currentTargetIdx + 2}): <strong>{nextTargetStop.patientName}</strong> (ม.{nextTargetStop.moo} {nextTargetStop.village})
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                broadcastConvoyStateToCloud({
+                                  isActive: true,
+                                  targetStopId: currentTargetStop.id,
+                                });
+                                setIsRouteDrawn(true);
+                                focusStopOnOverviewMap(currentTargetStop);
+                                window.open(
+                                  `https://www.google.com/maps/dir/?api=1&destination=${currentTargetStop.lat},${currentTargetStop.lng}&travelmode=driving`,
+                                  '_blank'
+                                );
+                              }}
+                              className="py-2 px-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                            >
+                              <Navigation className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">นำทางไปบ้านนี้ (#{currentTargetIdx + 1})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => openDeliveryModal(currentTargetStop)}
+                              className="py-2 px-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">✅ ส่งมอบแล้ว & ไปบ้านถัดไป</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleToggleLeadGpsShare}
+                              className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all ${
+                                isSharingLeadGps
+                                  ? 'bg-rose-500 hover:bg-rose-600 text-white animate-pulse'
+                                  : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
+                              }`}
+                              title="แชร์พิกัด GPS รถขนของคันหลักให้คณะผู้ติดตามเห็นสดบนแผนที่"
+                            >
+                              <Compass className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">
+                                {isSharingLeadGps ? 'กำลังแชร์พิกัดรถสด...' : 'แชร์พิกัดรถคันหลัก'}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* MODE 2: Follower / Catch-Up Mode (สำหรับคณะผู้ติดตามที่มาไม่ทัน) */
+                        <div className="space-y-2.5">
+                          <div className="p-2.5 rounded-xl bg-amber-400/15 border border-amber-300/40 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="font-black text-amber-300">
+                                📡 สถานะขบวนล่าสุด (อัปเดตสดอัตโนมัติ):
+                              </span>
+                              {liveConvoyState.leadLat && liveConvoyState.leadLng && (
+                                <span className="px-2 py-0.5 rounded-full bg-rose-500/80 text-white text-[10px] font-bold">
+                                  🚚 มีพิกัดรถคันหลัก ({liveConvoyState.leadUpdatedAt || 'สด'})
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              <div className="p-2 rounded-lg bg-slate-900/80 border border-emerald-400/40">
+                                <div className="text-[10px] font-extrabold text-emerald-300">
+                                  🎯 ตอนนี้ขบวนกำลังอยู่ที่ / มุ่งหน้าไป:
+                                </div>
+                                <div className="font-black text-white text-xs mt-0.5">
+                                  คิว #{currentTargetIdx + 1}: {currentTargetStop.patientName}
+                                </div>
+                                <div className="text-[10px] text-teal-200">
+                                  ม.{currentTargetStop.moo} {currentTargetStop.village} • {currentTargetStop.address}
+                                </div>
+                                {followerGps?.distToTargetKm !== undefined && (
+                                  <div className="mt-1 text-[10px] font-extrabold text-amber-300">
+                                    🛣️ ห่างจากคุณ: {followerGps.distToTargetKm} กม. (~{followerGps.durToTargetMin} นาที)
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="p-2 rounded-lg bg-slate-900/80 border border-sky-400/40">
+                                <div className="text-[10px] font-extrabold text-sky-300">
+                                  ⏭️ บ้านหลังถัดไปตามแผน (กรณีไปบ้านแรกไม่ทัน):
+                                </div>
+                                {nextTargetStop ? (
+                                  <>
+                                    <div className="font-black text-white text-xs mt-0.5">
+                                      คิว #{currentTargetIdx + 2}: {nextTargetStop.patientName}
+                                    </div>
+                                    <div className="text-[10px] text-teal-200">
+                                      ม.{nextTargetStop.moo} {nextTargetStop.village} • {nextTargetStop.address}
+                                    </div>
+                                    {followerGps?.distToNextKm !== undefined && (
+                                      <div className="mt-1 text-[10px] font-extrabold text-sky-300">
+                                        🛣️ ห่างจากคุณ: {followerGps.distToNextKm} กม. (~{followerGps.durToNextMin} นาที)
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="text-[11px] text-slate-400 mt-1">
+                                    บ้านปัจจุบันเป็นคิวสุดท้ายของรอบนี้แล้ว
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Follower Action Buttons */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isTrackingFollowerGps}
+                              onClick={() => handleLocateFollowerCatchUp(currentTargetStop, nextTargetStop)}
+                              className="py-2 px-2.5 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                            >
+                              <Crosshair className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">
+                                {isTrackingFollowerGps ? 'กำลังดึงพิกัดคุณ...' : '📍 ดึงพิกัดฉัน & วาดเส้นทางตาม'}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const originParam = followerGps
+                                  ? `&origin=${followerGps.lat},${followerGps.lng}`
+                                  : '';
+                                window.open(
+                                  `https://www.google.com/maps/dir/?api=1${originParam}&destination=${currentTargetStop.lat},${currentTargetStop.lng}&travelmode=driving`,
+                                  '_blank'
+                                );
+                              }}
+                              className="py-2 px-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                            >
+                              <Navigation className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">🚗 ตามไปบ้านปัจจุบัน (#{currentTargetIdx + 1})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={!nextTargetStop}
+                              onClick={() => {
+                                if (!nextTargetStop) return;
+                                const originParam = followerGps
+                                  ? `&origin=${followerGps.lat},${followerGps.lng}`
+                                  : '';
+                                window.open(
+                                  `https://www.google.com/maps/dir/?api=1${originParam}&destination=${nextTargetStop.lat},${nextTargetStop.lng}&travelmode=driving`,
+                                  '_blank'
+                                );
+                              }}
+                              className="py-2 px-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                            >
+                              <Navigation className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">
+                                {nextTargetStop ? `⏭️ ลัดไปดักรอบ้านถัดไป (#${currentTargetIdx + 2})` : 'ไม่มีบ้านถัดไป'}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {queueToastMsg && (
                   <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center justify-between gap-2">
