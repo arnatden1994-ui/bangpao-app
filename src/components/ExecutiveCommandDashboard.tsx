@@ -84,6 +84,8 @@ import {
   InspectionRecord,
   LicenseRecord,
   LtcPatient,
+  RoundDeliveryRecord,
+  LtcRoundPlan,
   MedicalEquipment,
   EquipmentLoan,
   NhsoProject,
@@ -143,8 +145,140 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
     (l) => l.status === 'normal' && (l.remainingDays === undefined || l.remainingDays > 30)
   ).length;
 
-  const ltcDeliveredCount = ltcPatients.filter((p) => p.receivedCarePack).length;
-  const ltcPercentage = ltcPatients.length > 0 ? Math.round((ltcDeliveredCount / ltcPatients.length) * 100) : 0;
+  // Live LTC Round Delivery Records & Round Plans synced in real-time from localStorage + Cloud Firestore
+  const [ltcDeliveryRecords, setLtcDeliveryRecords] = useState<Record<string, RoundDeliveryRecord>>(() => {
+    try {
+      const saved = localStorage.getItem('bangpao_ltc_round_deliveries_v2');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
+
+  const [ltcRoundPlans, setLtcRoundPlans] = useState<Record<string, LtcRoundPlan>>(() => {
+    try {
+      const saved =
+        localStorage.getItem('bangpao_ltc_round_plans_v2_14pts') ||
+        localStorage.getItem('bangpao_ltc_round_plans_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
+
+  useEffect(() => {
+    const syncLocalLtcState = () => {
+      try {
+        const dRaw = localStorage.getItem('bangpao_ltc_round_deliveries_v2');
+        if (dRaw) setLtcDeliveryRecords(JSON.parse(dRaw));
+      } catch {}
+      try {
+        const pRaw =
+          localStorage.getItem('bangpao_ltc_round_plans_v2_14pts') ||
+          localStorage.getItem('bangpao_ltc_round_plans_v1');
+        if (pRaw) setLtcRoundPlans(JSON.parse(pRaw));
+      } catch {}
+    };
+
+    syncLocalLtcState();
+    window.addEventListener('storage', syncLocalLtcState);
+    window.addEventListener('focus', syncLocalLtcState);
+
+    const unsubLtc = subscribeCollection<any>(COLLECTIONS.LTC_QUEUES, (docs) => {
+      if (!docs || !Array.isArray(docs)) return;
+      const sharedDeliv = docs.find((d) => d.id === 'LTC_SHARED_DELIVERY_RECORDS');
+      if (sharedDeliv && sharedDeliv.recordsMap && typeof sharedDeliv.recordsMap === 'object') {
+        setLtcDeliveryRecords((prev) => {
+          const merged = { ...prev, ...sharedDeliv.recordsMap };
+          try {
+            localStorage.setItem('bangpao_ltc_round_deliveries_v2', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+      docs.forEach((d) => {
+        if (d.fullPlanData && d.fiscalYear && d.round) {
+          setLtcRoundPlans((prev) => ({
+            ...prev,
+            [`${d.fiscalYear}_${d.round}`]: d.fullPlanData,
+          }));
+        }
+      });
+    });
+
+    return () => {
+      window.removeEventListener('storage', syncLocalLtcState);
+      window.removeEventListener('focus', syncLocalLtcState);
+      unsubLtc();
+    };
+  }, []);
+
+  // Dynamically determine the active/latest LTC round and real-time delivery KPIs
+  const ltcLiveSummary = useMemo(() => {
+    const totalPatients = ltcPatients.length || 35;
+    const deliveredEntries = Object.values(ltcDeliveryRecords).filter(
+      (r) => r && r.status === 'delivered'
+    );
+
+    // Count deliveries per (year_round)
+    const countByPeriod: Record<string, { year: string; round: string; delivered: number }> = {};
+    deliveredEntries.forEach((r) => {
+      const k = `${r.year}_${r.round}`;
+      if (!countByPeriod[k]) {
+        countByPeriod[k] = { year: r.year, round: r.round, delivered: 0 };
+      }
+      countByPeriod[k].delivered += 1;
+    });
+
+    // Pick the period with the highest delivery activity or latest saved plan (e.g. 2569_2)
+    let activeYear = '2569';
+    let activeRound = '2';
+    const periodsSorted = Object.values(countByPeriod).sort((a, b) => {
+      if (b.delivered !== a.delivered) return b.delivered - a.delivered;
+      return Number(b.round) - Number(a.round);
+    });
+
+    if (periodsSorted.length > 0 && periodsSorted[0].delivered > 0) {
+      activeYear = periodsSorted[0].year;
+      activeRound = periodsSorted[0].round;
+    } else if (ltcRoundPlans['2569_2']?.stops?.length) {
+      activeYear = '2569';
+      activeRound = '2';
+    } else if (ltcRoundPlans['2569_1']?.stops?.length) {
+      activeYear = '2569';
+      activeRound = '1';
+    }
+
+    const planKey = `${activeYear}_${activeRound}`;
+    const savedPlan = ltcRoundPlans[planKey];
+    const targetTotal =
+      savedPlan?.stops && savedPlan.stops.length > 0
+        ? Math.max(savedPlan.stops.length, totalPatients)
+        : totalPatients;
+
+    const deliveredInActiveRound = deliveredEntries.filter(
+      (r) => r.year === activeYear && r.round === activeRound
+    ).length;
+
+    const legacyCount = ltcPatients.filter((p) => p.receivedCarePack).length;
+    const finalDelivered =
+      deliveredInActiveRound > 0
+        ? Math.min(targetTotal, deliveredInActiveRound)
+        : Math.min(targetTotal, legacyCount);
+    const finalPending = Math.max(0, targetTotal - finalDelivered);
+    const finalPct = targetTotal > 0 ? Math.round((finalDelivered / targetTotal) * 100) : 0;
+
+    return {
+      activeYear,
+      activeRound,
+      deliveredCount: finalDelivered,
+      totalCount: targetTotal,
+      pendingCount: finalPending,
+      percentage: finalPct,
+      deliveredEntries,
+    };
+  }, [ltcPatients, ltcDeliveryRecords, ltcRoundPlans]);
+
+  const ltcDeliveredCount = ltcLiveSummary.deliveredCount;
+  const ltcPercentage = ltcLiveSummary.percentage;
 
   const activeLoans = loans.filter((l) => l.status === 'borrowed').length;
   const totalEquipmentUnits = equipmentList.reduce((acc, eq) => acc + (eq.totalQuantity || 0), 0) || 86;
@@ -394,6 +528,24 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         });
       }
     });
+
+    // F. Real-time LTC Care Pack Deliveries (e.g. Round 2/2569)
+    if (ltcLiveSummary.deliveredCount > 0) {
+      list.push({
+        id: `ltc-round-${ltcLiveSummary.activeYear}-${ltcLiveSummary.activeRound}`,
+        title: `ส่งมอบพัสดุ สปสช. LTC งวดรอบที่ ${ltcLiveSummary.activeRound}/${ltcLiveSummary.activeYear} (${ltcLiveSummary.deliveredCount}/${ltcLiveSummary.totalCount} ราย)`,
+        detail:
+          ltcLiveSummary.pendingCount === 0
+            ? `ส่งมอบครบ 100% ทั้ง ${ltcLiveSummary.totalCount} ราย • ตัดสต็อกคลังพัสดุเรียบร้อยแล้ว`
+            : `ส่งมอบแล้ว ${ltcLiveSummary.deliveredCount} ราย (${ltcLiveSummary.percentage}%) • รอส่งมอบอีก ${ltcLiveSummary.pendingCount} ราย`,
+        time: 'อัปเดตสด',
+        timestamp: Date.now() + 1000,
+        type: 'ltc',
+        icon: HeartPulse,
+        color: 'bg-rose-100 text-rose-800',
+        actionTab: 'ltc',
+      });
+    }
 
     list.sort((a, b) => b.timestamp - a.timestamp);
 
@@ -1060,7 +1212,7 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
         >
           <div className="flex items-center justify-between mb-3.5">
             <span className="text-xs sm:text-[13px] font-bold text-slate-600 uppercase tracking-wide">
-              สปสช. LTC ดูแลผู้สูงอายุ
+              สปสช. LTC ดูแลผู้สูงอายุ (รอบ {ltcLiveSummary.activeRound}/{ltcLiveSummary.activeYear.slice(-2)})
             </span>
             <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs">
               <HeartPulse className="w-5 h-5" />
@@ -1068,14 +1220,28 @@ export const ExecutiveCommandDashboard: React.FC<ExecutiveCommandDashboardProps>
           </div>
           <div className="flex items-baseline gap-2.5">
             <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              {ltcDeliveredCount}/{ltcPatients.length || 12}
+              {ltcDeliveredCount}/{ltcLiveSummary.totalCount}
             </span>
-            <span className="text-xs sm:text-[13px] text-rose-700 font-bold bg-rose-100/90 px-2.5 py-0.5 rounded-full">
+            <span
+              className={`text-xs sm:text-[13px] font-bold px-2.5 py-0.5 rounded-full ${
+                ltcPercentage === 100
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-rose-100/90 text-rose-700'
+              }`}
+            >
               ส่งมอบแล้ว ({ltcPercentage}%)
             </span>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs sm:text-[13px] text-slate-500 font-medium">
-            <span>รอส่งมอบ: <strong className="text-slate-800 font-bold">{(ltcPatients.length || 12) - ltcDeliveredCount}</strong> ราย (7 หมู่บ้าน)</span>
+            <span>
+              {ltcLiveSummary.pendingCount === 0 ? (
+                <strong className="text-emerald-700 font-bold">✓ ส่งมอบครบทุกรายแล้ว (7 หมู่บ้าน)</strong>
+              ) : (
+                <>
+                  รอส่งมอบ: <strong className="text-slate-800 font-bold">{ltcLiveSummary.pendingCount}</strong> ราย (7 หมู่บ้าน)
+                </>
+              )}
+            </span>
             <span className="text-rose-700 font-bold group-hover:translate-x-1 transition-transform flex items-center gap-0.5">
               จัดเส้นทาง <ChevronRight className="w-4 h-4" />
             </span>

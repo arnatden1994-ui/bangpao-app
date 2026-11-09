@@ -74,6 +74,7 @@ import {
   LtcInventoryManager,
   LtcInventoryItem,
   StockTransactionLog,
+  formatThaiDateTime,
 } from './LtcInventoryManager.tsx';
 
 interface NhsoLtcCombinedViewProps {
@@ -318,7 +319,65 @@ const INITIAL_LTC_INVENTORY: LtcInventoryItem[] = [
     expireDate: '2028-12-31',
     status: 'sufficient',
   },
+  {
+    id: 'INV-LTC-08',
+    code: '8',
+    name: 'ผ้าอ้อมสำหรับเด็ก ขนาด XXL',
+    specification: 'ผ้าอ้อมสำเร็จรูปสำหรับเด็กและผู้มีภาวะพึ่งพิงรูปร่างเล็ก ขนาด XXL',
+    totalStock: 1000,
+    allocatedStock: 0,
+    remainingStock: 1000,
+    unit: 'ชิ้น',
+    monthlyRequirement: 324,
+    lotNo: 'LOT-NHSO-6908',
+    expireDate: '2028-12-31',
+    status: 'sufficient',
+    category: 'diaper',
+  },
 ];
+
+// Normalize any delivered item name / itemId to canonical LtcInventoryItem id & name
+export const matchInventoryItemKey = (
+  invItem: LtcInventoryItem,
+  deliveredItem: { itemId?: string; itemName: string }
+): boolean => {
+  const invName = (invItem.name || '').trim().toLowerCase();
+  const delivName = (deliveredItem.itemName || '').trim().toLowerCase();
+  if (!delivName) return false;
+  if (deliveredItem.itemId && deliveredItem.itemId === invItem.id && invName === delivName) return true;
+
+  // 1. Baby Diaper XXL ("ผ้าอ้อมสำหรับเด็ก ขนาด XXL")
+  const invIsBaby = invName.includes('เด็ก');
+  const delivIsBaby = delivName.includes('เด็ก');
+  if (invIsBaby || delivIsBaby) {
+    return invIsBaby && delivIsBaby;
+  }
+
+  // 2. Adult Diapers (must strictly distinguish M, L, XL, XXL/2XL)
+  if (invName.includes('ผ้าอ้อม') && delivName.includes('ผ้าอ้อม')) {
+    const getDiaperSize = (s: string) => {
+      if (s.includes('xxl') || s.includes('2xl')) return 'XXL';
+      if (s.includes('xl')) return 'XL';
+      if (/\(m\)|\bsize\s*m\b|\bขนาด\s*m\b/i.test(s)) return 'M';
+      if (/\(l\)|\bsize\s*l\b|\bขนาด\s*l\b/i.test(s)) return 'L';
+      return '';
+    };
+    const s1 = getDiaperSize(invName);
+    const s2 = getDiaperSize(delivName);
+    if (s1 && s2) return s1 === s2;
+  }
+
+  // 3. Underpads ("แผ่นรองซับ")
+  if (invName.includes('แผ่นรองซับ') && delivName.includes('แผ่นรองซับ')) return true;
+
+  // 4. Nutrition Milk Powder ("นมผง") vs UHT Milk Box ("นมกล่อง" / "uht")
+  if (invName.includes('นมผง') && delivName.includes('นมผง')) return true;
+  if ((invName.includes('นมกล่อง') || invName.includes('uht')) && (delivName.includes('นมกล่อง') || delivName.includes('uht'))) {
+    return true;
+  }
+
+  return invName === delivName;
+};
 
 export const INITIAL_DELIVERY_RECORDS: Record<string, RoundDeliveryRecord> = {};
 
@@ -499,11 +558,25 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const [deliveryRelation, setDeliveryRelation] = useState('ผู้ดูแลผู้ป่วย');
   const [deliveryNote, setDeliveryNote] = useState('');
 
-  // Inventory State
+  // Inventory State (Ensures all INITIAL_LTC_INVENTORY items including Baby XXL exist)
   const [inventory, setInventory] = useState<LtcInventoryItem[]>(() => {
     try {
       const saved = localStorage.getItem('bangpao_ltc_inventory_v2');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: LtcInventoryItem[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const result = [...parsed];
+          INITIAL_LTC_INVENTORY.forEach((initItem) => {
+            const exists = result.some((r) =>
+              matchInventoryItemKey(r, { itemId: initItem.id, itemName: initItem.name })
+            );
+            if (!exists) {
+              result.push(initItem);
+            }
+          });
+          return result;
+        }
+      }
     } catch {}
     return INITIAL_LTC_INVENTORY;
   });
@@ -704,6 +777,207 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       localStorage.setItem('bangpao_ltc_round_deliveries_v2', JSON.stringify(deliveryRecords));
     } catch {}
   }, [deliveryRecords]);
+
+  // Auto-Reconcile Inventory Stock & Transaction Logs with ALL delivered records across rounds (e.g. Round 2/2569 & Mobile App deliveries)
+  useEffect(() => {
+    const deliveredEntries = Object.entries(deliveryRecords).filter(
+      ([_, rec]) => rec && rec.status === 'delivered'
+    );
+    if (deliveredEntries.length === 0) return;
+
+    // 1. Ensure all INITIAL_LTC_INVENTORY items (including Baby Diaper XXL) exist in current inventory
+    let nextInventory = [...inventory];
+    let invModified = false;
+    INITIAL_LTC_INVENTORY.forEach((initItem) => {
+      const exists = nextInventory.some((r) =>
+        matchInventoryItemKey(r, { itemId: initItem.id, itemName: initItem.name })
+      );
+      if (!exists) {
+        nextInventory.push({ ...initItem });
+        invModified = true;
+      }
+    });
+
+    // 2. Clean out legacy malformed logs (e.g. dateStr === 'Mon'/'Wed' or missing balanceAfter/recipientOrSource for delivery records)
+    // and collect already-reconciled DELIV_LOG keys
+    const daySet = new Set(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
+    const existingLogIds = new Set<string>();
+    const cleanedLogs: StockTransactionLog[] = [];
+    let logsModified = false;
+
+    // Keep track of legacy deductions we are replacing so we don't double-deduct
+    const legacyDeductedByInvId: Record<string, number> = {};
+
+    stockLogs.forEach((log) => {
+      const isLegacyDayLog =
+        daySet.has(log.dateStr) ||
+        (log.type === 'out' && /\(นาย|\(นาง|\(ด\.ช\.|\(ด\.ญ\./.test(log.itemName) && !log.id.startsWith('DELIV_LOG_'));
+
+      if (isLegacyDayLog) {
+        logsModified = true;
+        // If it was a real patient delivery log (not the -1 mock log), record how much was already deducted so we can replace it cleanly
+        if (log.id !== 'LOG-01' && /\(ปี\s*\d+\s*รอบ\s*\d+\)/.test(log.itemName)) {
+          const matchedInv = nextInventory.find((inv) =>
+            matchInventoryItemKey(inv, { itemName: log.itemName })
+          );
+          if (matchedInv) {
+            legacyDeductedByInvId[matchedInv.id] =
+              (legacyDeductedByInvId[matchedInv.id] || 0) + Math.abs(Number(log.quantity) || 0);
+          }
+        }
+        return;
+      }
+
+      if (log.id.startsWith('DELIV_LOG_')) {
+        existingLogIds.add(log.id);
+      }
+      cleanedLogs.push(log);
+    });
+
+    // Restore any legacy partial deductions back to nextInventory before applying full clean reconciliation
+    Object.entries(legacyDeductedByInvId).forEach(([invId, qty]) => {
+      if (qty > 0) {
+        nextInventory = nextInventory.map((it) =>
+          it.id === invId
+            ? {
+                ...it,
+                allocatedStock: Math.max(0, it.allocatedStock - qty),
+                remainingStock: it.remainingStock + qty,
+              }
+            : it
+        );
+        invModified = true;
+      }
+    });
+
+    // 3. Reconcile every delivered record (Patient + Year + Round)
+    const newlyCreatedLogs: StockTransactionLog[] = [];
+
+    deliveredEntries.forEach(([recKey, rec]) => {
+      const matchedPt = effectivePatients.find((p) => p.id === rec.patientId);
+      const stopMatch = stops.find((s) => s.patientId === rec.patientId);
+      const patientName = stopMatch?.patientName || matchedPt?.fullName || rec.patientId;
+      const planKey = `${rec.year}_${rec.round}`;
+      const planStop = roundPlans[planKey]?.stops?.find((ps) => ps.patientId === rec.patientId);
+
+      // Resolve exact items delivered for this patient in this round
+      let itemsList: LtcRoundItem[] =
+        rec.itemsDelivered && rec.itemsDelivered.length > 0
+          ? rec.itemsDelivered
+          : planStop?.items && planStop.items.length > 0
+          ? planStop.items
+          : matchedPt?.yearRoundItems?.[rec.year]?.[rec.round] ||
+            matchedPt?.roundItems?.[rec.round] ||
+            matchedPt?.roundItems?.['1'] ||
+            [];
+
+      if (!itemsList || itemsList.length === 0) {
+        if (stopMatch) {
+          itemsList = [
+            {
+              itemId: 'INV-LTC-02',
+              itemName: `ผ้าอ้อมผู้ใหญ่ (${stopMatch.diaperSize || 'L'})`,
+              quantity: stopMatch.diaperQuantity || 90,
+              unit: 'ชิ้น',
+            },
+          ];
+        }
+      }
+
+      itemsList.forEach((delivIt) => {
+        const qty = Number(delivIt.quantity) || 0;
+        if (qty <= 0) return;
+
+        const targetInvIdx = nextInventory.findIndex((inv) =>
+          matchInventoryItemKey(inv, delivIt)
+        );
+        if (targetInvIdx === -1) return;
+
+        const targetInv = nextInventory[targetInvIdx];
+        const logId = `DELIV_LOG_${recKey}_${targetInv.id}`;
+
+        if (!existingLogIds.has(logId)) {
+          existingLogIds.add(logId);
+          const nextRem = Math.max(0, targetInv.remainingStock - qty);
+          const nextAlloc = (targetInv.allocatedStock || 0) + qty;
+
+          nextInventory[targetInvIdx] = {
+            ...targetInv,
+            allocatedStock: nextAlloc,
+            remainingStock: nextRem,
+            status: nextRem > (targetInv.minStockAlert || 50) ? 'sufficient' : 'low',
+          };
+          invModified = true;
+
+          const formattedDate =
+            rec.deliveredAt && !daySet.has(rec.deliveredAt)
+              ? rec.deliveredAt
+              : formatThaiDateTime();
+
+          newlyCreatedLogs.push({
+            id: logId,
+            dateStr: formattedDate,
+            itemName: targetInv.name,
+            itemCode: targetInv.code,
+            type: 'out',
+            quantity: -qty,
+            balanceAfter: nextRem,
+            recipientOrSource: `ส่งมอบให้ ${patientName} (ปีงบ ${rec.year} • รอบที่ ${rec.round})`,
+            reason: `ผู้รับ: ${rec.receiverName || 'ญาติผู้ดูแล'}`,
+          });
+          logsModified = true;
+        }
+      });
+    });
+
+    // 4. Also ensure each inventory item's allocatedStock is at least the sum of all 'out' delivery logs for that item
+    const outSumByInvId: Record<string, number> = {};
+    const allFinalLogs = [...newlyCreatedLogs, ...cleanedLogs];
+    allFinalLogs.forEach((l) => {
+      if (l.type === 'out' && l.id.startsWith('DELIV_LOG_')) {
+        const matchedInv = nextInventory.find(
+          (inv) => inv.name === l.itemName || l.id.endsWith(`_${inv.id}`)
+        );
+        if (matchedInv) {
+          outSumByInvId[matchedInv.id] =
+            (outSumByInvId[matchedInv.id] || 0) + Math.abs(Number(l.quantity) || 0);
+        }
+      }
+    });
+
+    nextInventory = nextInventory.map((inv) => {
+      const delivOutTotal = outSumByInvId[inv.id] || 0;
+      if (delivOutTotal > 0 && inv.allocatedStock !== delivOutTotal) {
+        invModified = true;
+        // Ensure totalStock is at least initial + restocks so remainingStock is consistent
+        const effectiveTotal = Math.max(inv.totalStock, delivOutTotal + inv.remainingStock);
+        const consistentRem = Math.max(0, effectiveTotal - delivOutTotal);
+        return {
+          ...inv,
+          totalStock: effectiveTotal,
+          allocatedStock: delivOutTotal,
+          remainingStock: consistentRem,
+          status: consistentRem > (inv.minStockAlert || 50) ? 'sufficient' : 'low',
+        };
+      }
+      return inv;
+    });
+
+    if (invModified) {
+      setInventory(nextInventory);
+      try {
+        localStorage.setItem('bangpao_ltc_inventory_v2', JSON.stringify(nextInventory));
+      } catch {}
+    }
+
+    if (logsModified) {
+      const finalLogs = allFinalLogs.slice(0, 500);
+      setStockLogs(finalLogs);
+      try {
+        localStorage.setItem('bangpao_ltc_stock_logs_v2', JSON.stringify(finalLogs));
+      } catch {}
+    }
+  }, [deliveryRecords, effectivePatients.length]);
 
   // Real-time Firestore listener for LTC Convoy & Delivery Records across devices (Lead Vehicle & Followers)
   useEffect(() => {
@@ -2107,42 +2381,50 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       onRecordVisit(matchedPatient);
     }
 
-    // Deduct stock and append transaction log for each delivered item
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const nowDay = dayNames[new Date().getDay()];
+    // Deduct stock and append transaction log for each delivered item (Auto-Reconcile also verifies & keeps balanceAfter exact)
+    const nowFormatted = formatThaiDateTime();
+    const nextLogsBatch: StockTransactionLog[] = [];
 
     setInventory((prev) =>
       prev.map((item) => {
-        const found = deliveredItems.find(
-          (it) =>
-            it.itemId === item.id ||
-            it.itemName.toLowerCase() === item.name.toLowerCase() ||
-            item.name.toLowerCase().includes(it.itemName.toLowerCase()) ||
-            it.itemName.toLowerCase().includes(item.name.toLowerCase())
+        const matchedItems = deliveredItems.filter((it) =>
+          matchInventoryItemKey(item, it)
         );
-        if (found && found.quantity > 0) {
+        const totalDeduct = matchedItems.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+        if (totalDeduct > 0) {
+          const nextRem = Math.max(0, item.remainingStock - totalDeduct);
+          nextLogsBatch.push({
+            id: `DELIV_LOG_${recordKey}_${item.id}`,
+            dateStr: nowFormatted,
+            itemName: item.name,
+            itemCode: item.code,
+            type: 'out',
+            quantity: -totalDeduct,
+            balanceAfter: nextRem,
+            recipientOrSource: `ส่งมอบให้ ${deliveryModalStop.patientName} (ปีงบ ${effYear} • รอบที่ ${effRound})`,
+            reason: `ผู้รับ: ${receiver} (${deliveryRelation})`,
+          });
           return {
             ...item,
-            allocatedStock: item.allocatedStock + found.quantity,
-            remainingStock: Math.max(0, item.remainingStock - found.quantity),
+            allocatedStock: item.allocatedStock + totalDeduct,
+            remainingStock: nextRem,
+            status: nextRem > (item.minStockAlert || 50) ? 'sufficient' : 'low',
           };
         }
         return item;
       })
     );
 
-    const newLogs: StockTransactionLog[] = deliveredItems.map((it, idx) => ({
-      id: `LOG-${Date.now()}-${idx}`,
-      dateStr: nowDay,
-      itemName: `${it.itemName} (${deliveryModalStop.patientName} ปี ${effYear} รอบ ${effRound})`,
-      type: 'out',
-      quantity: -it.quantity,
-    }));
-    setStockLogs((prev) => [...newLogs, ...prev.slice(0, 45)]);
+    if (nextLogsBatch.length > 0) {
+      setStockLogs((prev) => {
+        const filtered = prev.filter((l) => !nextLogsBatch.some((nl) => nl.id === l.id));
+        return [...nextLogsBatch, ...filtered.slice(0, 490)];
+      });
+    }
 
     const itemsSummary = deliveredItems.map((it) => `${it.itemName} ${it.quantity} ${it.unit}`).join(', ');
     setQueueToastMsg(
-      `✅ ส่งมอบให้ "${deliveryModalStop.patientName}" (ปี ${effYear} • รอบ ${effRound}) สำเร็จแล้ว (${itemsSummary}) และกรองออกจากคิวจัดส่งรอบนี้เรียบร้อย`
+      `✅ ส่งมอบให้ "${deliveryModalStop.patientName}" (ปี ${effYear} • รอบ ${effRound}) สำเร็จแล้ว (${itemsSummary}) และตัดสต็อกคลังพัสดุเรียบร้อย`
     );
     setTimeout(() => setQueueToastMsg(null), 5000);
 
@@ -2159,30 +2441,48 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     setDeliveryRecords((prev) => {
       const next = { ...prev };
       delete next[recordKey];
+      try {
+        saveToFirestore(
+          COLLECTIONS.LTC_QUEUES,
+          {
+            id: 'LTC_SHARED_DELIVERY_RECORDS',
+            recordsMap: next,
+            updatedAt: new Date().toISOString(),
+          },
+          'LTC_SHARED_DELIVERY_RECORDS'
+        );
+      } catch {}
       return next;
     });
 
-    // Revert inventory stock
+    // Revert inventory stock & remove auto-generated delivery logs for this recordKey
     if (prevRec && prevRec.itemsDelivered) {
       setInventory((prev) =>
         prev.map((item) => {
-          const found = prevRec.itemsDelivered?.find(
-            (it) =>
-              it.itemId === item.id ||
-              it.itemName.toLowerCase() === item.name.toLowerCase() ||
-              item.name.toLowerCase().includes(it.itemName.toLowerCase())
+          const matchedItems = (prevRec.itemsDelivered || []).filter((it) =>
+            matchInventoryItemKey(item, it)
           );
-          if (found && found.quantity > 0) {
+          const totalRestore = matchedItems.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+          if (totalRestore > 0) {
+            const nextRem = item.remainingStock + totalRestore;
             return {
               ...item,
-              allocatedStock: Math.max(0, item.allocatedStock - found.quantity),
-              remainingStock: item.remainingStock + found.quantity,
+              allocatedStock: Math.max(0, item.allocatedStock - totalRestore),
+              remainingStock: nextRem,
+              status: nextRem > (item.minStockAlert || 50) ? 'sufficient' : 'low',
             };
           }
           return item;
         })
       );
     }
+    setStockLogs((prev) =>
+      prev.filter(
+        (l) =>
+          !l.id.startsWith(`DELIV_LOG_${recordKey}_`) &&
+          !l.itemName.includes(`(${stop.patientName} ปี ${effYear} รอบ ${effRound})`)
+      )
+    );
 
     // Add back to queue
     const nextQueue = selectedStopIds.includes(stop.id) ? selectedStopIds : [...selectedStopIds, stop.id];

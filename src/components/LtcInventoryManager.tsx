@@ -112,6 +112,8 @@ export const LtcInventoryManager: React.FC<LtcInventoryManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'normal' | 'low'>('all');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'round2' | 'round1' | 'in'>('all');
+  const [historySearch, setHistorySearch] = useState<string>('');
 
   // Modals
   const [editingItem, setEditingItem] = useState<LtcInventoryItem | null>(null);
@@ -197,30 +199,33 @@ export const LtcInventoryManager: React.FC<LtcInventoryManagerProps> = ({
     });
   }, [inventory, searchQuery, selectedCategory, selectedStatusFilter]);
 
-  // LTC Demand Analysis (Supply vs Demand from 14 registered patients)
+  // LTC Demand Analysis (Supply vs Demand from registered patients)
   const demandAnalysis = useMemo(() => {
     const demandPerRound: Record<string, { name: string; needed: number; unit: string; patientCount: number }> = {
       'ผ้าอ้อมผู้ใหญ่ (M)': { name: 'ผ้าอ้อมผู้ใหญ่ (M)', needed: 0, unit: 'ชิ้น', patientCount: 0 },
       'ผ้าอ้อมผู้ใหญ่ (L)': { name: 'ผ้าอ้อมผู้ใหญ่ (L)', needed: 0, unit: 'ชิ้น', patientCount: 0 },
       'ผ้าอ้อมผู้ใหญ่ (XL)': { name: 'ผ้าอ้อมผู้ใหญ่ (XL)', needed: 0, unit: 'ชิ้น', patientCount: 0 },
       'ผ้าอ้อมผู้ใหญ่ (XXL)': { name: 'ผ้าอ้อมผู้ใหญ่ (XXL)', needed: 0, unit: 'ชิ้น', patientCount: 0 },
+      'ผ้าอ้อมสำหรับเด็ก ขนาด XXL': { name: 'ผ้าอ้อมสำหรับเด็ก ขนาด XXL', needed: 0, unit: 'ชิ้น', patientCount: 0 },
       'นมผงสุขภาพ': { name: 'นมผงสุขภาพ', needed: 0, unit: 'กระป๋อง', patientCount: 0 },
       'แผ่นรองซับสิ่งขับถ่าย (Underpads)': { name: 'แผ่นรองซับสิ่งขับถ่าย (Underpads)', needed: 0, unit: 'แผ่น', patientCount: 0 },
     };
 
     patients.forEach((p) => {
       const items: LtcRoundItem[] =
+        p.yearRoundItems?.['2569']?.['2'] ||
         p.yearRoundItems?.['2569']?.['1'] ||
-        p.roundItems?.['1'] ||
         p.roundItems?.['2'] ||
+        p.roundItems?.['1'] ||
         [];
 
       items.forEach((it) => {
         let key = it.itemName;
-        if (key.includes('(M)')) key = 'ผ้าอ้อมผู้ใหญ่ (M)';
-        else if (key.includes('(L)')) key = 'ผ้าอ้อมผู้ใหญ่ (L)';
-        else if (key.includes('(XL)')) key = 'ผ้าอ้อมผู้ใหญ่ (XL)';
-        else if (key.includes('(XXL)') || key.includes('(2XL)')) key = 'ผ้าอ้อมผู้ใหญ่ (XXL)';
+        if (key.includes('เด็ก')) key = 'ผ้าอ้อมสำหรับเด็ก ขนาด XXL';
+        else if (key.includes('(XXL)') || key.includes('(2XL)') || key.includes('XXL')) key = 'ผ้าอ้อมผู้ใหญ่ (XXL)';
+        else if (key.includes('(XL)') || key.includes('XL')) key = 'ผ้าอ้อมผู้ใหญ่ (XL)';
+        else if (key.includes('(M)') || /\bM\b/.test(key)) key = 'ผ้าอ้อมผู้ใหญ่ (M)';
+        else if (key.includes('(L)') || /\bL\b/.test(key)) key = 'ผ้าอ้อมผู้ใหญ่ (L)';
         else if (key.includes('นมผง')) key = 'นมผงสุขภาพ';
         else if (key.includes('แผ่นรองซับ')) key = 'แผ่นรองซับสิ่งขับถ่าย (Underpads)';
 
@@ -572,7 +577,7 @@ export const LtcInventoryManager: React.FC<LtcInventoryManagerProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              จัดการรายการพัสดุ ปรับสต็อก รับเข้า-เบิกจ่าย และวิเคราะห์ความพอเพียงผ้าอ้อม/นมสำหรับผู้มีภาวะพึ่งพิง 14 ราย
+              จัดการรายการพัสดุ ปรับสต็อก รับเข้า-เบิกจ่าย และวิเคราะห์ความพอเพียงผ้าอ้อม/นมสำหรับผู้มีภาวะพึ่งพิง {patients.length} ราย
             </p>
           </div>
         </div>
@@ -707,7 +712,7 @@ export const LtcInventoryManager: React.FC<LtcInventoryManagerProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          <span>วิเคราะห์ความพอเพียงเทียบผู้ป่วย LTC (14 ราย)</span>
+          <span>วิเคราะห์ความพอเพียงเทียบผู้ป่วย LTC ({patients.length} ราย)</span>
         </button>
 
         <button
@@ -1083,7 +1088,7 @@ export const LtcInventoryManager: React.FC<LtcInventoryManagerProps> = ({
             </div>
             <div>
               <h4 className="text-base font-extrabold text-slate-900">
-                วิเคราะห์ความพอเพียงของสต็อกเทียบกับแผนแจกจ่ายจริง (ผู้ป่วย LTC 14 ราย)
+                วิเคราะห์ความพอเพียงของสต็อกเทียบกับแผนแจกจ่ายจริง (ผู้ป่วย LTC {patients.length} ราย)
               </h4>
               <p className="text-xs text-slate-500">
                 ระบบคำนวณอัตโนมัติจากความต้องการผ้าอ้อมและนมตามแผนการดูแลรายบุคคล (Care Plan) เพื่อให้วางแผนจัดซื้อจัดจ้างได้ทันท่วงที
@@ -1179,81 +1184,172 @@ export const LtcInventoryManager: React.FC<LtcInventoryManagerProps> = ({
       )}
 
       {/* ===================== VIEW 3: FULL TRANSACTION HISTORY ===================== */}
-      {activeView === 'history' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2.5">
-              <RotateCcw className="w-5 h-5 text-emerald-600" />
-              <div>
-                <h4 className="text-base font-extrabold text-slate-900">
-                  ประวัติการเคลื่อนไหวคลังทั้งหมด (Stock Transaction Logs)
-                </h4>
-                <p className="text-xs text-slate-500">
-                  บันทึกการรับเข้า จ่ายออก และปรับยอดสต็อกทุกรายการแบบเรียลไทม์
-                </p>
+      {activeView === 'history' && (() => {
+        const filteredLogs = stockLogs.filter((l) => {
+          const text = `${l.itemName} ${l.recipientOrSource || ''} ${l.reason || ''} ${l.id}`.toLowerCase();
+          if (historyFilter === 'round2') {
+            if (!(text.includes('รอบที่ 2') || text.includes('รอบ 2') || l.id.includes('_2569_2_'))) return false;
+          } else if (historyFilter === 'round1') {
+            if (!(text.includes('รอบที่ 1') || text.includes('รอบ 1') || l.id.includes('_2569_1_'))) return false;
+          } else if (historyFilter === 'in') {
+            if (l.type !== 'in') return false;
+          }
+          if (historySearch.trim()) {
+            if (!text.includes(historySearch.trim().toLowerCase())) return false;
+          }
+          return true;
+        });
+
+        // Summarize dispensed quantities by itemName in the current filtered view
+        const outSummaryMap: Record<string, number> = {};
+        filteredLogs.forEach((l) => {
+          if (l.type === 'out') {
+            outSummaryMap[l.itemName] = (outSummaryMap[l.itemName] || 0) + Math.abs(Number(l.quantity) || 0);
+          }
+        });
+        const outSummaryEntries = Object.entries(outSummaryMap);
+
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2.5">
+                <RotateCcw className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h4 className="text-base font-extrabold text-slate-900">
+                    ประวัติการเคลื่อนไหวคลังทั้งหมด (Stock Transaction Logs)
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    บันทึกการรับเข้า จ่ายออกตามรอบส่งมอบจริง และปรับยอดสต็อกทุกรายการแบบเรียลไทม์ ({filteredLogs.length} รายการ)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    placeholder="ค้นหาชื่อผู้รับ / พัสดุ..."
+                    className="pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  ส่งออกประวัติ
+                </button>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5"
-            >
-              <Download className="w-3.5 h-3.5" />
-              ส่งออกประวัติ
-            </button>
-          </div>
+            {/* Filter Pills by Round / Type */}
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              {[
+                { id: 'all', label: `ทั้งหมด (${stockLogs.length})` },
+                { id: 'round2', label: '📦 จ่ายออก งวดรอบที่ 2/2569' },
+                { id: 'round1', label: '📦 จ่ายออก งวดรอบที่ 1/2569' },
+                { id: 'in', label: '📥 เฉพาะรับเข้าคลัง (+)' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setHistoryFilter(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    historyFilter === tab.id
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm">
-              <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-3">วัน / เวลา</th>
-                  <th className="py-3 px-3">รายการพัสดุ</th>
-                  <th className="py-3 px-3 text-center">ประเภท</th>
-                  <th className="py-3 px-3 text-right">จำนวน</th>
-                  <th className="py-3 px-3 text-right">ยอดคงเหลือหลังทำรายการ</th>
-                  <th className="py-3 px-3">ผู้รับ / แหล่งที่มา / เหตุผล</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {stockLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50/80">
-                    <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap">
-                      {log.dateStr}
-                    </td>
-                    <td className="py-3 px-3 font-bold text-slate-800">
-                      {log.itemName}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white ${
-                          log.type === 'in' ? 'bg-emerald-600' : 'bg-rose-600'
+            {/* Summary of Dispensed Supplies for Active Filter */}
+            {outSummaryEntries.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-200/80 space-y-2">
+                <div className="text-xs font-extrabold text-rose-900 flex items-center justify-between">
+                  <span>📊 สรุปยอดจ่ายออกตามรายการพัสดุ (จากรายการที่แสดงด้านล่าง):</span>
+                  <span className="text-[11px] text-rose-700 font-semibold">
+                    หักสต็อกจากคลังพัสดุแล้ว 100%
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {outSummaryEntries.map(([itemName, totalQty]) => (
+                    <span
+                      key={itemName}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-rose-200 text-xs font-bold text-slate-800 shadow-2xs"
+                    >
+                      <span>{itemName}:</span>
+                      <strong className="text-rose-700 font-black">-{totalQty.toLocaleString()}</strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-3">วัน / เวลา</th>
+                    <th className="py-3 px-3">รายการพัสดุ</th>
+                    <th className="py-3 px-3 text-center">ประเภท</th>
+                    <th className="py-3 px-3 text-right">จำนวน</th>
+                    <th className="py-3 px-3 text-right">ยอดคงเหลือหลังทำรายการ</th>
+                    <th className="py-3 px-3">ผู้รับ / แหล่งที่มา / เหตุผล</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50/80">
+                      <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap">
+                        {log.dateStr}
+                      </td>
+                      <td className="py-3 px-3 font-bold text-slate-800">
+                        {log.itemName}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white ${
+                            log.type === 'in' ? 'bg-emerald-600' : 'bg-rose-600'
+                          }`}
+                        >
+                          {log.type === 'in' ? 'รับเข้า' : 'จ่ายออก'}
+                        </span>
+                      </td>
+                      <td
+                        className={`py-3 px-3 text-right font-extrabold ${
+                          log.type === 'in' ? 'text-emerald-700' : 'text-rose-700'
                         }`}
                       >
-                        {log.type === 'in' ? 'รับเข้า' : 'จ่ายออก'}
-                      </span>
-                    </td>
-                    <td
-                      className={`py-3 px-3 text-right font-extrabold ${
-                        log.type === 'in' ? 'text-emerald-700' : 'text-rose-700'
-                      }`}
-                    >
-                      {log.type === 'in' && log.quantity > 0 ? `+${log.quantity}` : log.quantity}
-                    </td>
-                    <td className="py-3 px-3 text-right font-bold text-slate-700">
-                      {log.balanceAfter !== undefined ? log.balanceAfter.toLocaleString() : '-'}
-                    </td>
-                    <td className="py-3 px-3 text-slate-600 text-xs">
-                      {log.recipientOrSource || log.reason || '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        {log.type === 'in' && log.quantity > 0 ? `+${log.quantity}` : log.quantity}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold text-slate-700">
+                        {log.balanceAfter !== undefined ? log.balanceAfter.toLocaleString() : '-'}
+                      </td>
+                      <td className="py-3 px-3 text-slate-600 text-xs">
+                        {log.recipientOrSource ? (
+                          <div>
+                            <div className="font-semibold text-slate-800">{log.recipientOrSource}</div>
+                            {log.reason && <div className="text-[11px] text-slate-500">{log.reason}</div>}
+                          </div>
+                        ) : (
+                          log.reason || '-'
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ===================== MODAL 1: EDIT ITEM MODAL ===================== */}
       {editingItem && (
