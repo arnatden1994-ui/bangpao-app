@@ -1177,6 +1177,57 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
     showToast(`✅ บันทึกแผนการจัดรอบ "${planTitle}" เรียบร้อยแล้ว`);
   };
 
+  // Helper to validate whether a step can be navigated to (Enforces strict linear workflow progression & prevents skipping)
+  const canGoToStep = (targetStep: 1 | 2 | 3 | 4 | 5): { allowed: boolean; reason?: string } => {
+    // Can always navigate back to previous completed steps
+    if (targetStep <= activeStep) {
+      return { allowed: true };
+    }
+
+    // Step 2 requires valid year & round (always set by default)
+
+    // Going to Step 3, 4, or 5 requires valid delivery date in Step 2
+    if (targetStep >= 3) {
+      if (!deliveryDate || deliveryDate.trim() === '') {
+        return { allowed: false, reason: 'กรุณากำหนดวันที่แจกพัสดุในขั้นตอนที่ 2 ก่อน' };
+      }
+    }
+
+    // Going to Step 4 or 5 strictly requires at least 1 patient stop in plannedStops!
+    if (targetStep >= 4) {
+      if (plannedStops.length === 0) {
+        return {
+          allowed: false,
+          reason: 'กรุณาเลือกรายชื่อผู้มีภาวะพึ่งพิงอย่างน้อย 1 รายในขั้นตอนที่ 3 ก่อนจัดลำดับคิวและยืนยันแผน',
+        };
+      }
+    }
+
+    return { allowed: true };
+  };
+
+  const handleStepClick = (targetStep: 1 | 2 | 3 | 4 | 5) => {
+    const check = canGoToStep(targetStep);
+    if (!check.allowed) {
+      showToast(`⚠️ ${check.reason}`);
+      return;
+    }
+    setActiveStep(targetStep);
+  };
+
+  // Save Plan and Finish/Close Modal in Step 5 (as requested by user)
+  const handleSaveAndClose = () => {
+    if (plannedStops.length === 0) {
+      alert('⚠️ ไม่สามารถบันทึกแผนได้ เนื่องจากยังไม่มีรายชื่อผู้รับพัสดุในคิว กรุณาเลือกรายชื่ออย่างน้อย 1 รายในขั้นตอนที่ 3');
+      setActiveStep(3);
+      return;
+    }
+    handleSaveCurrentPlan();
+    setTimeout(() => {
+      onClose();
+    }, 350);
+  };
+
   // Clone to round 2 (or any target round)
   const handleExecuteClone = () => {
     if (!cloneDeliveryDate) {
@@ -1553,21 +1604,23 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
           </div>
         )}
 
-        {/* 5 Guided Step Navigation Tabs */}
+        {/* 5 Guided Step Navigation Tabs (Strict Linear Workflow: Prevents Skipping Ahead) */}
         <div className="bg-slate-100/90 border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-1 overflow-x-auto text-xs shrink-0">
           <div className="flex items-center gap-1 min-w-max">
             {/* Step 1 */}
             <button
               type="button"
-              onClick={() => setActiveStep(1)}
+              onClick={() => handleStepClick(1)}
               className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
                 activeStep === 1
                   ? 'bg-teal-700 text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-200/70'
               }`}
             >
-              <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
-                1
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                activeStep > 1 ? 'bg-emerald-600 text-white' : 'bg-white/20'
+              }`}>
+                {activeStep > 1 ? '✓' : '1'}
               </span>
               <span>เลือก ปี พ.ศ. & รอบ</span>
             </button>
@@ -1577,15 +1630,19 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             {/* Step 2 */}
             <button
               type="button"
-              onClick={() => setActiveStep(2)}
-              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+              onClick={() => handleStepClick(2)}
+              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all ${
                 activeStep === 2
-                  ? 'bg-teal-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70'
+                  ? 'bg-teal-700 text-white shadow-xs cursor-pointer'
+                  : activeStep > 2
+                  ? 'text-slate-700 hover:bg-slate-200/70 cursor-pointer'
+                  : 'text-slate-500 hover:bg-slate-200/50 cursor-pointer'
               }`}
             >
-              <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
-                2
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                activeStep > 2 ? 'bg-emerald-600 text-white' : activeStep === 2 ? 'bg-white/20' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {activeStep > 2 ? '✓' : '2'}
               </span>
               <span>กำหนดวันแจก & ทีมงาน</span>
             </button>
@@ -1595,15 +1652,23 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             {/* Step 3 */}
             <button
               type="button"
-              onClick={() => setActiveStep(3)}
-              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+              onClick={() => handleStepClick(3)}
+              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all ${
                 activeStep === 3
-                  ? 'bg-teal-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70'
+                  ? 'bg-teal-700 text-white shadow-xs cursor-pointer'
+                  : activeStep > 3
+                  ? 'text-slate-700 hover:bg-slate-200/70 cursor-pointer'
+                  : 'text-slate-500 hover:bg-slate-200/50 cursor-pointer'
               }`}
             >
-              <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
-                3
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                plannedStops.length > 0 && activeStep > 3
+                  ? 'bg-emerald-600 text-white'
+                  : activeStep === 3
+                  ? 'bg-white/20'
+                  : 'bg-slate-200 text-slate-600'
+              }`}>
+                {plannedStops.length > 0 && activeStep > 3 ? '✓' : '3'}
               </span>
               <span>เลือกรายชื่อ & ดึงข้อมูล ({plannedStops.length})</span>
             </button>
@@ -1613,15 +1678,22 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             {/* Step 4 */}
             <button
               type="button"
-              onClick={() => setActiveStep(4)}
-              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+              onClick={() => handleStepClick(4)}
+              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all ${
                 activeStep === 4
-                  ? 'bg-teal-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70'
+                  ? 'bg-teal-700 text-white shadow-xs cursor-pointer'
+                  : activeStep > 4
+                  ? 'text-slate-700 hover:bg-slate-200/70 cursor-pointer'
+                  : plannedStops.length === 0
+                  ? 'text-slate-300 opacity-60 cursor-not-allowed'
+                  : 'text-slate-500 hover:bg-slate-200/50 cursor-pointer'
               }`}
+              title={plannedStops.length === 0 ? 'กรุณาเลือกรายชื่อผู้รับของในขั้นตอนที่ 3 ก่อน' : undefined}
             >
-              <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
-                4
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                activeStep > 4 ? 'bg-emerald-600 text-white' : activeStep === 4 ? 'bg-white/20' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {activeStep > 4 ? '✓' : '4'}
               </span>
               <span>จัดลำดับคิว & แผนเดินทาง</span>
             </button>
@@ -1631,30 +1703,38 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
             {/* Step 5 */}
             <button
               type="button"
-              onClick={() => setActiveStep(5)}
-              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+              onClick={() => handleStepClick(5)}
+              className={`px-3 py-1.5 rounded-xl font-extrabold flex items-center gap-1.5 transition-all ${
                 activeStep === 5
-                  ? 'bg-teal-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70'
+                  ? 'bg-teal-700 text-white shadow-xs cursor-pointer'
+                  : plannedStops.length === 0
+                  ? 'text-slate-300 opacity-60 cursor-not-allowed'
+                  : 'text-slate-500 hover:bg-slate-200/50 cursor-pointer'
               }`}
+              title={plannedStops.length === 0 ? 'กรุณาเลือกรายชื่อผู้รับของในขั้นตอนที่ 3 ก่อน' : undefined}
             >
-              <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                activeStep === 5 ? 'bg-white/20' : 'bg-slate-200 text-slate-600'
+              }`}>
                 5
               </span>
               <span>สรุปยอด & ยืนยันแผน</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSaveCurrentPlan}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs flex items-center gap-1 shadow-xs cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>บันทึกแผน</span>
-            </button>
-          </div>
+          {/* Top-Right Save Button: ONLY visible on Step 5 (as requested by user) */}
+          {activeStep === 5 && (
+            <div className="flex items-center gap-2 animate-in fade-in">
+              <button
+                type="button"
+                onClick={handleSaveCurrentPlan}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>บันทึกแผนจัดรอบนี้</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Main Body Content based on Active Step */}
@@ -1897,18 +1977,6 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-teal-500 outline-none"
                 />
               </div>
-
-              {/* Bottom Nav */}
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(2)}
-                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <span>ถัดไป: กำหนดวันแจก & ทีมงาน</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
 
@@ -2018,25 +2086,6 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   />
                 </div>
               </div>
-
-              {/* Bottom Nav */}
-              <div className="flex justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(1)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs sm:text-sm cursor-pointer"
-                >
-                  ย้อนกลับ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(3)}
-                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <span>ถัดไป: เลือกรายชื่อผู้รับของ</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
 
@@ -2059,6 +2108,33 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Prominent Warning/Guide if queue is empty */}
+              {plannedStops.length === 0 && (
+                <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-200/80 text-amber-900 flex items-center justify-center shrink-0 font-black">
+                      <AlertCircle className="w-5 h-5 text-amber-700" />
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-xs sm:text-sm text-amber-900">
+                        ยังไม่มีรายชื่อผู้มีภาวะพึ่งพิงในคิวจัดรอบนี้ (0 ราย)
+                      </div>
+                      <div className="text-[11px] text-amber-800 mt-0.5">
+                        ระบบกำหนดให้ต้องเลือกรายชื่ออย่างน้อย 1 ราย จึงจะสามารถไปขั้นตอนที่ 4 (จัดลำดับคิว & แผนเดินทาง) ได้
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAllFiltered(baseFilteredPatients)}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 cursor-pointer shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ ดึงรายชื่อทั้งหมดเข้าคิว ({baseFilteredPatients.length} ราย)</span>
+                  </button>
+                </div>
+              )}
 
               {/* Village Queue Chips Bar */}
               {plannedStops.length > 0 && (
@@ -2448,26 +2524,6 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   </table>
                 </div>
               </div>
-
-              {/* Bottom Nav */}
-              <div className="flex justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(2)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs sm:text-sm cursor-pointer"
-                >
-                  ย้อนกลับ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(4)}
-                  disabled={plannedStops.length === 0}
-                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:opacity-40 text-white rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <span>ถัดไป: จัดลำดับคิว & แผนเดินทาง</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
 
@@ -2717,25 +2773,6 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Bottom Nav */}
-              <div className="flex justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(3)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs sm:text-sm cursor-pointer"
-                >
-                  ย้อนกลับ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(5)}
-                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <span>ถัดไป: สรุปยอดเบิก & ยืนยันบันทึก</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
 
@@ -2865,26 +2902,101 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
 
-              {/* Bottom Nav */}
-              <div className="flex justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(4)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs sm:text-sm cursor-pointer"
-                >
-                  ย้อนกลับ
-                </button>
+        {/* Sticky Bottom Action Bar (Fixed at bottom of modal, always visible on all devices) */}
+        <div className="bg-slate-50 border-t border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 shrink-0 shadow-xs">
+          {/* Left: Back button or Close */}
+          <div>
+            {activeStep > 1 ? (
+              <button
+                type="button"
+                onClick={() => handleStepClick((activeStep - 1) as any)}
+                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all active:scale-95"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>ย้อนกลับ</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl font-semibold text-xs sm:text-sm cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            )}
+          </div>
+
+          {/* Center: Step indicators and summary */}
+          <div className="hidden md:flex items-center gap-2 text-xs font-bold text-slate-500">
+            <span className="px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 font-extrabold">
+              ขั้นตอนที่ {activeStep} / 5
+            </span>
+            <span>•</span>
+            {activeStep === 1 && <span>ปีงบ {planYear} • งวดรอบที่ {planRound}</span>}
+            {activeStep === 2 && <span>กำหนดส่ง: {deliveryDate || 'ยังไม่ระบุ'} • รถ: {vehiclePlate || '-'}</span>}
+            {activeStep === 3 && (
+              <span className={plannedStops.length > 0 ? 'text-teal-800 font-extrabold' : 'text-amber-700 font-extrabold'}>
+                เลือกแล้ว {plannedStops.length} จาก {safePatients.length} ราย
+              </span>
+            )}
+            {activeStep === 4 && (
+              <span className="text-teal-800 font-extrabold">
+                จัดคิวครบ {plannedStops.length} บ้าน • รวมระยะทาง ~{routeMetrics.distanceKm} กม.
+              </span>
+            )}
+            {activeStep === 5 && (
+              <span className="text-emerald-700 font-extrabold">
+                พร้อมตรวจสอบและยืนยันบันทึกแผนส่งมอบ
+              </span>
+            )}
+          </div>
+
+          {/* Right: Next Step or Save & Finish */}
+          <div className="flex items-center gap-2">
+            {activeStep < 5 ? (
+              <button
+                type="button"
+                onClick={() => handleStepClick((activeStep + 1) as any)}
+                disabled={activeStep === 3 && plannedStops.length === 0}
+                className={`px-5 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95 ${
+                  activeStep === 3 && plannedStops.length === 0
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                    : 'bg-teal-700 hover:bg-teal-800 text-white shadow-sm'
+                }`}
+              >
+                <span>
+                  {activeStep === 1 && 'ถัดไป: กำหนดวันแจก & ทีมงาน'}
+                  {activeStep === 2 && 'ถัดไป: เลือกรายชื่อผู้รับของ'}
+                  {activeStep === 3 && `ถัดไป: จัดลำดับคิว & แผนเดินทาง (${plannedStops.length} ราย)`}
+                  {activeStep === 4 && 'ถัดไป: สรุปยอดเบิก & ยืนยันบันทึก'}
+                </span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              /* Step 5: Dual Actions (Save & Finish vs Close without saving) */
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-extrabold text-xs sm:text-sm cursor-pointer"
+                  className="px-3.5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-xs sm:text-sm cursor-pointer"
                 >
-                  เสร็จสิ้น / ปิดหน้าต่าง
+                  ปิดหน้าต่าง
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndClose}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95 ring-2 ring-emerald-300"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>💾 บันทึกแผนและเสร็จสิ้น</span>
                 </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
