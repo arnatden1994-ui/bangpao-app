@@ -979,7 +979,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
         projectType: projectSourceType,
         items: extractPatientRoundItems(p, planRound, planYear),
-        scheduledTime: `0${9 + Math.floor(plannedStops.length / 2)}:${(plannedStops.length % 2) * 30 || '00'} น.`,
+        scheduledTime: `${String(9 + Math.floor(plannedStops.length / 2)).padStart(2, '0')}:${String((plannedStops.length % 2) * 30 || 0).padStart(2, '0')} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
       };
@@ -1018,7 +1018,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
         projectType: projectSourceType,
         items: extractPatientRoundItems(p, planRound, planYear, projectSourceType),
-        scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
+        scheduledTime: `${String(9 + Math.floor((plannedStops.length + idx) / 2)).padStart(2, '0')}:${String(((plannedStops.length + idx) % 2) * 30 || 0).padStart(2, '0')} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
       };
@@ -1064,7 +1064,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
         projectType: projectSourceType,
         items: extractPatientRoundItems(p, planRound, planYear, projectSourceType),
-        scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
+        scheduledTime: `${String(9 + Math.floor((plannedStops.length + idx) / 2)).padStart(2, '0')}:${String(((plannedStops.length + idx) % 2) * 30 || 0).padStart(2, '0')} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
       };
@@ -1115,7 +1115,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         adlCategory: p.adlCategory || (p.adlScore <= 4 ? 'ติดเตียง' : 'ติดบ้าน'),
         projectType: projectSourceType,
         items: extractPatientRoundItems(p, planRound, planYear, projectSourceType),
-        scheduledTime: `0${9 + Math.floor((plannedStops.length + idx) / 2)}:${((plannedStops.length + idx) % 2) * 30 || '00'} น.`,
+        scheduledTime: `${String(9 + Math.floor((plannedStops.length + idx) / 2)).padStart(2, '0')}:${String(((plannedStops.length + idx) % 2) * 30 || 0).padStart(2, '0')} น.`,
         deliveryStatus: 'pending',
         notes: p.diagnosis || '',
       };
@@ -1277,53 +1277,112 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
 
   // Print official A4 Delivery Manifest Sheet
   const handlePrintDeliverySheet = () => {
-    const printWindow = window.open('', '_blank', 'width=900,height=1100');
+    const printWindow = window.open('', '_blank', 'width=950,height=1100');
     if (!printWindow) {
       alert('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาต Pop-up');
       return;
     }
 
-    const rowsHtml = plannedStops
-      .map(
-        (stop, idx) => `
-        <tr style="border-bottom: 1px solid #cbd5e1;">
-          <td style="padding: 8px 6px; text-align: center; font-weight: bold; width: 35px;">#${
-            idx + 1
-          }</td>
-          <td style="padding: 8px 6px; width: 65px; text-align: center; font-family: monospace;">${
-            stop.scheduledTime || '-'
-          }</td>
-          <td style="padding: 8px 6px;">
-            <div style="font-weight: bold; color: #0f172a;">${stop.fullName} (${stop.age} ปี)</div>
-            <div style="font-size: 11px; color: #64748b;">หมู่ที่ ${stop.moo} ${
-          BANGPAO_VILLAGES[stop.moo] || ''
-        } • ${stop.adlCategory}</div>
-            <div style="font-size: 11px; color: #475569;">📞 ${stop.phone} (ผู้ดูแล: ${
-          stop.caregiverName
-        })</div>
-          </td>
-          <td style="padding: 8px 6px; font-size: 11px; max-width: 160px;">
-            ${stop.address}
-          </td>
-          <td style="padding: 8px 6px; width: 220px;">
-            ${stop.items
-              .map(
-                (it) => `
-              <div style="font-size: 11px; line-height: 1.4;">
-                <span style="font-weight: 700; color: #065f46;">• ${it.itemName}:</span> 
-                <strong>${it.quantity}</strong> ${it.unit}
+    // 1. เรียงข้อมูลตามรายชื่อคิวตามลำดับที่มีการจัดไว้ (queueOrder) อย่างถูกต้อง 100%
+    const sortedStops = [...plannedStops].sort((a, b) => {
+      const qA = a.queueOrder ?? 999999;
+      const qB = b.queueOrder ?? 999999;
+      return qA - qB;
+    });
+
+    const formatCleanTime = (timeStr?: string, idx: number = 0) => {
+      if (!timeStr || timeStr === '-') {
+        const hour = 9 + Math.floor(idx / 2);
+        const minute = (idx % 2) * 30;
+        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} น.`;
+      }
+      let clean = timeStr.trim();
+      // แก้ไขปัญหา 010:00 -> 10:00
+      clean = clean.replace(/^0([1-2][0-9]:)/, '$1');
+      return clean;
+    };
+
+    const rowsHtml = sortedStops
+      .map((stop, idx) => {
+        const matched = safePatients.find((p) => matchPlanStopWithPatient(stop, p));
+        const queueNum = stop.queueOrder || idx + 1;
+        const timeDisplay = formatCleanTime(stop.scheduledTime, idx);
+        const landmark = (stop.landmark || matched?.landmark || '').trim();
+        const address = (stop.address || matched?.address || stop.shortAddress || '-').trim();
+        const phone = stop.phone || matched?.phone || '-';
+        const caregiver = stop.caregiverName || matched?.caregiverName || 'ญาติผู้ดูแล';
+        const caregiverPhone = stop.caregiverPhone || matched?.caregiverPhone || '';
+
+        // สิ่งของที่จะได้รับ
+        let items = stop.items || [];
+        if (items.length === 0 && matched) {
+          items = extractPatientRoundItems(matched, planRound, planYear, projectSourceType);
+        }
+
+        let itemsHtml = '';
+        if (items.length > 0) {
+          itemsHtml = items
+            .map(
+              (it) => `
+              <div style="font-size: 11px; line-height: 1.45; margin-bottom: 2.5px;">
+                <span style="font-weight: 700; color: #047857;">• ${it.itemName}:</span> 
+                <strong style="color: #0f172a; font-size: 11.5px; background: #ecfdf5; padding: 1px 5px; border-radius: 3px; border: 1px solid #a7f3d0;">${it.quantity.toLocaleString()}</strong> ${it.unit || 'ชิ้น'}
               </div>
             `
-              )
-              .join('')}
+            )
+            .join('');
+        } else {
+          const fallbackText = stop.notes || matched?.allocationText || matched?.equipmentNeeded || 'พัสดุตามแผนการจัดสรร';
+          itemsHtml = `
+            <div style="font-size: 11px; color: #047857; font-weight: 600; line-height: 1.4;">
+              • ${fallbackText}
+            </div>
+          `;
+        }
+
+        const landmarkHtml = landmark
+          ? `
+            <div style="margin-top: 4px; padding: 3px 6px; background-color: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px; color: #92400e; font-size: 10.5px; font-weight: 700; line-height: 1.35;">
+              📍 <strong>จุดอ้างอิง:</strong> ${landmark}
+            </div>
+          `
+          : `
+            <div style="margin-top: 2px; font-size: 10px; color: #94a3b8; font-style: italic;">
+              (ไม่มีจุดอ้างอิงเพิ่มเติม)
+            </div>
+          `;
+
+        return `
+        <tr style="border-bottom: 1px solid #cbd5e1; page-break-inside: avoid;">
+          <td style="padding: 7px 5px; text-align: center; font-weight: 800; font-size: 13px; color: #0f766e; width: 38px; vertical-align: top;">
+            #${queueNum}
           </td>
-          <td style="padding: 8px 6px; width: 110px; text-align: center;">
+          <td style="padding: 7px 5px; width: 68px; text-align: center; font-family: monospace; font-size: 11px; font-weight: 600; color: #334155; vertical-align: top;">
+            ${timeDisplay}
+          </td>
+          <td style="padding: 7px 6px; vertical-align: top;">
+            <div style="font-weight: 800; font-size: 12.5px; color: #0f172a;">${stop.fullName} ${stop.age ? `(${stop.age} ปี)` : ''}</div>
+            <div style="font-size: 11px; color: #475569; margin-top: 1px;">
+              หมู่ที่ ${stop.moo} ${BANGPAO_VILLAGES[stop.moo] || ''} • <span style="font-weight: 600; color: #0f766e;">${stop.adlCategory || 'ผู้มีภาวะพึ่งพิง'}</span>
+            </div>
+            <div style="font-size: 10.5px; color: #0369a1; margin-top: 1px;">
+              📞 ${phone} (ผู้ดูแล: ${caregiver}${caregiverPhone && caregiverPhone !== phone ? ` โทร. ${caregiverPhone}` : ''})
+            </div>
+          </td>
+          <td style="padding: 7px 6px; font-size: 11px; vertical-align: top; max-width: 210px;">
+            <div style="color: #1e293b; font-weight: 500;">${address}</div>
+            ${landmarkHtml}
+          </td>
+          <td style="padding: 7px 6px; width: 225px; vertical-align: top;">
+            ${itemsHtml}
+          </td>
+          <td style="padding: 7px 5px; width: 105px; text-align: center; vertical-align: middle;">
             <div style="border-bottom: 1px dotted #94a3b8; height: 26px; margin-bottom: 2px;"></div>
             <span style="font-size: 10px; color: #64748b;">(ผู้รับมอบ/CG)</span>
           </td>
         </tr>
-      `
-      )
+      `;
+      })
       .join('');
 
     const htmlContent = `
@@ -1334,21 +1393,31 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         <meta charset="utf-8" />
         <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
-          @page { size: A4 portrait; margin: 12mm 15mm; }
-          body { font-family: 'Prompt', sans-serif; font-size: 12px; color: #1e293b; margin: 0; padding: 0; }
-          .header { text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 10px; margin-bottom: 12px; }
+          @page { size: A4 portrait; margin: 10mm 12mm; }
+          body { font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #1e293b; margin: 0; padding: 0; }
+          .header { text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 8px; margin-bottom: 10px; }
           .title { font-size: 16px; font-weight: 800; color: #0f766e; }
-          .subtitle { font-size: 12px; color: #475569; margin-top: 3px; }
-          .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 11px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          .subtitle { font-size: 11.5px; color: #475569; margin-top: 2px; }
+          .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 11px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
           th { background: #f1f5f9; color: #334155; font-size: 11px; font-weight: 700; text-align: left; padding: 8px 6px; border-bottom: 2px solid #cbd5e1; }
-          .summary-card { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 11px; }
-          .sign-area { display: flex; justify-content: space-between; margin-top: 24px; padding: 0 20px; page-break-inside: avoid; }
+          tr { page-break-inside: avoid; }
+          .summary-card { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 8px 12px; border-radius: 6px; margin-bottom: 14px; font-size: 11px; page-break-inside: avoid; }
+          .sign-area { display: flex; justify-content: space-between; margin-top: 20px; padding: 0 20px; page-break-inside: avoid; }
           .sign-col { text-align: center; width: 220px; font-size: 11px; }
           .sign-line { border-bottom: 1px dotted #475569; margin-bottom: 6px; height: 35px; }
+          @media print {
+            .no-print { display: none !important; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
         </style>
       </head>
       <body>
+        <div class="no-print" style="margin-bottom: 10px; display: flex; justify-content: flex-end; gap: 8px; padding: 6px 0;">
+          <button onclick="window.print()" style="padding: 6px 16px; background: #0f766e; color: #fff; border: none; border-radius: 6px; font-weight: bold; font-size: 12px; cursor: pointer; font-family: 'Prompt', sans-serif;">🖨️ สั่งพิมพ์เอกสาร A4</button>
+          <button onclick="window.close()" style="padding: 6px 14px; background: #e2e8f0; color: #334155; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; font-family: 'Prompt', sans-serif;">ปิดหน้าต่าง</button>
+        </div>
+
         <div class="header">
           <div class="title">เทศบาลตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง</div>
           <div style="font-weight: 700; font-size: 14px; margin-top: 2px;">ใบสรุปแผนการจัดรอบและใบส่งมอบพัสดุ (${getProjectSourceInfo(projectSourceType).fullLabel})</div>
@@ -1361,7 +1430,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
           <div><strong>🚗 ยานพาหนะ:</strong> ${vehiclePlate}</div>
           <div><strong>🚚 พนักงานขับรถ:</strong> ${driverName}</div>
           <div><strong>🩺 จนท.สาธารณสุข/CG:</strong> ${staffNames}</div>
-          <div><strong>📍 จำนวนบ้านในคิว:</strong> ${plannedStops.length} ราย (ระยะทาง ${
+          <div><strong>📍 จำนวนบ้านในคิว:</strong> ${sortedStops.length} ราย (ระยะทาง ${
       routeMetrics.distanceKm
     } กม.)</div>
         </div>
@@ -1369,12 +1438,12 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         <table>
           <thead>
             <tr>
-              <th style="text-align: center;">คิว</th>
-              <th style="text-align: center;">เวลานัด</th>
-              <th>ข้อมูลผู้ป่วย & ผู้ดูแล</th>
-              <th>ที่อยู่ / พิกัด</th>
-              <th>รายการสิ่งของที่ส่งมอบ</th>
-              <th style="text-align: center;">ลายมือชื่อผู้รับ</th>
+              <th style="text-align: center; width: 38px;">คิว</th>
+              <th style="text-align: center; width: 68px;">เวลานัด</th>
+              <th style="width: 24%;">ข้อมูลผู้ป่วย & ผู้ดูแล</th>
+              <th style="width: 30%;">ที่อยู่ & จุดอ้างอิงใกล้เคียง</th>
+              <th style="width: 28%;">รายการสิ่งของที่จะได้รับ</th>
+              <th style="text-align: center; width: 105px;">ลายมือชื่อผู้รับ</th>
             </tr>
           </thead>
           <tbody>
@@ -1415,7 +1484,9 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
         </div>
 
         <script>
-          window.onload = function() { window.print(); }
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 400);
+          };
         </script>
       </body>
       </html>
