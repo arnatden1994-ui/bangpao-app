@@ -24,6 +24,11 @@ import {
   ArrowLeft,
   QrCode,
   X,
+  Edit3,
+  Info,
+  Save,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import {
   LtcPatient,
@@ -82,6 +87,10 @@ export interface ConvoyStopItem {
   adlCategory: string;
   itemsSummary: string;
   itemsList: LtcRoundItem[];
+  deliveryStatus?: 'pending' | 'delivered';
+  deliveredAt?: string;
+  receiverName?: string;
+  deliveryNote?: string;
 }
 
 interface LiveConvoyMobileAppProps {
@@ -172,6 +181,15 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
   const [receiverRelation, setReceiverRelation] = useState('ญาติผู้ดูแล');
   const [handoverNote, setHandoverNote] = useState('');
   const [queueFilterTab, setQueueFilterTab] = useState<'pending' | 'delivered' | 'all'>('pending');
+
+  // Edit Handover Details Modal State
+  const [editHandoverModalStop, setEditHandoverModalStop] = useState<ConvoyStopItem | null>(null);
+  const [editReceiverName, setEditReceiverName] = useState('');
+  const [editReceiverRelation, setEditReceiverRelation] = useState('ญาติผู้ดูแล');
+  const [editDeliveredDate, setEditDeliveredDate] = useState('');
+  const [editHandoverNote, setEditHandoverNote] = useState('');
+  const [editHandoverItems, setEditHandoverItems] = useState<LtcRoundItem[]>([]);
+  const [viewDetailModalStop, setViewDetailModalStop] = useState<ConvoyStopItem | null>(null);
 
   // Map refs
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -279,6 +297,10 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
       adlCategory: rawStop.adlCategory || matchedPt?.adlCategory || 'ติดเตียง',
       itemsSummary: rawSummary,
       itemsList: rawItemsList,
+      deliveryStatus: rawStop.deliveryStatus || (rawStop.status === 'delivered' ? 'delivered' : 'pending'),
+      deliveredAt: rawStop.deliveredAt || '',
+      receiverName: rawStop.receiverName || '',
+      deliveryNote: rawStop.deliveryNote || '',
     };
   };
 
@@ -361,30 +383,60 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
     return [];
   }, [cloudConvoyDoc, cloudPlanDoc, effectivePatients, activeYear, activeRound, activePlanKey]);
 
-  // Check if a stop is delivered in this year & round
-  const getStopDeliveryInfo = (patientId: string) => {
-    const key = `${patientId}_${activeYear}_${activeRound}`;
-    const rec = deliveryRecords[key];
-    if (rec && rec.status === 'delivered') {
+  // Check if a stop is delivered in this year & round (with robust matching by ID, stop.id, and name)
+  const getStopDeliveryInfo = (stopOrPtId: ConvoyStopItem | string) => {
+    const ptId = typeof stopOrPtId === 'string' ? stopOrPtId : (stopOrPtId.patientId || stopOrPtId.id);
+    const stopObj = typeof stopOrPtId === 'object' ? stopOrPtId : allConvoyStops.find((s) => s.patientId === ptId || s.id === ptId);
+
+    const keysToCheck = [
+      `${ptId}_${activeYear}_${activeRound}`,
+      stopObj?.id ? `${stopObj.id}_${activeYear}_${activeRound}` : '',
+      stopObj?.patientName ? `${stopObj.patientName.trim()}_${activeYear}_${activeRound}` : '',
+    ].filter(Boolean);
+
+    for (const k of keysToCheck) {
+      const rec = deliveryRecords[k];
+      if (rec && rec.status === 'delivered') {
+        return {
+          isDelivered: true,
+          deliveredAt: rec.deliveredAt || '',
+          receiverName: rec.receiverName || '',
+          deliveryNote: rec.deliveryNote || '',
+          itemsDelivered: rec.itemsDelivered || stopObj?.itemsList || [],
+        };
+      }
+    }
+
+    // Also check if stopObj itself has deliveryStatus: 'delivered' from cloudConvoyDoc / cloudPlanDoc
+    if (stopObj && (stopObj.deliveryStatus === 'delivered' || (stopObj as any).status === 'delivered')) {
       return {
         isDelivered: true,
-        deliveredAt: rec.deliveredAt,
-        receiverName: rec.receiverName,
-        deliveryNote: rec.deliveryNote,
+        deliveredAt: stopObj.deliveredAt || '',
+        receiverName: stopObj.receiverName || '',
+        deliveryNote: stopObj.deliveryNote || '',
+        itemsDelivered: stopObj.itemsList || [],
       };
     }
+
     return { isDelivered: false };
   };
 
   const pendingStops = useMemo(
-    () => allConvoyStops.filter((s) => !getStopDeliveryInfo(s.patientId).isDelivered),
+    () => allConvoyStops.filter((s) => !getStopDeliveryInfo(s).isDelivered),
     [allConvoyStops, deliveryRecords, activeYear, activeRound]
   );
 
   const deliveredStops = useMemo(
-    () => allConvoyStops.filter((s) => getStopDeliveryInfo(s.patientId).isDelivered),
+    () => allConvoyStops.filter((s) => getStopDeliveryInfo(s).isDelivered),
     [allConvoyStops, deliveryRecords, activeYear, activeRound]
   );
+
+  // Automatically switch tab to 'delivered' if all stops in this round are completed
+  useEffect(() => {
+    if (allConvoyStops.length > 0 && pendingStops.length === 0 && queueFilterTab === 'pending') {
+      setQueueFilterTab('delivered');
+    }
+  }, [allConvoyStops.length, pendingStops.length, queueFilterTab]);
 
   // Determine current target stop & next target stop
   const currentTargetStop: ConvoyStopItem | null = useMemo(() => {
@@ -455,9 +507,12 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
   // Confirm Delivery Handover & Advance Convoy to Next Stop in Real-Time!
   const handleConfirmHandover = async () => {
     if (!handoverModalStop) return;
-    const key = `${handoverModalStop.patientId}_${activeYear}_${activeRound}`;
+    const ptId = handoverModalStop.patientId;
+    const key1 = `${ptId}_${activeYear}_${activeRound}`;
+    const key2 = `${handoverModalStop.id}_${activeYear}_${activeRound}`;
+
     const newRec: RoundDeliveryRecord = {
-      patientId: handoverModalStop.patientId,
+      patientId: ptId,
       year: activeYear,
       round: activeRound,
       status: 'delivered',
@@ -469,7 +524,8 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
 
     const nextRecords = {
       ...deliveryRecords,
-      [key]: newRec,
+      [key1]: newRec,
+      [key2]: newRec,
     };
     setDeliveryRecords(nextRecords);
     try {
@@ -478,9 +534,24 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
 
     // Determine the next pending stop after this one
     const remainingAfterThis = pendingStops.filter(
-      (s) => s.patientId !== handoverModalStop.patientId
+      (s) => s.patientId !== ptId && s.id !== handoverModalStop.id
     );
     const nextStop = remainingAfterThis.length > 0 ? remainingAfterThis[0] : null;
+    const isAllDone = remainingAfterThis.length === 0;
+
+    // Update stops snapshot
+    const updatedStopsSnapshot = allConvoyStops.map((s) => {
+      if (s.patientId === ptId || s.id === handoverModalStop.id) {
+        return {
+          ...s,
+          deliveryStatus: 'delivered' as const,
+          deliveredAt: newRec.deliveredAt,
+          receiverName: newRec.receiverName,
+          deliveryNote: newRec.deliveryNote,
+        };
+      }
+      return s;
+    });
 
     try {
       await saveToFirestore(
@@ -499,7 +570,10 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
           ...(cloudConvoyDoc || {}),
           id: `LIVE_CONVOY_${activePlanKey}`,
           planKey: activePlanKey,
-          isActive: remainingAfterThis.length > 0,
+          isActive: !isAllDone,
+          isCompleted: isAllDone,
+          queueIds: remainingAfterThis.map((s) => s.id),
+          stopsSnapshot: updatedStopsSnapshot,
           targetStopId: nextStop ? nextStop.id : null,
           updatedAt: new Date().toISOString(),
         },
@@ -517,17 +591,86 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
       );
     } else {
       showToast('🎉 ส่งมอบครบทุกบ้านในรอบนี้เรียบร้อยแล้ว!');
+      setQueueFilterTab('delivered');
     }
   };
 
-  // Revert delivery if clicked by mistake
-  const handleRevertStopDelivery = async (stop: ConvoyStopItem) => {
-    const key = `${stop.patientId}_${activeYear}_${activeRound}`;
-    const nextRecords = { ...deliveryRecords };
-    delete nextRecords[key];
+  // Open Edit Handover Modal for updating delivery info retrospectively
+  const openEditHandoverModal = (stop: ConvoyStopItem) => {
+    const info = getStopDeliveryInfo(stop);
+    const ptId = stop.patientId;
+    const existingRec =
+      deliveryRecords[`${ptId}_${activeYear}_${activeRound}`] ||
+      deliveryRecords[`${stop.id}_${activeYear}_${activeRound}`];
+
+    let rName = info.receiverName || existingRec?.receiverName || stop.caregiverName || 'ญาติผู้ดูแล';
+    let rRel = 'ญาติผู้ดูแล';
+    const relMatch = rName.match(/\(([^)]+)\)$/);
+    if (relMatch) {
+      rRel = relMatch[1];
+      rName = rName.replace(/\s*\([^)]+\)$/, '');
+    }
+
+    setEditReceiverName(rName);
+    setEditReceiverRelation(rRel);
+    setEditDeliveredDate(
+      info.deliveredAt ||
+        existingRec?.deliveredAt ||
+        new Date().toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+    );
+    setEditHandoverNote(info.deliveryNote || existingRec?.deliveryNote || '');
+    setEditHandoverItems(
+      info.itemsDelivered && info.itemsDelivered.length > 0
+        ? JSON.parse(JSON.stringify(info.itemsDelivered))
+        : stop.itemsList && stop.itemsList.length > 0
+        ? JSON.parse(JSON.stringify(stop.itemsList))
+        : []
+    );
+    setEditHandoverModalStop(stop);
+  };
+
+  // Save edited handover record back to Cloud Firestore
+  const handleSaveEditedHandover = async () => {
+    if (!editHandoverModalStop) return;
+    const ptId = editHandoverModalStop.patientId;
+    const fullReceiver = `${editReceiverName.trim() || 'ญาติผู้ดูแล'} (${editReceiverRelation})`;
+
+    const updatedRec: RoundDeliveryRecord = {
+      patientId: ptId,
+      year: activeYear,
+      round: activeRound,
+      status: 'delivered',
+      deliveredAt: editDeliveredDate.trim() || new Date().toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }),
+      receiverName: fullReceiver,
+      deliveryNote: editHandoverNote.trim(),
+      itemsDelivered: editHandoverItems,
+    };
+
+    const nextRecords = {
+      ...deliveryRecords,
+      [`${ptId}_${activeYear}_${activeRound}`]: updatedRec,
+      [`${editHandoverModalStop.id}_${activeYear}_${activeRound}`]: updatedRec,
+    };
     setDeliveryRecords(nextRecords);
     try {
       localStorage.setItem('bangpao_ltc_round_deliveries_v2', JSON.stringify(nextRecords));
+    } catch {}
+
+    const updatedStopsSnapshot = allConvoyStops.map((s) => {
+      if (s.patientId === ptId || s.id === editHandoverModalStop.id) {
+        return {
+          ...s,
+          deliveryStatus: 'delivered' as const,
+          deliveredAt: updatedRec.deliveredAt,
+          receiverName: updatedRec.receiverName,
+          deliveryNote: updatedRec.deliveryNote,
+          itemsList: editHandoverItems,
+        };
+      }
+      return s;
+    });
+
+    try {
       await saveToFirestore(
         COLLECTIONS.LTC_QUEUES,
         {
@@ -537,8 +680,99 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
         },
         'LTC_SHARED_DELIVERY_RECORDS'
       );
+
+      await saveToFirestore(
+        COLLECTIONS.LTC_QUEUES,
+        {
+          ...(cloudConvoyDoc || {}),
+          id: `LIVE_CONVOY_${activePlanKey}`,
+          stopsSnapshot: updatedStopsSnapshot,
+          updatedAt: new Date().toISOString(),
+        },
+        `LIVE_CONVOY_${activePlanKey}`
+      );
+    } catch (e) {
+      console.warn('Failed to update delivery record in cloud:', e);
+    }
+
+    setEditHandoverModalStop(null);
+    showToast(`✏️ บันทึกการแก้ไขข้อมูลส่งมอบของ ${editHandoverModalStop.patientName} สำเร็จ`);
+  };
+
+  // Revert delivery if clicked by mistake (sets status to 'pending' instead of deleting, ensuring Firestore merge:true overwrites properly!)
+  const handleRevertStopDelivery = async (stop: ConvoyStopItem) => {
+    const key1 = `${stop.patientId}_${activeYear}_${activeRound}`;
+    const key2 = `${stop.id}_${activeYear}_${activeRound}`;
+
+    const revertedRec: RoundDeliveryRecord = {
+      patientId: stop.patientId,
+      year: activeYear,
+      round: activeRound,
+      status: 'pending' as any,
+      deliveredAt: '',
+      receiverName: '',
+      deliveryNote: '',
+      itemsDelivered: [],
+    };
+
+    const nextRecords = {
+      ...deliveryRecords,
+      [key1]: revertedRec,
+      [key2]: revertedRec,
+    };
+    setDeliveryRecords(nextRecords);
+    try {
+      localStorage.setItem('bangpao_ltc_round_deliveries_v2', JSON.stringify(nextRecords));
     } catch {}
-    showToast(`↩️ ยกเลิกสถานะส่งมอบของ ${stop.patientName} แล้ว`);
+
+    const updatedStopsSnapshot = allConvoyStops.map((s) => {
+      if (s.patientId === stop.patientId || s.id === stop.id) {
+        return {
+          ...s,
+          deliveryStatus: 'pending' as const,
+          deliveredAt: '',
+          receiverName: '',
+          deliveryNote: '',
+        };
+      }
+      return s;
+    });
+
+    const remainingQueueIds = updatedStopsSnapshot
+      .filter((s) => {
+        const info = getStopDeliveryInfo(s);
+        return !info.isDelivered || s.patientId === stop.patientId;
+      })
+      .map((s) => s.id);
+
+    try {
+      await saveToFirestore(
+        COLLECTIONS.LTC_QUEUES,
+        {
+          id: 'LTC_SHARED_DELIVERY_RECORDS',
+          recordsMap: nextRecords,
+          updatedAt: new Date().toISOString(),
+        },
+        'LTC_SHARED_DELIVERY_RECORDS'
+      );
+
+      await saveToFirestore(
+        COLLECTIONS.LTC_QUEUES,
+        {
+          ...(cloudConvoyDoc || {}),
+          id: `LIVE_CONVOY_${activePlanKey}`,
+          planKey: activePlanKey,
+          isActive: true,
+          isCompleted: false,
+          targetStopId: stop.id,
+          queueIds: remainingQueueIds,
+          stopsSnapshot: updatedStopsSnapshot,
+          updatedAt: new Date().toISOString(),
+        },
+        `LIVE_CONVOY_${activePlanKey}`
+      );
+    } catch {}
+    showToast(`↩️ ยกเลิกสถานะส่งมอบของ ${stop.patientName} ดึงกลับเข้าคิวแล้ว`);
   };
 
   // Locate Follower/Officer Current GPS & Calculate Real Road Distance/ETA to Current Target & Next Stop
@@ -1027,8 +1261,34 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-teal-200 flex-wrap mt-0.5">
                 <span className="font-extrabold text-amber-300">
-                  ปีงบ {activeYear} • รอบที่ {activeRound}
+                  ปีงบ {activeYear}
                 </span>
+                <span>•</span>
+                {/* Round Switcher Pills */}
+                <div className="inline-flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-teal-800/80">
+                  {['1', '2', '3'].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        setActiveRound(r);
+                        if (typeof window !== 'undefined') {
+                          const url = new URL(window.location.href);
+                          url.searchParams.set('convoy', `${activeYear}_${r}`);
+                          window.history.replaceState({}, '', url.toString());
+                        }
+                      }}
+                      className={`px-2 py-0.5 rounded text-[10px] font-black cursor-pointer transition-all ${
+                        activeRound === r
+                          ? 'bg-amber-400 text-slate-950 shadow-xs'
+                          : 'text-teal-200 hover:text-white hover:bg-slate-800'
+                      }`}
+                      title={`สลับดูขบวนส่งมอบรอบที่ ${r}`}
+                    >
+                      รอบ {r}
+                    </button>
+                  ))}
+                </div>
                 <span>•</span>
                 <span className={`px-1.5 py-0.2 rounded text-[10px] font-extrabold border ${projectBadge.cls}`}>
                   {projectBadge.short}
@@ -1359,14 +1619,29 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
               </p>
             </div>
           ) : (
-            <div className="p-6 rounded-2xl bg-emerald-950/50 border border-emerald-500/40 text-center space-y-2">
-              <div className="text-3xl">🎉</div>
-              <div className="font-black text-base text-emerald-300">
-                ส่งมอบพัสดุครบทุกบ้านในรอบนี้เรียบร้อยแล้ว ({deliveredStops.length} บ้าน)!
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 border-2 border-emerald-400 text-center space-y-3 shadow-2xl animate-in zoom-in-95">
+              <div className="text-4xl animate-bounce">🎉</div>
+              <div className="space-y-1">
+                <div className="font-black text-lg sm:text-xl text-emerald-300">
+                  ส่งมอบพัสดุครบทุกบ้านในรอบนี้เรียบร้อยแล้ว!
+                </div>
+                <div className="text-sm font-bold text-teal-200">
+                  แจกจ่ายสำเร็จครบ 100% ({deliveredStops.length} จาก {allConvoyStops.length} หลังคาเรือน)
+                </div>
               </div>
-              <p className="text-xs text-teal-200">
-                สามารถตรวจสอบรายชื่อที่ส่งมอบแล้วได้ที่รายการด้านล่าง
+              <p className="text-xs text-slate-300 max-w-md mx-auto">
+                ขบวนส่งของได้ทำการส่งมอบพัสดุและเวชภัณฑ์ถึงมือผู้ป่วยและญาติผู้ดูแลเรียบร้อยแล้วทุกหลัง ท่านสามารถตรวจสอบข้อมูลและรายละเอียดผู้รับมอบของแต่ละบ้านได้จากรายการด้านล่าง
               </p>
+              <div className="pt-1 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQueueFilterTab('delivered')}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer shadow-md flex items-center gap-1.5 transition-all"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>ดูรายชื่อและหลักฐานการรับมอบ ({deliveredStops.length} ราย)</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1536,9 +1811,16 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                               </span>
                             )}
                             {deliv.isDelivered && (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black text-[10px]">
-                                ✅ ส่งมอบแล้ว ({deliv.deliveredAt})
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black text-[10px]">
+                                  ✅ ส่งมอบแล้ว ({deliv.deliveredAt})
+                                </span>
+                                {deliv.receiverName && (
+                                  <span className="text-[11px] text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-700/50">
+                                    ผู้รับ: {deliv.receiverName}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                           <div className="text-xs text-slate-300 mt-0.5">
@@ -1574,12 +1856,12 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                       <span className="text-white">{stop.itemsSummary}</span>
                     </div>
 
-                    {/* Action Row per Stop: Strict Role Separation! Followers ONLY get Navigation & Phone (cannot accidentally click Deliver or Change Target!) */}
+                    {/* Action Row per Stop: Strict Role Separation! */}
                     <div
                       className="flex items-center justify-between gap-2 pt-1 flex-wrap"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {stop.phone && stop.phone !== '-' && (
                           <a
                             href={`tel:${stop.phone}`}
@@ -1600,7 +1882,18 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {deliv.isDelivered && roleMode === 'follower' && (
+                          <button
+                            type="button"
+                            onClick={() => setViewDetailModalStop(stop)}
+                            className="px-2.5 py-1.5 rounded-xl bg-teal-900/80 hover:bg-teal-800 text-teal-200 border border-teal-600/50 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                          >
+                            <Info className="w-3.5 h-3.5 text-teal-300" />
+                            <span>ดูการรับมอบ</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => {
@@ -1613,7 +1906,7 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                           className="px-3.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer shadow-xs"
                         >
                           <Navigation className="w-3.5 h-3.5" />
-                          <span>นำทาง Google Maps</span>
+                          <span>นำทาง</span>
                         </button>
 
                         {roleMode === 'lead' && (
@@ -1630,13 +1923,25 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
                               <span>ส่งมอบแล้ว</span>
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleRevertStopDelivery(stop)}
-                              className="px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-700/50 font-bold text-xs cursor-pointer"
-                            >
-                              ↩️ ยกเลิก
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openEditHandoverModal(stop)}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                title="แก้ไขข้อมูลผู้รับมอบและวันเวลาย้อนหลัง"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-amber-300" />
+                                <span>แก้ไข</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRevertStopDelivery(stop)}
+                                className="px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-700/50 font-bold text-xs cursor-pointer"
+                                title="ดึงกลับเป็นรอส่งมอบ"
+                              >
+                                ↩️ ยกเลิก
+                              </button>
+                            </div>
                           )
                         )}
                       </div>
@@ -1900,6 +2205,291 @@ export const LiveConvoyMobileApp: React.FC<LiveConvoyMobileAppProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Edit Handover Details Retrospectively (Officer Mode) */}
+      {editHandoverModalStop && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 text-white max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <div>
+                <span className="text-[11px] font-black text-amber-400">
+                  ✏️ แก้ไขข้อมูลการส่งมอบพัสดุ (ย้อนหลัง) • คิว #{editHandoverModalStop.queueOrder}
+                </span>
+                <h3 className="font-black text-base text-white mt-0.5">
+                  {editHandoverModalStop.patientName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditHandoverModalStop(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold cursor-pointer hover:bg-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-3.5 pr-1 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+                <div className="text-slate-300">
+                  🏡 หมู่ที่ {editHandoverModalStop.moo} {editHandoverModalStop.village} • บ้านเลขที่ {editHandoverModalStop.address}
+                </div>
+                {editHandoverModalStop.landmark && (
+                  <div className="text-amber-300 font-semibold">
+                    📍 จุดอ้างอิง: {editHandoverModalStop.landmark}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">ชื่อผู้รับมอบของจริง:</label>
+                <input
+                  type="text"
+                  value={editReceiverName}
+                  onChange={(e) => setEditReceiverName(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold outline-none focus:border-amber-400"
+                  placeholder="ระบุชื่อผู้รับมอบ / ญาติ"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">ความสัมพันธ์กับผู้ป่วย:</label>
+                <select
+                  value={editReceiverRelation}
+                  onChange={(e) => setEditReceiverRelation(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold outline-none focus:border-amber-400"
+                >
+                  <option value="ผู้ป่วยรับด้วยตนเอง">ผู้ป่วยรับด้วยตนเอง</option>
+                  <option value="ญาติผู้ดูแล">ญาติผู้ดูแล</option>
+                  <option value="บุตร/หลาน">บุตร / หลาน</option>
+                  <option value="CG / อสม. ประจำหมู่บ้าน">CG / อสม. ประจำหมู่บ้าน</option>
+                  <option value="ผู้นำชุมชนรับแทน">ผู้นำชุมชน / ผู้ใหญ่บ้านรับแทน</option>
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-300">วันเวลาที่ส่งมอบ:</label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditDeliveredDate(
+                        new Date().toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+                      )
+                    }
+                    className="text-[10px] text-amber-300 hover:underline cursor-pointer"
+                  >
+                    ใช้วันเวลาขณะนี้
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={editDeliveredDate}
+                  onChange={(e) => setEditDeliveredDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs outline-none focus:border-amber-400"
+                  placeholder="เช่น 15/11/2569, 10:30"
+                />
+              </div>
+
+              {/* Editable items list */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-300">รายการสิ่งของที่แจกจริง:</label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditHandoverItems((prev) => [
+                        ...prev,
+                        { itemId: `item-${Date.now()}`, itemName: 'ผ้าอ้อมผู้ใหญ่', quantity: 90, unit: 'ชิ้น' },
+                      ])
+                    }
+                    className="px-2 py-0.5 rounded-lg bg-teal-800 hover:bg-teal-700 text-[10px] font-bold text-teal-100 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>เพิ่มรายการ</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {editHandoverItems.length === 0 ? (
+                    <div className="p-2 rounded-xl bg-slate-950 text-slate-400 text-center text-[11px]">
+                      ไม่มีรายการสิ่งของ
+                    </div>
+                  ) : (
+                    editHandoverItems.map((it, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-1.5 bg-slate-950 p-2 rounded-xl border border-slate-800 text-[11px]"
+                      >
+                        <input
+                          type="text"
+                          value={it.itemName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditHandoverItems((prev) =>
+                              prev.map((item, i) => (i === idx ? { ...item, itemName: val } : item))
+                            );
+                          }}
+                          placeholder="ชื่อสิ่งของ/เวชภัณฑ์"
+                          className="flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white"
+                        />
+                        <input
+                          type="number"
+                          value={it.quantity}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setEditHandoverItems((prev) =>
+                              prev.map((item, i) => (i === idx ? { ...item, quantity: val } : item))
+                            );
+                          }}
+                          className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-center font-bold"
+                        />
+                        <input
+                          type="text"
+                          value={it.unit}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditHandoverItems((prev) =>
+                              prev.map((item, i) => (i === idx ? { ...item, unit: val } : item))
+                            );
+                          }}
+                          placeholder="หน่วย"
+                          className="w-14 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-center"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditHandoverItems((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                          className="p-1 rounded text-rose-400 hover:bg-rose-950/60 cursor-pointer"
+                          title="ลบรายการนี้"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">หมายเหตุเพิ่มเติม:</label>
+                <input
+                  type="text"
+                  value={editHandoverNote}
+                  onChange={(e) => setEditHandoverNote(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white outline-none focus:border-amber-400"
+                  placeholder="เช่น มอบครบถ้วน, เปลี่ยนผู้รับแทน"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditHandoverModalStop(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs cursor-pointer hover:bg-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditedHandover}
+                className="flex-2 py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Save className="w-4 h-4" />
+                <span>บันทึกการแก้ไขข้อมูล</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: View Handover Details (Read-Only for Followers & Observers) */}
+      {viewDetailModalStop && (() => {
+        const info = getStopDeliveryInfo(viewDetailModalStop);
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-slate-900 border border-teal-600 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4 text-white">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <span className="text-[11px] font-black text-emerald-400">
+                    ℹ️ ข้อมูลการรับมอบพัสดุ • คิว #{viewDetailModalStop.queueOrder}
+                  </span>
+                  <h3 className="font-black text-base text-white mt-0.5">
+                    {viewDetailModalStop.patientName}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewDetailModalStop(null)}
+                  className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+                  <div className="text-slate-300">
+                    🏡 หมู่ที่ {viewDetailModalStop.moo} {viewDetailModalStop.village} • {viewDetailModalStop.address}
+                  </div>
+                  {viewDetailModalStop.landmark && (
+                    <div className="text-amber-300 font-semibold">
+                      📍 จุดอ้างอิง: {viewDetailModalStop.landmark}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">สถานะ:</span>
+                    <span className="text-xs font-black text-emerald-400">
+                      {info.isDelivered ? '✅ ส่งมอบสำเร็จ' : '⏳ รอส่งมอบ'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">วันเวลาที่ส่งมอบ:</span>
+                    <span className="text-xs font-bold text-white">
+                      {info.deliveredAt || '-'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                  <span className="text-[10px] text-slate-400 block">ผู้รับมอบของ:</span>
+                  <div className="text-xs font-black text-teal-200">
+                    {info.receiverName || viewDetailModalStop.caregiverName || 'ญาติผู้ดูแล'}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <span className="text-[10px] text-slate-400 block font-bold">รายการสิ่งของที่มอบจริง:</span>
+                  <div className="text-xs text-white font-medium">
+                    {viewDetailModalStop.itemsSummary}
+                  </div>
+                </div>
+
+                {info.deliveryNote && (
+                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">หมายเหตุ:</span>
+                    <span className="text-xs text-amber-200">{info.deliveryNote}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setViewDetailModalStop(null)}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

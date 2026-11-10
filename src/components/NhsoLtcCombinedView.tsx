@@ -193,7 +193,7 @@ const convertPatientsToDeliveryStops = (pts: LtcPatient[]): DeliveryStop[] => {
       .reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
 
     return {
-      id: `STOP-${String(idx + 1).padStart(2, '0')}`,
+      id: p.id || `STOP-${String(idx + 1).padStart(2, '0')}`,
       patientId: p.id,
       patientName: p.fullName,
       moo: mooNum,
@@ -495,8 +495,37 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const [stops, setStops] = useState<DeliveryStop[]>(() =>
     convertPatientsToDeliveryStops(mergeLtcWithMaster(patients))
   );
-  const [selectedYearFilter, setSelectedYearFilter] = useState<string>('2569');
-  const [selectedRoundFilter, setSelectedRoundFilter] = useState<string>('1');
+
+  // Remember active year and round filter in localStorage so page refresh preserves user view
+  const [selectedYearFilter, setSelectedYearFilterState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('bangpao_ltc_active_year_filter') || '2569';
+    } catch {
+      return '2569';
+    }
+  });
+  const [selectedRoundFilter, setSelectedRoundFilterState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('bangpao_ltc_active_round_filter') || '1';
+    } catch {
+      return '1';
+    }
+  });
+
+  const setSelectedYearFilter = (yr: string) => {
+    setSelectedYearFilterState(yr);
+    try {
+      localStorage.setItem('bangpao_ltc_active_year_filter', yr);
+    } catch {}
+  };
+
+  const setSelectedRoundFilter = (rd: string) => {
+    setSelectedRoundFilterState(rd);
+    try {
+      localStorage.setItem('bangpao_ltc_active_round_filter', rd);
+    } catch {}
+  };
+
   const [selectedMooFilter, setSelectedMooFilter] = useState<string>('all');
   const [adlFilter, setAdlFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -504,6 +533,20 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
   const [showPinLabels, setShowPinLabels] = useState<boolean>(true);
   const [isOverviewMapFullscreen, setIsOverviewMapFullscreen] = useState<boolean>(false);
   const [activeStop, setActiveStop] = useState<DeliveryStop | null>(null);
+
+  // Delivery Handover Modal State (Record new delivery)
+  const [deliveryModalStop, setDeliveryModalStop] = useState<DeliveryStop | null>(null);
+  const [deliveryReceiver, setDeliveryReceiver] = useState('');
+  const [deliveryRelation, setDeliveryRelation] = useState('ผู้ดูแลผู้ป่วย');
+  const [deliveryNote, setDeliveryNote] = useState('');
+
+  // Edit Existing Handover Modal State (Review & Edit already-delivered records)
+  const [editDeliveryModalStop, setEditDeliveryModalStop] = useState<DeliveryStop | null>(null);
+  const [editDeliveryReceiver, setEditDeliveryReceiver] = useState('');
+  const [editDeliveryRelation, setEditDeliveryRelation] = useState('ผู้ดูแลผู้ป่วย');
+  const [editDeliveryDate, setEditDeliveryDate] = useState('');
+  const [editDeliveryNote, setEditDeliveryNote] = useState('');
+  const [editDeliveryItems, setEditDeliveryItems] = useState<LtcRoundItem[]>([]);
 
   // Overview Map Refs (for 'route' / แดชบอร์ดติดตาม subTab)
   const overviewMapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -551,12 +594,6 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
 
   // Delivery Route Selection (starts empty until stops are added via "+ ส่งไปจัดรอบ" or loaded from saved period queue)
   const [selectedStopIds, setSelectedStopIds] = useState<string[]>([]);
-
-  // Delivery Handover Modal State (Replaces window.prompt)
-  const [deliveryModalStop, setDeliveryModalStop] = useState<DeliveryStop | null>(null);
-  const [deliveryReceiver, setDeliveryReceiver] = useState('');
-  const [deliveryRelation, setDeliveryRelation] = useState('ผู้ดูแลผู้ป่วย');
-  const [deliveryNote, setDeliveryNote] = useState('');
 
   // Inventory State (Ensures all INITIAL_LTC_INVENTORY items including Baby XXL exist)
   const [inventory, setInventory] = useState<LtcInventoryItem[]>(() => {
@@ -1014,19 +1051,27 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
       const convoyDoc = docs.find((d) => d.id === `LIVE_CONVOY_${activePlanKey}`);
       const hasPlanForRound = Boolean(planDoc?.fullPlanData || roundPlans[activePlanKey]?.stops?.length);
       if (convoyDoc && hasPlanForRound) {
+        const isAllDone = Boolean(convoyDoc.isCompleted || (Array.isArray(convoyDoc.queueIds) && convoyDoc.queueIds.length === 0));
         setLiveConvoyState({
-          isActive: Boolean(convoyDoc.isActive),
-          targetStopId: convoyDoc.targetStopId || null,
+          isActive: isAllDone ? false : Boolean(convoyDoc.isActive),
+          targetStopId: isAllDone ? null : (convoyDoc.targetStopId || null),
           leadLat: convoyDoc.leadLat,
           leadLng: convoyDoc.leadLng,
           leadUpdatedAt: convoyDoc.leadUpdatedAt,
           projectSourceType: convoyDoc.projectSourceType,
         });
-        if (Array.isArray(convoyDoc.queueIds) && convoyDoc.queueIds.length > 0) {
-          setSelectedStopIds((prev) => {
-            if (prev.length === 0) return convoyDoc.queueIds;
-            return prev;
+
+        if (isAllDone) {
+          setSelectedStopIds([]);
+        } else if (Array.isArray(convoyDoc.queueIds) && convoyDoc.queueIds.length > 0) {
+          // Filter out any IDs that have already been delivered in this round
+          const validPendingQueue = convoyDoc.queueIds.filter((qid: string) => {
+            const matchStop = stops.find((s) => s.id === qid || s.patientId === qid);
+            const ptId = matchStop?.patientId || qid;
+            const rec = sharedDelivDoc?.recordsMap?.[`${ptId}_${effYear}_${effRound}`] || deliveryRecords[`${ptId}_${effYear}_${effRound}`];
+            return !rec || rec.status !== 'delivered';
           });
+          setSelectedStopIds(validPendingQueue);
         }
       } else if (!hasPlanForRound) {
         setLiveConvoyState({
@@ -1048,61 +1093,85 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     queueIds?: string[];
   }>) => {
     setLiveConvoyState((prev) => {
-      const next = { ...prev, ...patch };
+      const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+      const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+      const pKey = `${effYear}_${effRound}`;
+      const savedPlan = roundPlans[pKey];
+
+      // Build complete stops list for this round's plan
+      const basePlanStops = savedPlan?.stops && savedPlan.stops.length > 0
+        ? savedPlan.stops
+        : stops.filter((s) => selectedStopIds.includes(s.id) || selectedStopIds.includes(s.patientId));
+
+      // Build enriched snapshot preserving ALL stops in the round with accurate delivery status
+      const snapshotStops = basePlanStops.map((ps: any, idx: number) => {
+        const ptId = ps.patientId || ps.id;
+        const matchedPt = effectivePatients.find((p) => p.id === ptId || p.fullName === ps.fullName);
+        const matchStop = stops.find((s) => s.id === ptId || s.patientId === ptId);
+        const delivInfo = getStopDeliveryStatus(ptId, effYear, effRound);
+        const isDelivered = delivInfo.status === 'delivered' || ps.deliveryStatus === 'delivered';
+
+        const ptRoundItems =
+          ps.items && ps.items.length > 0
+            ? ps.items
+            : matchedPt?.yearRoundItems?.[effYear]?.[effRound] ||
+              matchedPt?.roundItems?.[effRound] ||
+              [];
+
+        const itemsSummaryText =
+          ptRoundItems.length > 0
+            ? ptRoundItems.map((it: any) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ')
+            : matchedPt?.equipmentNeeded ||
+              `ผ้าอ้อม Size ${matchStop?.diaperSize || 'L'} (${matchStop?.diaperQuantity || 90} ชิ้น)`;
+
+        return {
+          id: matchStop?.id || ps.id || ptId,
+          patientId: ptId,
+          queueOrder: ps.queueOrder || idx + 1,
+          patientName: ps.fullName || matchStop?.patientName || matchedPt?.fullName || 'ผู้ป่วย',
+          age: matchedPt?.age || ps.age || 75,
+          moo: String(ps.moo || matchStop?.moo || matchedPt?.moo || '1'),
+          village: ps.village || matchStop?.village || matchedPt?.village || '',
+          address: ps.address || matchStop?.address || matchedPt?.address || '',
+          landmark: ps.landmark || matchStop?.landmark || matchedPt?.landmark || '',
+          phone: ps.phone || matchedPt?.caregiverPhone || matchedPt?.phone || '-',
+          caregiverName: ps.caregiverName || matchedPt?.caregiverName || 'ญาติผู้ดูแล',
+          lat: Number(ps.latitude ?? matchStop?.lat ?? matchedPt?.latitude ?? BANGPAO_MUNICIPALITY_COORDS.lat),
+          lng: Number(ps.longitude ?? matchStop?.lng ?? matchedPt?.longitude ?? BANGPAO_MUNICIPALITY_COORDS.lng),
+          adlCategory: ps.adlCategory || matchStop?.adlCategory || matchedPt?.adlCategory || 'ติดเตียง',
+          itemsSummary: itemsSummaryText,
+          itemsList: ptRoundItems,
+          deliveryStatus: isDelivered ? ('delivered' as const) : ('pending' as const),
+          deliveredAt: delivInfo.deliveredAt || ps.deliveredAt || '',
+          receiverName: delivInfo.receiverName || ps.receiverName || '',
+          deliveryNote: delivInfo.deliveryNote || ps.deliveryNote || '',
+        };
+      });
+
+      // Calculate pending queue strictly from pending stops
+      const pendingSnapshotStops = snapshotStops.filter((s) => s.deliveryStatus !== 'delivered');
+      const activeIds =
+        patch.queueIds !== undefined
+          ? patch.queueIds
+          : selectedStopIds.length > 0
+          ? selectedStopIds.filter((id) => {
+              const matched = snapshotStops.find((s) => s.id === id || s.patientId === id);
+              return !matched || matched.deliveryStatus !== 'delivered';
+            })
+          : pendingSnapshotStops.map((s) => s.id);
+
+      const isCompleted = snapshotStops.length > 0 && (activeIds.length === 0 || pendingSnapshotStops.length === 0);
+      const isNextActive = isCompleted ? false : (patch.isActive !== undefined ? patch.isActive : (activeIds.length > 0));
+      const nextTargetId = isCompleted ? null : (patch.targetStopId !== undefined ? patch.targetStopId : (pendingSnapshotStops[0]?.id ?? null));
+
+      const next = {
+        ...prev,
+        ...patch,
+        isActive: isNextActive,
+        targetStopId: nextTargetId,
+      };
+
       try {
-        const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
-        const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
-        const pKey = `${effYear}_${effRound}`;
-        const savedPlan = roundPlans[pKey];
-        const activeIds =
-          patch.queueIds && patch.queueIds.length > 0
-            ? patch.queueIds
-            : selectedStopIds.length > 0
-            ? selectedStopIds
-            : savedPlan?.stops?.map((ps) => ps.patientId) || [];
-
-        const rawRoundStops =
-          activeIds.length > 0
-            ? activeIds
-                .map((id) => stops.find((s) => s.id === id || s.patientId === id))
-                .filter((s): s is DeliveryStop => Boolean(s))
-            : [];
-
-        const snapshotStops = rawRoundStops.map((s, idx) => {
-          const matchedPt = effectivePatients.find((p) => p.id === s.patientId);
-          const planStopMatch = savedPlan?.stops?.find((ps) => ps.patientId === s.patientId);
-          const ptRoundItems =
-            planStopMatch?.items && planStopMatch.items.length > 0
-              ? planStopMatch.items
-              : matchedPt?.yearRoundItems?.[effYear]?.[effRound] ||
-                matchedPt?.roundItems?.[effRound] ||
-                [];
-          const itemsSummaryText =
-            ptRoundItems.length > 0
-              ? ptRoundItems.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ')
-              : matchedPt?.equipmentNeeded ||
-                `ผ้าอ้อม Size ${s.diaperSize || 'L'} (${s.diaperQuantity || 90} ชิ้น)`;
-
-          return {
-            id: s.id,
-            patientId: s.patientId,
-            queueOrder: idx + 1,
-            patientName: s.patientName,
-            age: matchedPt?.age || 75,
-            moo: s.moo,
-            village: s.village,
-            address: s.address,
-            landmark: s.landmark || planStopMatch?.landmark || matchedPt?.landmark || '',
-            phone: matchedPt?.caregiverPhone || matchedPt?.phone || '-',
-            caregiverName: matchedPt?.caregiverName || 'ญาติผู้ดูแล',
-            lat: s.lat,
-            lng: s.lng,
-            adlCategory: s.adlCategory,
-            itemsSummary: itemsSummaryText,
-            itemsList: ptRoundItems,
-          };
-        });
-
         const convoyPayload = {
           id: `LIVE_CONVOY_${activePlanKey}`,
           planKey: activePlanKey,
@@ -1115,12 +1184,13 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
           staffNames: savedPlan?.staffNames || '',
           vehiclePlate: savedPlan?.vehiclePlate || '',
           projectSourceType: patch.projectSourceType || savedPlan?.projectSourceType || 'both',
-          isActive: next.isActive,
-          targetStopId: next.targetStopId || (snapshotStops[0]?.id ?? null),
+          isActive: isNextActive,
+          isCompleted,
+          targetStopId: nextTargetId,
           ...(next.leadLat !== undefined ? { leadLat: next.leadLat } : {}),
           ...(next.leadLng !== undefined ? { leadLng: next.leadLng } : {}),
           ...(next.leadUpdatedAt ? { leadUpdatedAt: next.leadUpdatedAt } : {}),
-          queueIds: activeIds,
+          queueIds: isCompleted ? [] : activeIds,
           stopsSnapshot: snapshotStops,
           updatedAt: new Date().toISOString(),
         };
@@ -2431,6 +2501,129 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     setDeliveryModalStop(null);
   };
 
+  // Open Edit Existing Handover Modal
+  const openEditDeliveryModal = (stop: DeliveryStop) => {
+    const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+    const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+    const recordKey = `${stop.patientId}_${effYear}_${effRound}`;
+    const rec = deliveryRecords[recordKey];
+    const roundData = getStopRoundInfo(stop, effRound, effYear);
+
+    setEditDeliveryModalStop(stop);
+    setEditDeliveryReceiver(rec?.receiverName ? rec.receiverName.replace(/\s*\([^)]*\)$/, '') : stop.receiverName || 'ผู้ดูแลผู้ป่วย');
+    setEditDeliveryRelation(
+      rec?.receiverName && rec.receiverName.includes('(')
+        ? rec.receiverName.substring(rec.receiverName.indexOf('(') + 1, rec.receiverName.lastIndexOf(')'))
+        : 'ผู้ดูแลผู้ป่วย'
+    );
+    setEditDeliveryDate(rec?.deliveredAt || stop.deliveredAt || formatThaiDateTime());
+    setEditDeliveryNote(rec?.deliveryNote || stop.notes || '');
+    setEditDeliveryItems(
+      rec?.itemsDelivered && rec.itemsDelivered.length > 0
+        ? [...rec.itemsDelivered]
+        : roundData.itemsList && roundData.itemsList.length > 0
+        ? [...roundData.itemsList]
+        : [
+            {
+              itemId: 'INV-LTC-02',
+              itemName: `ผ้าอ้อม Size ${stop.diaperSize || 'L'}`,
+              quantity: stop.diaperQuantity || 90,
+              unit: 'ชิ้น',
+            },
+          ]
+    );
+  };
+
+  // Save changes to already delivered record
+  const handleSaveEditedDelivery = () => {
+    if (!editDeliveryModalStop) return;
+    const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
+    const effRound = selectedRoundFilter === 'all' ? '1' : selectedRoundFilter;
+    const recordKey = `${editDeliveryModalStop.patientId}_${effYear}_${effRound}`;
+    const receiver = editDeliveryReceiver.trim() || 'ผู้ดูแลผู้ป่วย';
+    const noteText = editDeliveryNote.trim();
+
+    const updatedRecord: RoundDeliveryRecord = {
+      patientId: editDeliveryModalStop.patientId,
+      year: effYear,
+      round: effRound,
+      status: 'delivered',
+      deliveredAt: editDeliveryDate.trim() || formatThaiDateTime(),
+      receiverName: `${receiver} (${editDeliveryRelation})`,
+      deliveryNote: noteText,
+      itemsDelivered: editDeliveryItems,
+    };
+
+    setDeliveryRecords((prev) => {
+      const next = { ...prev, [recordKey]: updatedRecord };
+      try {
+        saveToFirestore(
+          COLLECTIONS.LTC_QUEUES,
+          {
+            id: 'LTC_SHARED_DELIVERY_RECORDS',
+            recordsMap: next,
+            updatedAt: new Date().toISOString(),
+          },
+          'LTC_SHARED_DELIVERY_RECORDS'
+        );
+      } catch {}
+      return next;
+    });
+
+    // Also update saved round plan stops
+    const pKey = `${effYear}_${effRound}`;
+    const savedPlan = roundPlans[pKey];
+    if (savedPlan && savedPlan.stops) {
+      const updatedStops = savedPlan.stops.map((ps) => {
+        if (ps.patientId === editDeliveryModalStop.patientId) {
+          return {
+            ...ps,
+            deliveryStatus: 'delivered' as const,
+            deliveredAt: updatedRecord.deliveredAt,
+            receiverName: updatedRecord.receiverName,
+            items: editDeliveryItems,
+          };
+        }
+        return ps;
+      });
+      const nextPlan = { ...savedPlan, stops: updatedStops, updatedAt: new Date().toISOString() };
+      setRoundPlans((prev) => ({ ...prev, [pKey]: nextPlan }));
+      try {
+        saveLtcQueueToFirestore({
+          id: `PLAN-${effYear}-R${effRound}`,
+          referenceCode: `LTC-${effYear}-R${effRound}`,
+          fiscalYear: effYear,
+          round: effRound,
+          planTitle: nextPlan.planTitle,
+          projectSourceType: nextPlan.projectSourceType || 'both',
+          deliveryDate: nextPlan.deliveryDate,
+          stopsCount: updatedStops.length,
+          fullPlanData: nextPlan,
+          stops: updatedStops.map((s) => ({
+            patientId: s.patientId,
+            queueOrder: s.queueOrder,
+            fullName: s.fullName,
+            phone: s.phone,
+            address: s.address,
+            landmark: s.landmark || '',
+            moo: s.moo,
+            deliveryStatus: s.deliveryStatus,
+            itemsSummary: s.items?.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ') || '-',
+          })),
+          updatedAt: new Date().toISOString(),
+        });
+      } catch {}
+    }
+
+    broadcastConvoyStateToCloud({});
+
+    setQueueToastMsg(
+      `✏️ แก้ไขข้อมูลการส่งมอบของ "${editDeliveryModalStop.patientName}" (ปี ${effYear} • รอบ ${effRound}) เรียบร้อยแล้ว`
+    );
+    setTimeout(() => setQueueToastMsg(null), 4000);
+    setEditDeliveryModalStop(null);
+  };
+
   // Revert / Cancel delivery status in case staff confirmed by accident
   const handleRevertDelivery = (stop: DeliveryStop) => {
     const effYear = selectedYearFilter === 'all' ? '2569' : selectedYearFilter;
@@ -2438,9 +2631,21 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
     const recordKey = `${stop.patientId}_${effYear}_${effRound}`;
     const prevRec = deliveryRecords[recordKey];
 
+    // Explicitly update record status to 'pending' in Firestore (so { merge: true } reliably overwrites)
     setDeliveryRecords((prev) => {
-      const next = { ...prev };
-      delete next[recordKey];
+      const next = {
+        ...prev,
+        [recordKey]: {
+          ...(prevRec || {}),
+          patientId: stop.patientId,
+          year: effYear,
+          round: effRound,
+          status: 'pending' as const,
+          deliveredAt: '',
+          receiverName: '',
+          deliveryNote: '',
+        },
+      };
       try {
         saveToFirestore(
           COLLECTIONS.LTC_QUEUES,
@@ -2483,6 +2688,50 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
           !l.itemName.includes(`(${stop.patientName} ปี ${effYear} รอบ ${effRound})`)
       )
     );
+
+    // Also update saved round plan stops
+    const pKey = `${effYear}_${effRound}`;
+    const savedPlan = roundPlans[pKey];
+    if (savedPlan && savedPlan.stops) {
+      const updatedStops = savedPlan.stops.map((ps) => {
+        if (ps.patientId === stop.patientId) {
+          return {
+            ...ps,
+            deliveryStatus: 'pending' as const,
+            deliveredAt: undefined,
+            receiverName: undefined,
+          };
+        }
+        return ps;
+      });
+      const nextPlan = { ...savedPlan, stops: updatedStops, updatedAt: new Date().toISOString() };
+      setRoundPlans((prev) => ({ ...prev, [pKey]: nextPlan }));
+      try {
+        saveLtcQueueToFirestore({
+          id: `PLAN-${effYear}-R${effRound}`,
+          referenceCode: `LTC-${effYear}-R${effRound}`,
+          fiscalYear: effYear,
+          round: effRound,
+          planTitle: nextPlan.planTitle,
+          projectSourceType: nextPlan.projectSourceType || 'both',
+          deliveryDate: nextPlan.deliveryDate,
+          stopsCount: updatedStops.length,
+          fullPlanData: nextPlan,
+          stops: updatedStops.map((s) => ({
+            patientId: s.patientId,
+            queueOrder: s.queueOrder,
+            fullName: s.fullName,
+            phone: s.phone,
+            address: s.address,
+            landmark: s.landmark || '',
+            moo: s.moo,
+            deliveryStatus: s.deliveryStatus,
+            itemsSummary: s.items?.map((it) => `${it.itemName} (${it.quantity} ${it.unit})`).join(', ') || '-',
+          })),
+          updatedAt: new Date().toISOString(),
+        });
+      } catch {}
+    }
 
     // Add back to queue
     const nextQueue = selectedStopIds.includes(stop.id) ? selectedStopIds : [...selectedStopIds, stop.id];
@@ -4065,20 +4314,17 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                 </span>
               </div>
               <div className="text-2xl font-black text-slate-900 mt-1.5">
-                {baseSummaryStops.length} <span className="text-xs font-bold text-slate-500">ราย</span>
+                {effectivePatients.length} <span className="text-xs font-bold text-slate-500">ราย (ในทะเบียน)</span>
               </div>
-              <div className="flex items-center gap-1.5 flex-wrap mt-2 pt-2 border-t border-slate-100 text-[11px] font-semibold">
-                <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700">
-                  ติดเตียง {bedriddenCount}
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px] font-semibold">
+                <span className="text-teal-800 font-extrabold">
+                  {selectedRoundFilter === 'all'
+                    ? `รวมทุกรอบ ${effectivePatients.length} ราย`
+                    : `ในแผนรอบนี้: ${roundScopedStops.length} ราย`}
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700">
-                  ติดบ้าน {homeboundCount}
+                <span className="text-slate-500">
+                  ติดเตียง {bedriddenCount} • ติดบ้าน {homeboundCount}
                 </span>
-                {socialCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-md bg-sky-50 text-sky-700">
-                    ติดสังคม {socialCount}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -4092,7 +4338,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
               </div>
               <div className="text-2xl font-black text-emerald-700 mt-1.5">
                 {deliveredCount}{' '}
-                <span className="text-xs font-bold text-emerald-600">/ {baseSummaryStops.length} ราย</span>
+                <span className="text-xs font-bold text-emerald-600">/ {roundScopedStops.length} ราย</span>
               </div>
               <div className="mt-2 pt-1">
                 <div className="w-full h-2 rounded-full bg-emerald-100 overflow-hidden">
@@ -4130,18 +4376,20 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
               <div className="text-2xl font-black text-amber-700 mt-1.5">
                 {pendingCount}{' '}
                 <span className="text-xs font-bold text-amber-600">
-                  {hasActiveRoundPlan ? 'จุดพิกัดบ้าน' : 'คิว (ยังไม่มีแผนรอบนี้)'}
+                  {pendingCount === 0 && hasActiveRoundPlan ? 'ครบแล้ว ✓' : hasActiveRoundPlan ? 'จุดพิกัดบ้าน' : 'คิว (ยังไม่มีแผน)'}
                 </span>
               </div>
               <div className="text-[11px] text-amber-700 font-semibold mt-2 pt-2 border-t border-amber-100 flex items-center justify-between">
                 <span>
                   {!hasActiveRoundPlan
                     ? 'ยังไม่ได้จัดแผนรอบนี้'
+                    : pendingCount === 0
+                    ? '🎉 ส่งครบทุกบ้านในรอบนี้แล้ว'
                     : selectedMooFilter === 'all'
                     ? 'ครบทั้ง 7 หมู่บ้าน'
                     : `เฉพาะหมู่ที่ ${selectedMooFilter}`}
                 </span>
-                <span className="underline">{hasActiveRoundPlan ? 'คลิกกรอง' : '+ จัดแผนรอบนี้'}</span>
+                <span className="underline">{!hasActiveRoundPlan ? '+ จัดแผนรอบนี้' : pendingCount === 0 ? 'ดูประวัติ' : 'คลิกกรอง'}</span>
               </div>
             </div>
 
@@ -4509,14 +4757,25 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                 <span>บันทึกส่งมอบสำเร็จ</span>
                               </button>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleRevertDelivery(activeStop)}
-                                className="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                                title="ยกเลิกสถานะส่งมอบและนำกลับเข้าคิว"
-                              >
-                                <span>↩️ ยกเลิกส่งมอบ (ดึงกลับเข้าคิว)</span>
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDeliveryModal(activeStop)}
+                                  className="flex-1 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg font-extrabold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                  title="ตรวจสอบและแก้ไขข้อมูลการส่งมอบย้อนหลัง"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                  <span>✏️ แก้ไขข้อมูลส่งมอบ</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevertDelivery(activeStop)}
+                                  className="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                  title="ยกเลิกสถานะส่งมอบและนำกลับเข้าคิว"
+                                >
+                                  <span>↩️ ยกเลิก</span>
+                                </button>
+                              </>
                             )}
 
                             <button
@@ -5943,14 +6202,25 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                   </button>
                                 </>
                               ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRevertDelivery(stop)}
-                                  className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[10px] flex items-center gap-0.5 cursor-pointer transition-colors"
-                                  title="ยกเลิกส่งมอบ"
-                                >
-                                  <span>↩️ ยกเลิก</span>
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditDeliveryModal(stop)}
+                                    className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-extrabold text-[11px] shadow-2xs flex items-center gap-0.5 cursor-pointer transition-colors"
+                                    title="ตรวจสอบหรือแก้ไขข้อมูลการส่งมอบย้อนหลัง"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    <span>✏️ แก้ไขข้อมูลส่งมอบ</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevertDelivery(stop)}
+                                    className="px-1.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[10px] flex items-center gap-0.5 cursor-pointer transition-colors"
+                                    title="ยกเลิกส่งมอบ"
+                                  >
+                                    <span>↩️ ยกเลิก</span>
+                                  </button>
+                                </>
                               )}
 
                               <button
@@ -7360,6 +7630,143 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer active:scale-98"
                 >
                   ✓ บันทึกยืนยันส่งมอบสำเร็จ
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Already Delivered Record Modal */}
+      {editDeliveryModalStop && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-amber-200" />
+                <h3 className="font-bold text-sm sm:text-base">แก้ไขข้อมูลการส่งมอบย้อนหลัง</h3>
+              </div>
+              <button
+                onClick={() => setEditDeliveryModalStop(null)}
+                className="p-1 text-amber-100 hover:text-white rounded-lg hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-amber-800 font-bold">ผู้ป่วยผู้รับของ:</span>
+                  <span className="font-black text-slate-900 text-sm">{editDeliveryModalStop.patientName}</span>
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  📍 {editDeliveryModalStop.address} (ม.{editDeliveryModalStop.moo} {editDeliveryModalStop.village})
+                </div>
+                <div className="text-[11px] font-extrabold text-blue-800 pt-0.5">
+                  ปีงบประมาณ {selectedYearFilter === 'all' ? '2569' : selectedYearFilter} • รอบที่ {selectedRoundFilter === 'all' ? '1' : selectedRoundFilter}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  ชื่อผู้รับมอบของ *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editDeliveryReceiver}
+                  onChange={(e) => setEditDeliveryReceiver(e.target.value)}
+                  placeholder="เช่น นางสาวสมศรี"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    ความสัมพันธ์
+                  </label>
+                  <select
+                    value={editDeliveryRelation}
+                    onChange={(e) => setEditDeliveryRelation(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs font-medium"
+                  >
+                    <option value="ผู้ดูแลผู้ป่วย">ผู้ดูแลผู้ป่วย</option>
+                    <option value="ผู้ป่วยรับมอบเอง">ผู้ป่วยรับมอบเอง</option>
+                    <option value="บุตร/ธิดา">บุตร / ธิดา</option>
+                    <option value="คู่สมรส">คู่สมรส</option>
+                    <option value="ญาติผู้ดูแล">ญาติผู้ดูแล</option>
+                    <option value="อสม. ผู้ดูแล">อสม. ประจำหมู่บ้าน</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    วันเวลาที่ส่งมอบ
+                  </label>
+                  <input
+                    type="text"
+                    value={editDeliveryDate}
+                    onChange={(e) => setEditDeliveryDate(e.target.value)}
+                    placeholder="เช่น 10/11/2569 11:30"
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  รายการสิ่งของที่ส่งมอบจริง
+                </label>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto border border-slate-200 rounded-xl p-2 bg-slate-50">
+                  {editDeliveryItems.map((it, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-slate-200">
+                      <span className="font-semibold text-slate-800 text-[11px] flex-1 truncate">{it.itemName}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={it.quantity}
+                        onChange={(e) => {
+                          const val = Number(e.target.value) || 0;
+                          setEditDeliveryItems((prev) =>
+                            prev.map((item, i) => (i === idx ? { ...item, quantity: val } : item))
+                          );
+                        }}
+                        className="w-16 p-1 text-center font-bold border border-slate-300 rounded text-xs"
+                      />
+                      <span className="text-[11px] text-slate-500 w-8">{it.unit || 'ชิ้น'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  บันทึกสภาพผู้ป่วย / หมายเหตุ
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDeliveryNote}
+                  onChange={(e) => setEditDeliveryNote(e.target.value)}
+                  placeholder="เช่น มอบครบถ้วน ผู้ป่วยอาการดี"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditDeliveryModalStop(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditedDelivery}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer active:scale-98"
+                >
+                  💾 บันทึกการแก้ไขข้อมูลส่งมอบ
                 </button>
               </div>
             </div>
