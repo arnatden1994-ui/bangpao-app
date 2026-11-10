@@ -749,17 +749,23 @@ unsubLicenses();
       const existingIdx = licenses.findIndex(
         (l) => l.businessName.toLowerCase() === newLicense.businessName.toLowerCase()
       );
+      let nextLicenses: LicenseRecord[];
       if (existingIdx >= 0) {
-        const updated = [...licenses];
-        updated[existingIdx] = {
-          ...updated[existingIdx],
+        nextLicenses = [...licenses];
+        nextLicenses[existingIdx] = {
+          ...nextLicenses[existingIdx],
           ...newLicense,
+          inspectionData: formState,
         };
-        setLicenses(updated);
       } else {
-        setLicenses([newLicense, ...licenses]);
+        nextLicenses = [{ ...newLicense, inspectionData: formState }, ...licenses];
       }
-      saveToFirestore(COLLECTIONS.LICENSES, newLicense).catch(() => {});
+      setLicenses(nextLicenses);
+      saveStoredLicenses(nextLicenses);
+      saveToFirestore(
+        COLLECTIONS.LICENSES,
+        nextLicenses[existingIdx >= 0 ? existingIdx : 0]
+      ).catch(() => {});
     }
 
     // Also record in establishments table
@@ -828,10 +834,17 @@ unsubLicenses();
     showToast('info', `กำลังเปิดฟอร์มตรวจประเมินสุขลักษณะของ "${lic.businessName}" เพื่อแก้ไขข้อมูลเดิม`);
   };
 
-  // 2. พิมพ์รายงานตรวจ (🖨️ รายงานตรวจ): เปิด modal เลือกพิมพ์ PDF, Google Sheet, Word
+  // 2. พิมพ์รายงานตรวจ (🖨️ รายงานตรวจ): เปิด modal เลือกพิมพ์ PDF, Google Sheet, Word, Excel
   const handlePrintInspectionReport = (lic: LicenseRecord) => {
-    setSelectedLicenseForPrint(lic);
-    setSelectedLicenseForOfficialReport(lic);
+    const latestLic = licenses.find(
+      (l) => l.id === lic.id || l.businessName.trim().toLowerCase() === lic.businessName.trim().toLowerCase()
+    );
+    const effectiveLic =
+      lic.inspectionData && Object.keys(lic.inspectionData.criteriaAnswers || {}).length > 0
+        ? lic
+        : (latestLic || lic);
+    setSelectedLicenseForPrint(effectiveLic);
+    setSelectedLicenseForOfficialReport(effectiveLic);
     setPrintOptionsModalOpen(true);
   };
 

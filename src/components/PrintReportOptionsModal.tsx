@@ -3,6 +3,7 @@ import { LicenseRecord, SignerSettings, DEFAULT_SIGNER_SETTINGS } from '../types
 import { DEFAULT_GAS_URL, DEFAULT_SHEET_ID } from '../services/sheetsSync.ts';
 import {
   exportInspectionReportWord,
+  exportInspectionReportExcel,
   generateInspectionReportHtml,
   printHtmlInNewWindow,
 } from '../services/officialDocGenerator.ts';
@@ -115,7 +116,13 @@ export const PrintReportOptionsModal: React.FC<PrintReportOptionsModalProps> = (
     exportInspectionReportWord(license, signers);
   };
 
-  // 4. 🖨️ พิมพ์ด่วนผ่านเบราว์เซอร์ (A4 ทันที ไม่ต้องรอคลาวด์)
+  // 4. 📊 ส่งออกเป็น Excel (.xls รายงานผลตรวจ 25 ข้อฉบับสมบูรณ์)
+  const handleExportExcel = () => {
+    handleClose();
+    exportInspectionReportExcel(license, signers);
+  };
+
+  // 5. 🖨️ พิมพ์ด่วนผ่านเบราว์เซอร์ (A4 ทันที ไม่ต้องรอคลาวด์)
   const handlePrintBrowser = () => {
     handleClose();
     const html = generateInspectionReportHtml(license, signers);
@@ -217,39 +224,48 @@ export const PrintReportOptionsModal: React.FC<PrintReportOptionsModalProps> = (
               <span className="font-bold text-indigo-700 text-base">{license.businessName}</span>
             </p>
 
-            <div className="flex flex-col gap-3">
-              {/* 1. พิมพ์เป็น PDF (GAS Template จริง) */}
+            <div className="flex flex-col gap-2.5">
+              {/* 1. พิมพ์เป็น PDF */}
               <button
                 type="button"
                 onClick={handlePrintPdf}
                 className="w-full bg-indigo-600 text-white hover:bg-indigo-700 font-bold px-4 py-3 rounded-xl text-sm cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2"
               >
-                📄 พิมพ์เป็น PDF
+                📄 พิมพ์เป็น PDF (รายงานการตรวจ)
               </button>
 
-              {/* 2. เปิดใน Google Sheet (สร้างสำเนาชีต 'แบบออกรายงานตรวจ' เฉพาะร้านค้า) */}
+              {/* 2. ส่งออกเป็น Excel (.xls) */}
               <button
                 type="button"
-                onClick={handleOpenSheet}
-                className="w-full bg-green-600 text-white hover:bg-green-700 font-bold px-4 py-3 rounded-xl text-sm cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2"
+                onClick={handleExportExcel}
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-700 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2"
               >
-                📊 เปิดใน Google Sheet
+                📊 ส่งออกเป็น Excel (.xls)
               </button>
 
-              {/* 3. ส่งออกเป็น Word */}
+              {/* 3. ส่งออกเป็น Word (.doc) */}
               <button
                 type="button"
                 onClick={handleExportWord}
-                className="w-full bg-blue-600 text-white hover:bg-blue-700 font-bold px-4 py-3 rounded-xl text-sm cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2 mt-1"
+                className="w-full bg-blue-600 text-white hover:bg-blue-700 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2"
               >
-                📝 ส่งออกเป็น Word
+                📝 ส่งออกเป็น Word (.doc)
               </button>
 
-              {/* 4. พิมพ์ด่วนผ่านเบราว์เซอร์ */}
+              {/* 4. เปิดใน Google Sheet (สร้างสำเนาชีต 'แบบออกรายงานตรวจ' เฉพาะร้านค้า) */}
+              <button
+                type="button"
+                onClick={handleOpenSheet}
+                className="w-full bg-teal-600 text-white hover:bg-teal-700 font-semibold px-4 py-2 rounded-xl text-xs cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2"
+              >
+                🌐 เปิดใน Google Sheet (ผ่านระบบคลาวด์)
+              </button>
+
+              {/* 5. พิมพ์ด่วนผ่านเบราว์เซอร์ */}
               <button
                 type="button"
                 onClick={handlePrintBrowser}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-1.5 mt-1 border border-slate-200"
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-1.5 border border-slate-200"
               >
                 <span>🖨️ แสดงตัวอย่าง & พิมพ์ด่วน (A4 ในเครื่อง)</span>
               </button>

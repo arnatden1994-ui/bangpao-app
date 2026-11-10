@@ -457,11 +457,7 @@ export function getStoredLicenses(): LicenseRecord[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // If cached storage still has the dummy 'ร้าน ก.ไก่' or obsolete LIC-36, refresh to authentic records
-        const hasDummy = parsed.some((p: any) => p.businessName === 'ร้าน ก.ไก่' || p.id === 'LIC-36');
-        if (!hasDummy && parsed.length === INITIAL_LICENSE_RECORDS.length) {
-          return parsed;
-        }
+        return parsed;
       }
     }
   } catch (e) {

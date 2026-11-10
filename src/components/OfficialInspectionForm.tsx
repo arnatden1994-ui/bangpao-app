@@ -137,47 +137,90 @@ export const OfficialInspectionForm: React.FC<OfficialInspectionFormProps> = ({
   const [inspectorName, setInspectorName] = useState('');
   const [inspectorPosition, setInspectorPosition] = useState('');
 
+  const applyLicenseData = (lic: LicenseRecord) => {
+    setBusinessName(lic.businessName || '');
+    setOwnerName(lic.ownerName || '');
+    setOwnerPhone(lic.ownerPhone || lic.businessPhone || '');
+    setBusinessPhone(lic.businessPhone || lic.ownerPhone || '');
+    setAddressNo(lic.businessAddressNo || lic.ownerAddressNo || '');
+    setMoo(lic.businessMoo || lic.ownerMoo || '');
+    setRoad(lic.businessRoad || lic.ownerRoad || '');
+    setSubdistrict(lic.businessSubdistrict || 'บางเป้า');
+    setDistrict(lic.businessDistrict || 'กันตัง');
+    setProvince(lic.businessProvince || 'ตรัง');
+    if (lic.businessCategory) {
+      setSelectedCategories([lic.businessCategory]);
+    } else {
+      setSelectedCategories([]);
+    }
+
+    if (lic.inspectionData) {
+      const d = lic.inspectionData;
+      if (d.selectedCategories && d.selectedCategories.length > 0) {
+        setSelectedCategories(d.selectedCategories);
+      }
+      setBuildingType(d.buildingType || '');
+      setBuildingDetails(d.buildingDetails || '');
+      setMachineCount(d.machineCount !== undefined ? String(d.machineCount) : '');
+      setHorsepower(d.horsepower !== undefined ? String(d.horsepower) : '');
+      setWorkingDaysPerWeek(d.workingDaysPerWeek !== undefined ? String(d.workingDaysPerWeek) : '');
+      setMaleWorkers(d.maleWorkers !== undefined ? String(d.maleWorkers) : '');
+      setFemaleWorkers(d.femaleWorkers !== undefined ? String(d.femaleWorkers) : '');
+      setStartTime(d.startTime || '08:00');
+      setEndTime(d.endTime || '17:00');
+      setHadComplaints(d.hadComplaints !== undefined ? d.hadComplaints : null);
+      setComplaintCount(d.complaintCount !== undefined ? String(d.complaintCount) : '');
+      setComplaintIssues(d.complaintIssues || []);
+      setAnimalType(d.animalType || '');
+      setAnimalCount(d.animalCount !== undefined ? String(d.animalCount) : '');
+      setRawMaterials(d.rawMaterials || []);
+
+      const freshCriteria: Record<string, { answer: 'yes' | 'no' | 'na' | ''; findings: string; recommendations: string }> = {};
+      OFFICIAL_25_CRITERIA.forEach((crit) => {
+        if (d.criteriaAnswers && d.criteriaAnswers[crit.id]) {
+          freshCriteria[crit.id] = { ...d.criteriaAnswers[crit.id] };
+        } else {
+          freshCriteria[crit.id] = { answer: '', findings: '', recommendations: '' };
+        }
+      });
+      setCriteriaAnswers(freshCriteria);
+      setAdditionalNotes(d.additionalNotes || '');
+      setOverallResult(d.overallResult || '');
+      setInspectorName(d.inspectorName || signerSettings?.inspectorName || 'พันจ่าเอกอานัส เด็นหมาด');
+      setInspectorPosition(d.inspectorPosition || signerSettings?.inspectorPos || 'เจ้าพนักงานสาธารณสุขชำนาญงาน');
+    } else {
+      // Clear inspection-specific fields so old answers from previously viewed shops don't leak
+      setBuildingType('');
+      setBuildingDetails('');
+      setMachineCount('');
+      setHorsepower('');
+      setWorkingDaysPerWeek('');
+      setMaleWorkers('');
+      setFemaleWorkers('');
+      setStartTime('08:00');
+      setEndTime('17:00');
+      setHadComplaints(null);
+      setComplaintCount('');
+      setComplaintIssues([]);
+      setAnimalType('');
+      setAnimalCount('');
+      setRawMaterials([]);
+      const freshCriteria: Record<string, { answer: 'yes' | 'no' | 'na' | ''; findings: string; recommendations: string }> = {};
+      OFFICIAL_25_CRITERIA.forEach((crit) => {
+        freshCriteria[crit.id] = { answer: '', findings: '', recommendations: '' };
+      });
+      setCriteriaAnswers(freshCriteria);
+      setAdditionalNotes('');
+      setOverallResult('');
+      setInspectorName(signerSettings?.inspectorName || 'พันจ่าเอกอานัส เด็นหมาด');
+      setInspectorPosition(signerSettings?.inspectorPos || 'เจ้าพนักงานสาธารณสุขชำนาญงาน');
+    }
+  };
+
   // Pre-fill form ONLY when editing an existing license or business
   useEffect(() => {
     if (initialLicense) {
-      setBusinessName(initialLicense.businessName || '');
-      setOwnerName(initialLicense.ownerName || '');
-      setOwnerPhone(initialLicense.ownerPhone || initialLicense.businessPhone || '');
-      setBusinessPhone(initialLicense.businessPhone || initialLicense.ownerPhone || '');
-      setAddressNo(initialLicense.businessAddressNo || initialLicense.ownerAddressNo || '');
-      setMoo(initialLicense.businessMoo || initialLicense.ownerMoo || '');
-      setRoad(initialLicense.businessRoad || initialLicense.ownerRoad || '');
-      setSubdistrict(initialLicense.businessSubdistrict || 'บางเป้า');
-      setDistrict(initialLicense.businessDistrict || 'กันตัง');
-      setProvince(initialLicense.businessProvince || 'ตรัง');
-      if (initialLicense.businessCategory) {
-        setSelectedCategories([initialLicense.businessCategory]);
-      }
-
-      if (initialLicense.inspectionData) {
-        const d = initialLicense.inspectionData;
-        if (d.selectedCategories && d.selectedCategories.length > 0) setSelectedCategories(d.selectedCategories);
-        if (d.buildingType) setBuildingType(d.buildingType);
-        if (d.buildingDetails) setBuildingDetails(d.buildingDetails);
-        if (d.machineCount !== undefined) setMachineCount(String(d.machineCount));
-        if (d.horsepower !== undefined) setHorsepower(String(d.horsepower));
-        if (d.workingDaysPerWeek !== undefined) setWorkingDaysPerWeek(String(d.workingDaysPerWeek));
-        if (d.maleWorkers !== undefined) setMaleWorkers(String(d.maleWorkers));
-        if (d.femaleWorkers !== undefined) setFemaleWorkers(String(d.femaleWorkers));
-        if (d.startTime) setStartTime(d.startTime);
-        if (d.endTime) setEndTime(d.endTime);
-        if (d.hadComplaints !== undefined) setHadComplaints(d.hadComplaints);
-        if (d.complaintCount !== undefined) setComplaintCount(String(d.complaintCount));
-        if (d.complaintIssues) setComplaintIssues(d.complaintIssues);
-        if (d.animalType) setAnimalType(d.animalType);
-        if (d.animalCount !== undefined) setAnimalCount(String(d.animalCount));
-        if (d.rawMaterials && d.rawMaterials.length > 0) setRawMaterials(d.rawMaterials);
-        if (d.criteriaAnswers) setCriteriaAnswers(d.criteriaAnswers as any);
-        if (d.additionalNotes) setAdditionalNotes(d.additionalNotes);
-        if (d.overallResult) setOverallResult(d.overallResult);
-        if (d.inspectorName) setInspectorName(d.inspectorName);
-        if (d.inspectorPosition) setInspectorPosition(d.inspectorPosition);
-      }
+      applyLicenseData(initialLicense);
     }
   }, [initialLicense]);
 
@@ -188,17 +231,7 @@ export const OfficialInspectionForm: React.FC<OfficialInspectionFormProps> = ({
     if (!trimmed) return;
     const found = existingLicenses.find((l) => l.businessName.trim() === trimmed);
     if (found) {
-      setOwnerName(found.ownerName);
-      setOwnerPhone(found.ownerPhone || found.businessPhone);
-      setBusinessPhone(found.businessPhone || found.ownerPhone);
-      setAddressNo(found.businessAddressNo || found.ownerAddressNo || '');
-      setMoo(found.businessMoo || found.ownerMoo || '');
-      setSubdistrict(found.businessSubdistrict || 'บางเป้า');
-      setDistrict(found.businessDistrict || 'กันตัง');
-      setProvince(found.businessProvince || 'ตรัง');
-      if (found.businessCategory) {
-        setSelectedCategories([found.businessCategory]);
-      }
+      applyLicenseData(found);
     }
   };
 

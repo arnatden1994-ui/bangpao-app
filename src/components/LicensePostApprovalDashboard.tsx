@@ -281,43 +281,102 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
     });
   }, [yearScopedLicenses, search, statusFilter, selectedCategory]);
 
-  // Export to CSV helper (Thai UTF-8 BOM compatible with Excel)
-  const handleExportCSV = () => {
+  // Export to Excel helper (.xls compatible with all versions of Microsoft Excel with Thai fonts)
+  const handleExportExcel = () => {
     if (filteredLicenses.length === 0) return;
-    const headers = [
-      'ลำดับ',
-      'ชื่อสถานประกอบการ',
-      'รอบปี',
-      'เลขที่ใบอนุญาต',
-      'วันที่เริ่มมีผล',
-      'วันที่สิ้นสุด',
-      'สถานะ',
-      'วันที่เหลือ',
-      'ชื่อผู้ประกอบการ',
-      'ที่อยู่สถานประกอบการ',
-      'ประเภทกิจการ',
-      'ค่าธรรมเนียม (บาท)',
-    ];
-    const rows = filteredLicenses.map((item, idx) => [
-      idx + 1,
-      `"${(item.businessName || '').replace(/"/g, '""')}"`,
-      item.licenseYear || '',
-      `"${(item.licenseNumber || '').replace(/"/g, '""')}"`,
-      item.approvalDate || '',
-      item.expireDate || '',
-      item.status === 'normal' ? 'ปกติ' : item.status === 'expiring' ? 'ใกล้หมดอายุ' : item.status === 'expired' ? 'หมดอายุ' : 'รออนุมัติ',
-      item.remainingDays ?? '',
-      `"${(item.ownerName || '').replace(/"/g, '""')}"`,
-      `"${(item.businessAddressNo || '')} ม.${item.businessMoo || ''} ต.${item.businessSubdistrict || 'บางเป้า'}"`,
-      `"${(item.businessCategory || '').replace(/"/g, '""')}"`,
-      item.feeAmount || 0,
-    ]);
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const escapeXls = (str?: string | number | null) => {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    };
+
+    const rows = filteredLicenses
+      .map((item, idx) => {
+        const statusLabel =
+          item.status === 'normal'
+            ? 'ปกติ'
+            : item.status === 'expiring'
+            ? 'ใกล้หมดอายุ'
+            : item.status === 'expired'
+            ? 'หมดอายุ'
+            : 'รออนุมัติ';
+        const address = `${item.businessAddressNo || ''} ม.${item.businessMoo || ''} ต.${item.businessSubdistrict || 'บางเป้า'}`;
+        return `
+          <tr>
+            <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${idx + 1}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">${escapeXls(item.businessName || '')}</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(item.licenseYear || selectedYear)}</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(item.licenseNumber || 'รอออกเลข')}</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(item.approvalDate || '-')}</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(item.expireDate || '-')}</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(statusLabel)}</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px;">${item.remainingDays ?? '-'}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(item.ownerName || '')}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(address)}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 6px;">${escapeXls(item.businessCategory || '')}</td>
+            <td style="text-align: right; border: 1px solid #cbd5e1; padding: 6px;">${(item.feeAmount || 0).toLocaleString()}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const excelHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8">
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>ทะเบียนใบอนุญาต</x:Name>
+                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          body, table, td, th { font-family: 'Sarabun', 'TH SarabunPSK', sans-serif; font-size: 13px; }
+          .main-title { font-size: 16px; font-weight: bold; text-align: center; padding: 12px; background-color: #ecfdf5; color: #065f46; }
+          .th-header { background-color: #047857; color: white; font-weight: bold; text-align: center; padding: 8px; }
+        </style>
+      </head>
+      <body>
+        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+          <tr>
+            <td colspan="12" class="main-title">
+              ทะเบียนและสถิติใบอนุญาตกิจการที่เป็นอันตรายต่อสุขภาพ เทศบาลตำบลบางเป้า ประจำปี ${selectedYear === 'all' ? 'ทุกปี' : selectedYear}
+            </td>
+          </tr>
+          <tr>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">ลำดับ</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">ชื่อสถานประกอบการ</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">รอบปี</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">เลขที่ใบอนุญาต</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">วันที่เริ่มมีผล</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">วันที่สิ้นสุด</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">สถานะ</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">วันที่เหลือ</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">ชื่อผู้ประกอบการ</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">ที่อยู่สถานประกอบการ</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">ประเภทกิจการ</th>
+            <th class="th-header" style="border: 1px solid #cbd5e1;">ค่าธรรมเนียม (บาท)</th>
+          </tr>
+          ${rows}
+        </table>
+      </body>
+      </html>
+    `;
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `สถิติใบอนุญาตกิจการอันตราย_ปี_${selectedYear}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.href = url;
+    link.setAttribute('download', `สถิติใบอนุญาตกิจการอันตราย_ปี_${selectedYear}_${new Date().toISOString().slice(0, 10)}.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -703,12 +762,12 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
               </span>
             </span>
 
-            {/* Export CSV Button */}
+            {/* Export Excel Button */}
             <button
-              onClick={handleExportCSV}
+              onClick={handleExportExcel}
               disabled={filteredLicenses.length === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-40"
-              title="ส่งออกรายชื่อและข้อมูลใบอนุญาตเป็นไฟล์ Excel (CSV)"
+              title="ส่งออกรายชื่อและข้อมูลใบอนุญาตเป็นไฟล์ Excel (.xls)"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
               <span>ส่งออก Excel</span>

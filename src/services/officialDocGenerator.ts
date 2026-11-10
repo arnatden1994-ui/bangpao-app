@@ -1,6 +1,7 @@
 import { generateOfficialMedicalLoanHtml } from './medicalLoanDocGenerator.ts';
 import { LicenseRecord, SignerSettings, EquipmentLoan } from '../types/index.ts';
 import { GARUDA_BASE64 } from '../data/garudaBase64.ts';
+import { OFFICIAL_25_CRITERIA } from '../data/officialCriteria.ts';
 import {
   exportOfficialLicenseDocx,
   cleanBoilerplateCondition,
@@ -9,6 +10,16 @@ import {
   splitBizCategoryForDocx,
   DocxLicensePayload,
 } from './docxTemplateExporter.ts';
+
+function escapeHtml(text?: string | null): string {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // Helper for Thai short months
 export function shortThaiMonth(m: string): string {
@@ -1289,19 +1300,117 @@ export function generateInspectionReportHtml(
   license: LicenseRecord,
   signers: SignerSettings
 ): string {
-  const bName = license.businessName || '-';
-  const owner = license.ownerName || '-';
-  const phone = license.businessPhone || license.ownerPhone || '-';
-  const bType = license.businessCategory || '-';
-  const addrNo = license.businessAddressNo || '-';
-  const moo = license.businessMoo || '-';
-  const street = (license.ownerRoad && license.ownerRoad !== '-') ? license.ownerRoad : '-';
-  const tumbon = license.businessSubdistrict || 'บางเป้า';
-  const amphoe = license.businessDistrict || 'กันตัง';
-  const changwat = license.businessProvince || 'ตรัง';
-  const inspectorName = 'พันจ่าเอกอานัส เด็นหมาด';
-  const inspectorPos = 'เจ้าพนักงานสาธารณสุขชำนาญงาน';
-  const inspectDate = license.approvalDate || '23 กรกฎาคม 2569';
+  const insp = license.inspectionData;
+  const bName = insp?.businessName || license.businessName || '-';
+  const owner = insp?.ownerName || license.ownerName || '-';
+  const phone = insp?.ownerPhone || insp?.businessPhone || license.businessPhone || license.ownerPhone || '-';
+  const phoneShop = insp?.businessPhone || license.businessPhone || phone;
+  const bType = (insp?.selectedCategories && insp.selectedCategories.length > 0)
+    ? insp.selectedCategories.join(', ')
+    : (license.businessCategory || '-');
+  const addrNo = insp?.addressNo || license.businessAddressNo || license.ownerAddressNo || '-';
+  const moo = insp?.moo || license.businessMoo || license.ownerMoo || '-';
+  const street = insp?.road || ((license.ownerRoad && license.ownerRoad !== '-') ? license.ownerRoad : '-');
+  const tumbon = insp?.subdistrict || license.businessSubdistrict || 'บางเป้า';
+  const amphoe = insp?.district || license.businessDistrict || 'กันตัง';
+  const changwat = insp?.province || license.businessProvince || 'ตรัง';
+  const animalType = insp?.animalType || '-';
+  const animalCount = (insp?.animalCount !== undefined && insp.animalCount !== null && insp.animalCount !== 0) ? String(insp.animalCount) : '-';
+
+  // Building Type checkboxes & details
+  const bldgType = insp?.buildingType || '';
+  const bldgDetails = insp?.buildingDetails || '';
+  const isFactory = bldgType.includes('โรงงาน') || bldgType.includes('เอกเทศ');
+  const isCommercial = bldgType.includes('พาณิชย์') || bldgType.includes('ตึกแถว');
+  const isOffice = bldgType.includes('สำนักงาน');
+  const isShed = bldgType.includes('โรงเรือน');
+  const isWarehouse = bldgType.includes('โกดัง') || bldgType.includes('คลัง');
+  const isOther = !isFactory && !isCommercial && !isOffice && !isShed && !isWarehouse && bldgType !== '';
+
+  const factoryFloors = isFactory && bldgDetails ? bldgDetails : '...';
+  const commFloors = isCommercial && bldgDetails ? bldgDetails : (isCommercial ? '1' : '...');
+  const officeFloors = isOffice && bldgDetails ? bldgDetails : '...';
+  const shedQty = isShed && bldgDetails ? bldgDetails : '...';
+  const warehouseQty = isWarehouse && bldgDetails ? bldgDetails : '...';
+  const otherText = isOther ? (bldgDetails || bldgType) : '...........................................';
+
+  // Machines, workers, hours
+  const machQty = insp?.machineCount !== undefined ? String(insp.machineCount) : '0';
+  const machHp = insp?.horsepower !== undefined ? String(insp.horsepower) : '0';
+  const maleWorkers = insp?.maleWorkers ?? 0;
+  const femaleWorkers = insp?.femaleWorkers ?? 0;
+  const totalWorkers = maleWorkers + femaleWorkers;
+  const workingDays = insp?.workingDaysPerWeek !== undefined ? String(insp.workingDaysPerWeek) : '6';
+  const startTime = insp?.startTime || '08:00';
+  const endTime = insp?.endTime || '17:00';
+
+  // Complaints
+  const hadComplaints = insp?.hadComplaints === true;
+  const complaintDetail = hadComplaints
+    ? [(insp?.complaintCount ? (insp.complaintCount + ' ครั้ง') : ''), (insp?.complaintIssues?.join(', ') || '')].filter(Boolean).join(' ') || 'มีข้อร้องเรียน'
+    : '....................................................';
+
+  // Raw materials (5 rows)
+  const rawMaterials = insp?.rawMaterials || [];
+  const rawRowsCount = Math.max(5, rawMaterials.length);
+  let rawMatHtml = '';
+  for (let i = 0; i < rawRowsCount; i++) {
+    const item = rawMaterials[i];
+    const name = item?.name || '-';
+    const qty = item?.monthlyQuantity || '-';
+    rawMatHtml += `
+      <tr style="height: 24px;">
+        <td style="width: 25px; text-align: left; vertical-align: bottom; border: none !important;">${i + 1})</td>
+        <td class="dotted-cell" align="center" style="padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">${escapeHtml(name)}</td>
+        <td style="width: 150px; text-align: right; padding-right: 5px; vertical-align: bottom; white-space: nowrap; color: #000; border: none !important;">ปริมาณที่ใช้ (ต่อปี/เดือน)</td>
+        <td class="dotted-cell" style="width: 180px; padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">${escapeHtml(qty)}</td>
+      </tr>
+    `;
+  }
+
+  // Criteria rows (25 items)
+  let criteriaRowsHtml = '';
+  OFFICIAL_25_CRITERIA.forEach((crit) => {
+    if (crit.isSubItemHeader) {
+      criteriaRowsHtml += `
+        <!-- ${crit.itemNumber} Header -->
+        <tr style="background-color: #fafafa;">
+          <td colspan="6" style="text-align:left; line-height:1.35; font-weight:bold; padding: 5px 6px;">${crit.itemNumber.replace('ข้อ ', '')} ${crit.title}</td>
+        </tr>
+      `;
+    } else {
+      const ans = insp?.criteriaAnswers ? insp.criteriaAnswers[crit.id] : null;
+      const isYes = ans?.answer === 'yes';
+      const isNo = ans?.answer === 'no';
+      const isNa = ans?.answer === 'na';
+      const findings = ans?.findings || '';
+      const recommendations = ans?.recommendations || '';
+      const isSub = crit.itemNumber.includes('.');
+      const paddingLeft = isSub ? 'padding-left: 15px;' : '';
+      const num = crit.itemNumber.replace('ข้อ ', '');
+
+      criteriaRowsHtml += `
+        <!-- ${crit.itemNumber} -->
+        <tr>
+          <td style="text-align:left; line-height:1.35; ${paddingLeft}">${num} ${crit.title}</td>
+          <td style="text-align:center; font-size:14px; vertical-align:middle; font-weight:bold; color: #166534;">${isYes ? '✓' : ''}</td>
+          <td style="text-align:center; font-size:14px; vertical-align:middle; font-weight:bold; color: #991b1b;">${isNo ? '✓' : ''}</td>
+          <td style="text-align:center; font-size:14px; vertical-align:middle; font-weight:bold; color: #475569;">${isNa ? '✓' : ''}</td>
+          <td style="line-height:1.25; font-size:12.5px;">${escapeHtml(findings)}</td>
+          <td style="line-height:1.25; font-size:12.5px;">${escapeHtml(recommendations)}</td>
+        </tr>
+      `;
+    }
+  });
+
+  // Summary & Signers
+  const additionalNotes = insp?.additionalNotes || 
+    (insp?.overallResult === 'passed' 
+      ? 'สถานประกอบการผ่านเกณฑ์มาตรฐานการตรวจประเมินสุขลักษณะขั้นพื้นฐาน และมีมาตรการดูแลความปลอดภัยในการปฏิบัติงาน' 
+      : (insp?.overallResult === 'needs_improvement' ? 'ควรปรับปรุงตามข้อเสนอแนะที่ระบุไว้ข้างต้น' : '-'));
+  const inspectorName = insp?.inspectorName || signers.inspectorName || 'พันจ่าเอกอานัส เด็นหมาด';
+  const inspectorPos = insp?.inspectorPosition || signers.inspectorPos || 'เจ้าพนักงานสาธารณสุขชำนาญงาน';
+  const inspectDate = license.approvalDate || new Date().toLocaleDateString('th-TH');
 
   return `<!DOCTYPE html>
 <html>
@@ -1405,6 +1514,9 @@ export function generateInspectionReportHtml(
       <button onclick="exportToWord();" class="btn-action" style="background-color: #0056b3;">
         📝 ส่งออก Word
       </button>
+      <button onclick="exportToExcel();" class="btn-action" style="background-color: #059669;">
+        📊 ส่งออก Excel
+      </button>
       <button onclick="window.print();" class="btn-action" style="background-color: #28a745;">
         🖨️ สั่งพิมพ์รายงาน
       </button>
@@ -1420,108 +1532,108 @@ export function generateInspectionReportHtml(
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 140px; white-space: nowrap; vertical-align: bottom;">1. สถานประกอบกิจการประเภท</td>
-          <td id="v_business_type" class="dotted-cell" align="center" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${bType}</td>
+          <td id="v_business_type" class="dotted-cell" align="center" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(bType)}</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 135px; white-space: nowrap; vertical-align: bottom;">2. ชื่อ-สกุลผู้ดำเนินกิจการ</td>
-          <td id="v_owner_name" align="center" class="dotted-cell" style="width: 250px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${owner}</td>
+          <td id="v_owner_name" align="center" class="dotted-cell" style="width: 250px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(owner)}</td>
           <td style="width: 50px; white-space: nowrap; vertical-align: bottom; padding-left: 10px;">โทรศัพท์</td>
-          <td id="v_phone_owner" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${phone}</td>
+          <td id="v_phone_owner" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(phone)}</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 120px; white-space: nowrap; vertical-align: bottom; padding-left: 15px;">ชื่อสถานประกอบกิจการ</td>
-          <td id="v_shopName" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${bName}</td>
+          <td id="v_shopName" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(bName)}</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 70px; white-space: nowrap; vertical-align: bottom; padding-left: 15px;">ตั้งอยู่เลขที่</td>
-          <td id="v_address" align="center" class="dotted-cell" style="width: 80px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${addrNo}</td>
+          <td id="v_address" align="center" class="dotted-cell" style="width: 80px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(addrNo)}</td>
           <td style="width: 40px; white-space: nowrap; vertical-align: bottom; padding-left: 10px;">หมู่ที่</td>
-          <td id="v_moo" align="center" class="dotted-cell" style="width: 70px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${moo}</td>
+          <td id="v_moo" align="center" class="dotted-cell" style="width: 70px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(moo)}</td>
           <td style="width: 30px; white-space: nowrap; vertical-align: bottom; padding-left: 10px;">ถนน</td>
-          <td id="v_street" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${street}</td>
+          <td id="v_street" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(street)}</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 40px; white-space: nowrap; vertical-align: bottom; padding-left: 15px;">ตำบล</td>
-          <td id="v_tumbon" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${tumbon}</td>
+          <td id="v_tumbon" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(tumbon)}</td>
           <td style="width: 40px; white-space: nowrap; vertical-align: bottom; padding-left: 10px;">อำเภอ</td>
-          <td id="v_amphoe" align="center" class="dotted-cell" style="width: 150px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${amphoe}</td>
+          <td id="v_amphoe" align="center" class="dotted-cell" style="width: 150px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(amphoe)}</td>
           <td style="width: 45px; white-space: nowrap; vertical-align: bottom; padding-left: 10px;">จังหวัด</td>
-          <td id="v_changwat" align="center" class="dotted-cell" style="width: 150px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${changwat}</td>
+          <td id="v_changwat" align="center" class="dotted-cell" style="width: 150px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(changwat)}</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 70px; white-space: nowrap; vertical-align: bottom; padding-left: 15px;">โทรศัพท์ร้าน</td>
-          <td id="v_phone_shop" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${phone}</td>
+          <td id="v_phone_shop" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(phoneShop)}</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 250px; white-space: nowrap; vertical-align: bottom;">3. กรณีประกอบกิจการเลี้ยงสัตว์ (ระบุ) ชนิดสัตว์</td>
-          <td id="v_animal" align="center" class="dotted-cell" style="width: 200px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">-</td>
+          <td id="v_animal" align="center" class="dotted-cell" style="width: 200px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(animalType)}</td>
           <td style="width: 40px; white-space: nowrap; vertical-align: bottom; padding-left: 10px;">จำนวน</td>
-          <td id="v_animal_qty" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">-</td>
+          <td id="v_animal_qty" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${escapeHtml(animalCount)}</td>
           <td style="width: 20px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">ตัว</td>
         </tr>
       </table>
       
       <div style="margin-top: 8px;">4. ลักษณะอาคารประกอบกิจการ</div>
       <div style="padding-left: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;" id="bldgArea">
-        <div class="checkbox-item"><span class="checkbox-icon">☐</span> อาคารโรงงาน/อาคารเอกเทศ จำนวน <span style="margin:0 4px;">...</span> ชั้น</div>
-        <div class="checkbox-item"><span class="checkbox-icon">☑</span> อาคารพาณิชย์/พาณิชย์-พักอาศัย จำนวน <span style="margin:0 4px;">1</span> ชั้น</div>
-        <div class="checkbox-item"><span class="checkbox-icon">☐</span> อาคารสำนักงาน จำนวน <span style="margin:0 4px;">...</span> ชั้น</div>
-        <div class="checkbox-item"><span class="checkbox-icon">☐</span> โรงเรือน จำนวน <span style="margin:0 4px;">...</span> หลัง</div>
-        <div class="checkbox-item"><span class="checkbox-icon">☐</span> โกดัง จำนวน <span style="margin:0 4px;">...</span> หลัง</div>
-        <div class="checkbox-item"><span class="checkbox-icon">☐</span> อื่นๆ ...........................................</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${isFactory ? '☑' : '☐'}</span> อาคารโรงงาน/อาคารเอกเทศ จำนวน <span style="margin:0 4px;">${escapeHtml(factoryFloors)}</span> ชั้น</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${isCommercial ? '☑' : '☐'}</span> อาคารพาณิชย์/พาณิชย์-พักอาศัย จำนวน <span style="margin:0 4px;">${escapeHtml(commFloors)}</span> ชั้น</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${isOffice ? '☑' : '☐'}</span> อาคารสำนักงาน จำนวน <span style="margin:0 4px;">${escapeHtml(officeFloors)}</span> ชั้น</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${isShed ? '☑' : '☐'}</span> โรงเรือน จำนวน <span style="margin:0 4px;">${escapeHtml(shedQty)}</span> หลัง</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${isWarehouse ? '☑' : '☐'}</span> โกดัง จำนวน <span style="margin:0 4px;">${escapeHtml(warehouseQty)}</span> หลัง</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${isOther ? '☑' : '☐'}</span> อื่นๆ <span style="margin:0 4px;">${escapeHtml(otherText)}</span></div>
       </div>
 
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-top: 8px; margin-bottom: 6px;">
         <tr>
           <td style="width: 100px; white-space: nowrap; vertical-align: bottom;">5. จำนวนเครื่องจักร</td>
-          <td id="v_machQty" align="center" class="dotted-cell" style="width: 150px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">1</td>
+          <td id="v_machQty" align="center" class="dotted-cell" style="width: 150px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${machQty}</td>
           <td style="width: 20px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">ตัว</td>
           <td style="width: 100px; white-space: nowrap; vertical-align: bottom; padding-left: 15px;">รวมจำนวนแรงม้า</td>
-          <td id="v_machHp" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">3</td>
+          <td id="v_machHp" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${machHp}</td>
           <td style="width: 40px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">แรงม้า</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 120px; white-space: nowrap; vertical-align: bottom;">6. จำนวนพนักงานทั้งหมด</td>
-          <td id="v_total" align="center" class="dotted-cell" style="width: 80px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">1</td>
+          <td id="v_total" align="center" class="dotted-cell" style="width: 80px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${totalWorkers}</td>
           <td style="width: 20px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">คน</td>
           <td style="width: 30px; white-space: nowrap; vertical-align: bottom; padding-left: 15px;">ชาย</td>
-          <td id="v_male" align="center" class="dotted-cell" style="width: 100px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">1</td>
+          <td id="v_male" align="center" class="dotted-cell" style="width: 100px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${maleWorkers}</td>
           <td style="width: 20px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">คน</td>
           <td style="width: 30px; white-space: nowrap; vertical-align: bottom; padding-left: 15px;">หญิง</td>
-          <td id="v_female" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">0</td>
+          <td id="v_female" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${femaleWorkers}</td>
           <td style="width: 20px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">คน</td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 13px; line-height: 1.2; margin-bottom: 6px;">
         <tr>
           <td style="width: 100px; white-space: nowrap; vertical-align: bottom;">7. ระยะเวลาการทำงาน</td>
-          <td id="v_days" align="center" class="dotted-cell" style="width: 80px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">6</td>
+          <td id="v_days" align="center" class="dotted-cell" style="width: 80px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${workingDays}</td>
           <td style="width: 60px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">วัน/สัปดาห์</td>
           <td style="width: 60px; white-space: nowrap; vertical-align: bottom; padding-left: 10px;">ตั้งแต่เวลา</td>
-          <td id="v_start" align="center" class="dotted-cell" style="width: 100px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">08:00</td>
+          <td id="v_start" align="center" class="dotted-cell" style="width: 100px; vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${startTime}</td>
           <td style="width: 60px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">น. ถึงเวลา</td>
-          <td id="v_end" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">17:00</td>
+          <td id="v_end" align="center" class="dotted-cell" style="vertical-align: bottom; text-align: center; border-bottom: 1px dashed #000;">${endTime}</td>
           <td style="width: 20px; white-space: nowrap; vertical-align: bottom; padding-left: 5px;">น.</td>
         </tr>
       </table>
       <div style="margin-top: 8px;">8. ในรอบปีที่ผ่านมา สถานประกอบกิจการเคยถูกร้องเรียนก่อปัญหาเหตุรำคาญหรือมลพิษสิ่งแวดล้อม</div>
       <div style="padding-left: 20px; display: flex; gap: 20px;" id="compArea">
-        <div class="checkbox-item"><span class="checkbox-icon">☑</span> ไม่เคยถูกร้องเรียน</div>
-        <div class="checkbox-item"><span class="checkbox-icon">☐</span> เคยถูกร้องเรียน (ระบุ) ....................................................</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${!hadComplaints ? '☑' : '☐'}</span> ไม่เคยถูกร้องเรียน</div>
+        <div class="checkbox-item"><span class="checkbox-icon">${hadComplaints ? '☑' : '☐'}</span> เคยถูกร้องเรียน (ระบุ) ${escapeHtml(complaintDetail)}</div>
       </div>
     </div>
 
@@ -1529,36 +1641,7 @@ export function generateInspectionReportHtml(
     <div style="padding-left: 20px;" id="materialsTableWrapper">
       <table style="width: 100%; border-collapse: collapse; font-family: inherit; font-size: 12px; margin-top: 5px; border: none !important;">
         <tbody id="materialsTableBody">
-          <tr style="height: 24px;">
-            <td style="width: 25px; text-align: left; vertical-align: bottom; border: none !important;">1)</td>
-            <td class="dotted-cell" align="center" style="padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">น้ำมันหล่อลื่น</td>
-            <td style="width: 150px; text-align: right; padding-right: 5px; vertical-align: bottom; white-space: nowrap; color: #000; border: none !important;">ปริมาณที่ใช้ (ต่อปี/เดือน)</td>
-            <td class="dotted-cell" style="width: 180px; padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">5 ลิตร/เดือน</td>
-          </tr>
-          <tr style="height: 24px;">
-            <td style="width: 25px; text-align: left; vertical-align: bottom; border: none !important;">2)</td>
-            <td class="dotted-cell" align="center" style="padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">น้ำยาล้างเครื่องมือ</td>
-            <td style="width: 150px; text-align: right; padding-right: 5px; vertical-align: bottom; white-space: nowrap; color: #000; border: none !important;">ปริมาณที่ใช้ (ต่อปี/เดือน)</td>
-            <td class="dotted-cell" style="width: 180px; padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">2 ลิตร/เดือน</td>
-          </tr>
-          <tr style="height: 24px;">
-            <td style="width: 25px; text-align: left; vertical-align: bottom; border: none !important;">3)</td>
-            <td class="dotted-cell" align="center" style="padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">-</td>
-            <td style="width: 150px; text-align: right; padding-right: 5px; vertical-align: bottom; white-space: nowrap; color: #000; border: none !important;">ปริมาณที่ใช้ (ต่อปี/เดือน)</td>
-            <td class="dotted-cell" style="width: 180px; padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">-</td>
-          </tr>
-          <tr style="height: 24px;">
-            <td style="width: 25px; text-align: left; vertical-align: bottom; border: none !important;">4)</td>
-            <td class="dotted-cell" align="center" style="padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">-</td>
-            <td style="width: 150px; text-align: right; padding-right: 5px; vertical-align: bottom; white-space: nowrap; color: #000; border: none !important;">ปริมาณที่ใช้ (ต่อปี/เดือน)</td>
-            <td class="dotted-cell" style="width: 180px; padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">-</td>
-          </tr>
-          <tr style="height: 24px;">
-            <td style="width: 25px; text-align: left; vertical-align: bottom; border: none !important;">5)</td>
-            <td class="dotted-cell" align="center" style="padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">-</td>
-            <td style="width: 150px; text-align: right; padding-right: 5px; vertical-align: bottom; white-space: nowrap; color: #000; border: none !important;">ปริมาณที่ใช้ (ต่อปี/เดือน)</td>
-            <td class="dotted-cell" style="width: 180px; padding: 0 5px; vertical-align: bottom; font-weight: normal; border-bottom: 1px dashed #000; text-align: center;">-</td>
-          </tr>
+          ${rawMatHtml}
         </tbody>
       </table>
     </div>
@@ -1579,274 +1662,14 @@ export function generateInspectionReportHtml(
         </tr>
       </thead>
       <tbody>
-        <!-- 1 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">1 สถานที่ตั้งเหมาะสม ระยะห่างเป็นไปตามกฎหมาย</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 2 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">2 อาคารมีความมั่นคง แข็งแรง</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;">ลักษณะเป็นบ้านแถวติดกัน พื้นที่โล่ง</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 3 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">3 มีทางหนีไฟ บันไดหนีไฟ หรือทางออกฉุกเฉิน ไม่มีสิ่งกีดขวาง มีป้ายหรือเครื่องหมายแสดงชัดเจน เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 4 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">4 สถานประกอบกิจการมีการจัดแสงสว่างเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 5 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">5 สถานประกอบกิจการมีการระบายอากาศเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 6 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">6 สถานประกอบกิจการมีความสะอาด จัดวางสิ่งของเป็นระเบียบเรียบร้อย ปลอดภัย เป็นสัดส่วน และดูแลรักษาความสะอาดให้ถูกสุขลักษณะอย่างสม่ำเสมอ</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 7 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">7 สถานประกอบกิจการมีห้องน้ำ ห้องส้วม อ่างหรือที่ล้างมือที่ สะอาด เพียงพอ ถูกสุขลักษณะ ดูแลรักษาความสะอาดเป็นประจำ</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 8 Header -->
-        <tr>
-          <td style="text-align:left; line-height:1.35; font-weight:bold;">8 สถานประกอบกิจการมีการเก็บ รวบรวม กำจัดมูลฝอย และของเสียอันตรายที่ถูกสุขลักษณะ ดังนี้</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 8.1 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35; padding-left: 15px;">8.1 มีภาชนะบรรจุหรือภาชนะรองรับมูลฝอย สะอาด มีฝาปิด ไม่แตกหรือรั่วซึม และเพียงพอกับประเภทและปริมาณของมูลฝอย</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;">รถขยะเทศบาลจัดเก็บ</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 8.2 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35; padding-left: 15px;">8.2 บริเวณที่เก็บวางภาชนะรองรับมูลฝอย หรือสถานที่พักรวมมูลฝอย สะอาด ไม่มีกลิ่นเหม็น ไม่มีน้ำขัง และไม่เป็นแหล่งเพาะพันธุ์สัตว์และแมลงนำโรค</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;">รถขยะเทศบาลจัดเก็บ</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 8.3 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35; padding-left: 15px;">8.3 มีการกำจัดมูลฝอยอย่างถูกต้อง และเป็นไปตามข้อบัญญัติของท้องถิ่น</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 8.4 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35; padding-left: 15px;">8.4 กรณีที่มีของเสียอันตราย วัตถุอันตราย มูลฝอยปนเปื้อนสารพิษ มูลฝอยอันตราย หรือมูลฝอยปนเปื้อนเลือดหรือสารคัดหลั่ง ดำเนินการเป็นไปตามกฎหมาย</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 9 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">9 สถานประกอบกิจการมีการป้องกัน ควบคุม กำจัดแมลงและสัตว์พาหะนำโรค มิให้เป็นแหล่งเพาะพันธุ์และแพร่ระบาดของโรค</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 10 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">10 สถานประกอบกิจการมีการระบายน้ำที่เหมาะสม และดูแลมิให้มีน้ำท่วมขังบริเวณสถานประกอบกิจการ</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 11 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">11 สถานประกอบกิจการที่มีโรงอาหารหรือห้องครัวที่จัดไว้เพื่อการปรุงประกอบอาหารสำหรับผู้ปฏิบัติงาน มีการดำเนินการอย่างถูกต้องตามหลักสุขาภิบาลอาหาร</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 12 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">12 สถานประกอบกิจการมีน้ำดื่มที่สะอาด เพียงพอสำหรับผู้ปฏิบัติงาน และมีภาชนะรองรับน้ำดื่มที่สะอาด</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 13 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">13 สถานประกอบกิจการมีระบบบำบัดน้ำเสียที่เหมาะสม สภาพใช้งานได้ดี และมีการจัดการน้ำเสียที่ถูกสุขลักษณะ หรือได้มาตรฐานตามที่กฎหมายกำหนด</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 14 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">14 สถานประกอบกิจการมีการป้องกันควบคุมระดับเสียงรบกวน เป็นไปตามประกาศกระทรวงสาธารณสุข หรือกฎหมายว่าด้วยโรงงาน</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 15 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">15 สถานประกอบกิจการมีการป้องกันควบคุมฝุ่นละออง เป็นไปตามกฎหมายว่าด้วยโรงงาน หรือกฎหมายว่าด้วยการส่งเสริมและรักษาคุณภาพสิ่งแวดล้อม</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 16 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">16 สถานประกอบกิจการมีการป้องกันควบคุมกลิ่นหรือไอสารเคมี เป็นไปตามกฎหมายว่าด้วยโรงงาน</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 17 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">17 อุปกรณ์ เครื่องมือ เครื่องจักร สายไฟ มีสภาพปลอดภัยต่อการใช้งาน มีการติดตั้งในลักษณะที่แข็งแรง มั่นคง ปลอดภัย โดยมีคำแนะนำในการป้องกันอันตราย และกรณีชำรุดต้องมีป้ายเตือน</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 18 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">18 มีการจัดวางหรือการจัดเก็บอุปกรณ์ เครื่องมือ เครื่องจักร หรือสายไฟ ต้องเป็นระเบียบ ไม่กีดขวางทางเดินและการปฏิบัติงาน และมีการดูแล ตรวจสอบ บำรุงรักษาให้อยู่ในสภาพดีตลอดเวลา</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 19 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">19 สถานประกอบกิจการมีการติดตั้งอุปกรณ์หรือเครื่องดับเพลิงอย่างเพียงพอ เหมาะสม สภาพดี พร้อมใช้งาน มีการฝึกซ้อมดับเพลิงและอพยพหนีไฟ หรือซ้อมแผนฉุกเฉิน</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;">มีถังดับเพลิง 1 ถัง</td>
-          <td style="line-height:1.25; font-size:12.5px;">ควรตรวจสอบเป็นประจำ ตามวงรอบ</td>
-        </tr>
-        <!-- 20 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">20 สถานประกอบกิจการที่มีสารเคมีหรือวัตถุอันตราย ต้องจัดสถานที่ที่ปลอดภัยสำหรับจัดเก็บสารเคมีหรือวัตถุอันตราย มีป้ายแสดงชนิดหรือประเภทของสารเคมีหรือวัตถุอันตราย และเอกสารข้อมูลความปลอดภัย</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 21 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">21 สถานประกอบกิจการที่มีความเสี่ยงจากการสัมผัสสารเคมี/วัตถุอันตราย ต้องจัดให้มีที่ชำระร่างกาย และที่ล้างตาฉุกเฉิน</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 22 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">22 สถานประกอบกิจการมีอุปกรณ์คุ้มครองความปลอดภัยส่วนบุคคลสำหรับผู้ปฏิบัติงานที่เพียงพอ เหมาะสมตามลักษณะงาน</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 23 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">23 สถานประกอบกิจการมีการตรวจสุขภาพผู้ปฏิบัติงาน ตามกฎหมายว่าด้วยความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;">ตรวจสุขภาพประจำปีล่าสุดปี 68</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 24 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">24 สถานประกอบกิจการมีมาตรการควบคุมและป้องกันปัญหาเหตุรำคาญแก่ชุมชนและประชาชนที่อยู่ใกล้เคียง</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
-        <!-- 25 -->
-        <tr>
-          <td style="text-align:left; line-height:1.35;">25 สถานประกอบกิจการมีมาตรการป้องกันควบคุมโรคติดต่อตามหลักเกณฑ์ที่ราชการหรือกฎหมายกำหนด</td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;"></td>
-          <td style="text-align:center; font-size:14px; vertical-align:middle;">✓</td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-          <td style="line-height:1.25; font-size:12.5px;"></td>
-        </tr>
+        ${criteriaRowsHtml}
       </tbody>
     </table>
 
     <div style="margin-top: 20px;">
       <div class="line-row"><div class="line-label"><b>ข้อเสนอแนะ/สรุปผลการตรวจประเมิน:</b></div></div>
       <div id="v_extra_comment" class="lined-notes" style="width: 100%; padding-left: 10px;">
-        สถานประกอบการผ่านเกณฑ์มาตรฐานการตรวจประเมินสุขลักษณะขั้นพื้นฐาน และมีมาตรการดูแลความปลอดภัยในการปฏิบัติงาน
+        ${escapeHtml(additionalNotes)}
       </div>
       
       <div class="sign-table-wrapper">
@@ -1858,17 +1681,17 @@ export function generateInspectionReportHtml(
           </tr>
           <tr>
             <td style="padding: 0; line-height: 1.2;"></td>
-            <td style="text-align: center; padding: 2px 0 0 0; line-height: 1.2;">( <span id="v_inspector_name" style="font-weight: normal;">${inspectorName}</span> )</td>
+            <td style="text-align: center; padding: 2px 0 0 0; line-height: 1.2;">( <span id="v_inspector_name" style="font-weight: normal;">${escapeHtml(inspectorName)}</span> )</td>
             <td style="padding: 0; line-height: 1.2;"></td>
           </tr>
           <tr>
             <td style="text-align: left; padding: 8px 0 0 0; vertical-align: bottom; line-height: 1.2;">ตำแหน่ง</td>
-            <td id="v_inspector_position" style="text-align: center; padding: 8px 0 0 0; vertical-align: bottom; font-weight: normal; line-height: 1.2;">${inspectorPos}</td>
+            <td id="v_inspector_position" style="text-align: center; padding: 8px 0 0 0; vertical-align: bottom; font-weight: normal; line-height: 1.2;">${escapeHtml(inspectorPos)}</td>
             <td style="padding: 0; line-height: 1.2;"></td>
           </tr>
           <tr>
             <td style="width: 100px; text-align: left; padding: 12px 0 0 0; vertical-align: bottom; line-height: 1.2; white-space: nowrap;">วันที่ตรวจประเมิน</td>
-            <td style="padding: 12px 0 0 0; border-bottom: 1px dashed #000; line-height: 1.2; text-align: center;">${inspectDate}</td>
+            <td style="padding: 12px 0 0 0; border-bottom: 1px dashed #000; line-height: 1.2; text-align: center;">${escapeHtml(inspectDate)}</td>
             <td style="padding: 0; line-height: 1.2;"></td>
           </tr>
         </table>
@@ -1884,11 +1707,27 @@ export function generateInspectionReportHtml(
       var noPrintElements = clone.querySelectorAll('.no-print');
       noPrintElements.forEach(function(el) { el.parentNode.removeChild(el); });
       var sourceHTML = header + clone.innerHTML + footer;
-      var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+      var blob = new Blob(['\uFEFF' + sourceHTML], { type: 'application/msword;charset=utf-8;' });
       var fileDownload = document.createElement("a");
       document.body.appendChild(fileDownload);
-      fileDownload.href = source;
+      fileDownload.href = URL.createObjectURL(blob);
       fileDownload.download = 'รายงานตรวจ_${bName.replace(/\\s+/g, '_')}.doc';
+      fileDownload.click();
+      document.body.removeChild(fileDownload);
+    }
+
+    function exportToExcel() {
+      var header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:x='urn:schemas-microsoft-com:office:excel' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>รายงานการตรวจ_${bName}</title></head><body>";
+      var footer = "</body></html>";
+      var clone = document.documentElement.cloneNode(true);
+      var noPrintElements = clone.querySelectorAll('.no-print');
+      noPrintElements.forEach(function(el) { el.parentNode.removeChild(el); });
+      var sourceHTML = header + clone.innerHTML + footer;
+      var blob = new Blob(['\uFEFF' + sourceHTML], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      var fileDownload = document.createElement("a");
+      document.body.appendChild(fileDownload);
+      fileDownload.href = URL.createObjectURL(blob);
+      fileDownload.download = 'รายงานตรวจ_${bName.replace(/\\s+/g, '_')}.xls';
       fileDownload.click();
       document.body.removeChild(fileDownload);
     }
@@ -2076,63 +1915,92 @@ export function exportLicenseWordDoc(license: LicenseRecord, signers: SignerSett
 }
 
 /**
- * 100% Exact Word export matching GAS JavaScript.html exportToWord
+ * 100% Dynamic Word export with full 25-criteria inspection data
  */
 export function exportInspectionReportWord(license: LicenseRecord, signers: SignerSettings) {
-  const shopName = license.businessName || '-';
-  const ownerName = license.ownerName || '-';
-  const ownerPhone = license.ownerPhone || license.businessPhone || '-';
-  const shopPhone = license.businessPhone || license.ownerPhone || '-';
-  const bType = license.businessCategory || '-';
-  const addrNo = license.businessAddressNo || license.ownerAddressNo || '-';
-  const moo = license.businessMoo || license.ownerMoo || '-';
-  const road = license.ownerRoad || license.businessRoad || '-';
-  const tumbon = license.businessSubdistrict || license.ownerSubdistrict || 'บางเป้า';
-  const amphoe = license.businessDistrict || license.ownerDistrict || 'กันตัง';
-  const prov = license.businessProvince || license.ownerProvince || 'ตรัง';
-  const inspector = 'พันจ่าเอกอานัส เด็นหมาด';
-  const inspectorPos = 'เจ้าพนักงานสาธารณสุขชำนาญงาน';
-  const inspectDate = license.approvalDate || '23 กรกฎาคม 2569';
+  const insp = license.inspectionData;
+  const shopName = insp?.businessName || license.businessName || '-';
+  const ownerName = insp?.ownerName || license.ownerName || '-';
+  const ownerPhone = insp?.ownerPhone || insp?.businessPhone || license.ownerPhone || license.businessPhone || '-';
+  const shopPhone = insp?.businessPhone || license.businessPhone || ownerPhone;
+  const bType = (insp?.selectedCategories && insp.selectedCategories.length > 0)
+    ? insp.selectedCategories.join(', ')
+    : (license.businessCategory || '-');
+  const addrNo = insp?.addressNo || license.businessAddressNo || license.ownerAddressNo || '-';
+  const moo = insp?.moo || license.businessMoo || license.ownerMoo || '-';
+  const road = insp?.road || license.businessRoad || ((license.ownerRoad && license.ownerRoad !== '-') ? license.ownerRoad : '-');
+  const tumbon = insp?.subdistrict || license.businessSubdistrict || 'บางเป้า';
+  const amphoe = insp?.district || license.businessDistrict || 'กันตัง';
+  const prov = insp?.province || license.businessProvince || 'ตรัง';
 
-  const chk = (cond: boolean) => (cond ? '☑' : '☐');
+  // Building Type checkboxes & details
+  const bldgType = insp?.buildingType || '';
+  const isFactory = bldgType.includes('โรงงาน') || bldgType.includes('เอกเทศ');
+  const isCommercial = bldgType.includes('พาณิชย์') || bldgType.includes('ตึกแถว');
+  const isOther = !isFactory && !isCommercial && bldgType !== '';
 
-  const ministryQuestions = [
-    { type: 'heading', text: 'สถานที่ตั้งและลักษณะอาคาร' },
-    { num: '1', id: '1', text: 'สถานที่ตั้งเหมาะสม ระยะห่างเป็นไปตามกฎหมาย' },
-    { num: '2', id: '2', text: 'อาคารมีความมั่นคง แข็งแรง' },
-    { num: '3', id: '3', text: 'มีทางหนีไฟ บันไดหนีไฟ หรือทางออกฉุกเฉิน ไม่มีสิ่งกีดขวาง มีป้ายหรือเครื่องหมายแสดงชัดเจน เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร' },
-    { num: '4', id: '4', text: 'สถานประกอบกิจการมีการจัดแสงสว่างเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร' },
-    { num: '5', id: '5', text: 'สถานประกอบกิจการมีการระบายอากาศเหมาะสม เพียงพอ เป็นไปตามกฎหมายว่าด้วยการควบคุมอาคาร' },
-    { num: '6', id: '6', text: 'สถานประกอบกิจการมีความสะอาด จัดวางสิ่งของเป็นระเบียบเรียบร้อย ปลอดภัย เป็นสัดส่วน และดูแลรักษาความสะอาดให้ถูกสุขลักษณะอย่างสม่ำเสมอ' },
-    { type: 'heading', text: 'การสุขาภิบาลสถานประกอบกิจการ' },
-    { num: '7', id: '7', text: 'สถานประกอบกิจการมีห้องน้ำ ห้องส้วม อ่างหรือที่ล้างมือที่ สะอาด เพียงพอ ถูกสุขลักษณะ ดูแลรักษาความสะอาดเป็นประจำ' },
-    { num: '8', id: '8', text: 'สถานประกอบกิจการมีการเก็บ รวบรวม กำจัดมูลฝอย และของเสียอันตรายที่ถูกสุขลักษณะ ดังนี้' },
-    { num: '(1)', id: '9', text: 'มีภาชนะบรรจุหรือภาชนะรองรับมูลฝอย สะอาด มีฝาปิด ไม่แตกหรือรั่วซึม และเพียงพอกับประเภทและปริมาณของมูลฝอย' },
-    { num: '(2)', id: '10', text: 'บริเวณที่เก็บวางภาชนะรองรับมูลฝอย หรือสถานที่พักรวมมูลฝอย สะอาด ไม่มีกลิ่นเหม็น ไม่มีน้ำขัง และไม่เป็นแหล่งเพาะพันธุ์สัตว์และแมลงนำโรค' },
-    { num: '(3)', id: '11', text: 'มีการกำจัดมูลฝอยอย่างถูกต้อง และเป็นไปตามข้อบัญญัติของท้องถิ่น' },
-    { num: '(4)', id: '12', text: 'กรณีที่มีของเสียอันตราย วัตถุอันตราย มูลฝอยปนเปื้อนสารพิษ มูลฝอยอันตราย หรือมูลฝอยปนเปื้อนเลือดหรือสารคัดหลั่ง ดำเนินการเป็นไปตามกฎหมาย' },
-    { num: '9', id: '13', text: 'สถานประกอบกิจการมีการป้องกัน ควบคุม กำจัดแมลงและสัตว์พาหะนำโรค มิให้เป็นแหล่งเพาะพันธุ์และแพร่ระบาดของโรค' },
-    { num: '10', id: '14', text: 'สถานประกอบกิจการมีการระบายน้ำที่เหมาะสม และดูแลมิให้มีน้ำท่วมขังบริเวณสถานประกอบกิจการ' },
-    { num: '11', id: '15', text: 'สถานประกอบกิจการที่มีโรงอาหารหรือห้องครัวที่จัดไว้เพื่อการปรุงประกอบอาหารสำหรับผู้ปฏิบัติงาน มีการดำเนินการอย่างถูกต้องตามหลักสุขาภิบาลอาหาร' },
-    { num: '12', id: '16', text: 'สถานประกอบกิจการมีน้ำดื่มที่สะอาด เพียงพอสำหรับผู้ปฏิบัติงาน และมีภาชนะรองรับน้ำดื่มที่สะอาด' },
-    { type: 'heading', text: 'การควบคุมมลพิษ' },
-    { num: '13', id: '17', text: 'สถานประกอบกิจการมีระบบบำบัดน้ำเสียที่เหมาะสม สภาพใช้งานได้ดี และมีการจัดการน้ำเสียที่ถูกสุขลักษณะ หรือได้มาตรฐานตามที่กฎหมายกำหนด' },
-    { num: '14', id: '18', text: 'สถานประกอบกิจการมีการป้องกันควบคุมระดับเสียงรบกวน เป็นไปตามประกาศกระทรวงสาธารณสุข หรือกฎหมายว่าด้วยโรงงาน' },
-    { num: '15', id: '19', text: 'สถานประกอบกิจการมีการป้องกันควบคุมฝุ่นละออง เป็นไปตามกฎหมายว่าด้วยโรงงาน หรือกฎหมายว่าด้วยการส่งเสริมและรักษาคุณภาพสิ่งแวดล้อม' },
-    { num: '16', id: '20', text: 'สถานประกอบกิจการมีการป้องกันควบคุมกลิ่นหรือไอสารเคมี เป็นไปตามกฎหมายว่าด้วยโรงงาน' },
-    { type: 'heading', text: 'ความปลอดภัยและอาชีวอนามัย' },
-    { num: '17', id: '21', text: 'อุปกรณ์ เครื่องมือ เครื่องจักร สายไฟ มีสภาพปลอดภัยต่อการใช้งาน มีการติดตั้งในลักษณะที่แข็งแรง มั่นคง ปลอดภัย โดยมีคำแนะนำในการป้องกันอันตราย และกรณีชำรุดต้องมีป้ายเตือน' },
-    { num: '18', id: '22', text: 'มีการจัดวางหรือการจัดเก็บอุปกรณ์ เครื่องมือ เครื่องจักร หรือสายไฟ ต้องเป็นระเบียบ ไม่กีดขวางทางเดินและการปฏิบัติงาน และมีการดูแล ตรวจสอบ บำรุงรักษาให้อยู่ในสภาพดีตลอดเวลา' },
-    { num: '19', id: '23', text: 'สถานประกอบกิจการมีการติดตั้งอุปกรณ์หรือเครื่องดับเพลิงอย่างเพียงพอ เหมาะสม สภาพดี พร้อมใช้งาน มีการฝึกซ้อมดับเพลิงและอพยพหนีไฟ หรือซ้อมแผนฉุกเฉิน' },
-    { num: '20', id: '24', text: 'สถานประกอบกิจการที่มีสารเคมีหรือวัตถุอันตราย ต้องจัดสถานที่ที่ปลอดภัยสำหรับจัดเก็บสารเคมีหรือวัตถุอันตราย มีป้ายแสดงชนิดหรือประเภทของสารเคมีหรือวัตถุอันตราย และเอกสารข้อมูลความปลอดภัย' },
-    { num: '21', id: '25', text: 'สถานประกอบกิจการที่มีความเสี่ยงจากการสัมผัสสารเคมี/วัตถุอันตราย ต้องจัดให้มีที่ชำระร่างกาย และที่ล้างตาฉุกเฉิน' },
-    { num: '22', id: '26', text: 'สถานประกอบกิจการมีอุปกรณ์คุ้มครองความปลอดภัยส่วนบุคคลสำหรับผู้ปฏิบัติงานที่เพียงพอ เหมาะสมตามลักษณะงาน' },
-    { num: '23', id: '27', text: 'สถานประกอบกิจการมีการตรวจสุขภาพผู้ปฏิบัติงาน ตามกฎหมายว่าด้วยความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน' },
-    { type: 'heading', text: 'การป้องกันเหตุรำคาญ' },
-    { num: '24', id: '28', text: 'สถานประกอบกิจการมีมาตรการควบคุมและป้องกันปัญหาเหตุรำคาญแก่ชุมชนและประชาชนที่อยู่ใกล้เคียง' },
-    { type: 'heading', text: 'การป้องกันควบคุมโรค' },
-    { num: '25', id: '29', text: 'สถานประกอบกิจการมีมาตรการป้องกันควบคุมโรคติดต่อตามหลักเกณฑ์ที่ราชการหรือกฎหมายกำหนด' },
-  ];
+  const machQty = insp?.machineCount !== undefined ? String(insp.machineCount) : '0';
+  const horsepower = insp?.horsepower !== undefined ? String(insp.horsepower) : '0';
+  const workingDays = insp?.workingDaysPerWeek !== undefined ? String(insp.workingDaysPerWeek) : '6';
+  const maleWorkers = insp?.maleWorkers ?? 0;
+  const femaleWorkers = insp?.femaleWorkers ?? 0;
+  const totalWorkers = maleWorkers + femaleWorkers;
+  const startTime = insp?.startTime || '08:00';
+  const endTime = insp?.endTime || '17:00';
+
+  const hadComplaints = insp?.hadComplaints === true;
+  const complaintCount = insp?.complaintCount ? (insp.complaintCount + ' ครั้ง') : '';
+  const complaintIssues = (insp?.complaintIssues && insp.complaintIssues.length > 0)
+    ? insp.complaintIssues.join(', ')
+    : '';
+  const complaintDetail = [complaintCount, complaintIssues].filter(Boolean).join(' ') || '......';
+
+  // Raw materials
+  const rawMaterials = insp?.rawMaterials || [];
+  const rawMatRows = Array.from({ length: Math.max(2, rawMaterials.length) }).map((_, i) => {
+    const item = rawMaterials[i];
+    return `
+      <tr>
+        <td width="5%">${i + 1})</td>
+        <td class="u" width="32%" align="center">${escapeHtml(item?.name || '-')}</td>
+        <td width="28%" align="right">ปริมาณที่ใช้ (ต่อปี/เดือน)&nbsp;&nbsp;</td>
+        <td class="u" width="35%" align="center">${escapeHtml(item?.monthlyQuantity || '-')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // Criteria Table
+  let criteriaRows = '';
+  OFFICIAL_25_CRITERIA.forEach((crit) => {
+    if (crit.isSubItemHeader) {
+      criteriaRows += `<tr><td colspan="6" style="background:#fafafa; font-weight:bold;">${crit.itemNumber} ${crit.title}</td></tr>`;
+    } else {
+      const ans = insp?.criteriaAnswers ? insp.criteriaAnswers[crit.id] : null;
+      const isYes = ans?.answer === 'yes';
+      const isNo = ans?.answer === 'no';
+      const isNa = ans?.answer === 'na';
+      const findings = ans?.findings || '';
+      const recommendations = ans?.recommendations || '';
+      const isSub = crit.itemNumber.includes('.');
+      const prefix = isSub ? '&nbsp;&nbsp;&nbsp;&nbsp;' : '';
+
+      criteriaRows += `
+        <tr>
+          <td valign="top">${prefix}${crit.itemNumber.replace('ข้อ ', '')}. ${crit.title}</td>
+          <td valign="middle" align="center">${isYes ? '<span class="chk">✓</span>' : ''}</td>
+          <td valign="middle" align="center">${isNo ? '<span class="chk">✓</span>' : ''}</td>
+          <td valign="middle" align="center">${isNa ? '<span class="chk">✓</span>' : ''}</td>
+          <td valign="top">${escapeHtml(findings)}</td>
+          <td valign="top">${escapeHtml(recommendations)}</td>
+        </tr>`;
+    }
+  });
+
+  const additionalNotes = insp?.additionalNotes || 
+    (insp?.overallResult === 'passed' ? 'ผ่านเกณฑ์มาตรฐานการประเมินสุขลักษณะสถานประกอบกิจการ' : (insp?.overallResult === 'needs_improvement' ? 'ควรปรับปรุงตามข้อเสนอแนะที่ระบุไว้ข้างต้น' : '-'));
+  const inspector = insp?.inspectorName || signers.inspectorName || 'พันจ่าเอกอานัส เด็นหมาด';
+  const inspectorPos = insp?.inspectorPosition || signers.inspectorPos || 'เจ้าพนักงานสาธารณสุขชำนาญงาน';
+  const inspectDate = license.approvalDate || new Date().toLocaleDateString('th-TH');
 
   let htmlContent = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -2149,7 +2017,7 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
         line-height: 1.1;
       }
       p { margin: 0 0 4pt 0; text-align: left; }
-      .chk { font-family: 'Segoe UI Symbol', 'Arial Unicode MS', sans-serif !important; }
+      .chk { font-family: 'Segoe UI Symbol', 'Arial Unicode MS', sans-serif !important; font-weight: bold; }
       .u { border-bottom: 1pt dotted #000; display: inline-block; padding: 0 5px; }
       .bold { font-weight: bold; }
     </style>
@@ -2164,69 +2032,69 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="30%" valign="top">1. สถานประกอบกิจการประเภท</td>
-          <td class="u" width="70%" valign="top">${bType}</td>
+          <td class="u" width="70%" valign="top">${escapeHtml(bType)}</td>
         </tr>
       </table>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="22%">2. ชื่อ-สกุลผู้ดำเนินกิจการ</td>
-          <td class="u" width="45%" align="center">${ownerName}</td>
+          <td class="u" width="45%" align="center">${escapeHtml(ownerName)}</td>
           <td width="10%">โทรศัพท์</td>
-          <td class="u" width="23%" align="center">${ownerPhone}</td>
+          <td class="u" width="23%" align="center">${escapeHtml(ownerPhone)}</td>
         </tr>
       </table>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="20%">ชื่อสถานประกอบกิจการ</td>
-          <td class="u" width="80%" align="center">${shopName}</td>
+          <td class="u" width="80%" align="center">${escapeHtml(shopName)}</td>
         </tr>
       </table>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="15%">ตั้งอยู่เลขที่</td>
-          <td class="u" width="15%" align="center">${addrNo}</td>
+          <td class="u" width="15%" align="center">${escapeHtml(addrNo)}</td>
           <td width="8%">หมู่ที่</td>
-          <td class="u" width="12%" align="center">${moo}</td>
+          <td class="u" width="12%" align="center">${escapeHtml(moo)}</td>
           <td width="8%">ถนน</td>
-          <td class="u" width="42%" align="center">${road}</td>
+          <td class="u" width="42%" align="center">${escapeHtml(road)}</td>
         </tr>
       </table>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="8%">ตำบล</td>
-          <td class="u" width="22%" align="center">${tumbon}</td>
+          <td class="u" width="22%" align="center">${escapeHtml(tumbon)}</td>
           <td width="8%">อำเภอ</td>
-          <td class="u" width="22%" align="center">${amphoe}</td>
+          <td class="u" width="22%" align="center">${escapeHtml(amphoe)}</td>
           <td width="8%">จังหวัด</td>
-          <td class="u" width="32%" align="center">${prov}</td>
+          <td class="u" width="32%" align="center">${escapeHtml(prov)}</td>
         </tr>
       </table>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="25%">โทรศัพท์สถานประกอบการ</td>
-          <td class="u" width="75%" align="center">${shopPhone}</td>
+          <td class="u" width="75%" align="center">${escapeHtml(shopPhone)}</td>
         </tr>
       </table>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px; margin-top: 4pt;">
         <tr>
           <td width="25%">3. ลักษณะอาคาร</td>
-          <td width="75%"><span class="chk">☑</span> อาคารโรงงาน/อาคารเอกเทศ &nbsp;&nbsp; <span class="chk">☐</span> อาคารพาณิชย์ &nbsp;&nbsp; <span class="chk">☐</span> อื่น ๆ</td>
+          <td width="75%"><span class="chk">${isFactory ? '☑' : '☐'}</span> อาคารโรงงาน/อาคารเอกเทศ &nbsp;&nbsp; <span class="chk">${isCommercial ? '☑' : '☐'}</span> อาคารพาณิชย์ &nbsp;&nbsp; <span class="chk">${isOther ? '☑' : '☐'}</span> อื่น ๆ</td>
         </tr>
       </table>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="30%">4. จำนวนเครื่องจักร/อุปกรณ์</td>
-          <td class="u" width="20%" align="center">1</td>
+          <td class="u" width="20%" align="center">${machQty}</td>
           <td width="5%">ตัว</td>
           <td width="20%">รวมกำลังแรงม้า</td>
-          <td class="u" width="20%" align="center">5</td>
+          <td class="u" width="20%" align="center">${horsepower}</td>
           <td width="5%">HP</td>
         </tr>
       </table>
@@ -2234,7 +2102,7 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="28%">5. จำนวนวันทำงานต่อสัปดาห์</td>
-          <td class="u" width="15%" align="center">6</td>
+          <td class="u" width="15%" align="center">${workingDays}</td>
           <td width="57%">วัน/สัปดาห์</td>
         </tr>
       </table>
@@ -2242,13 +2110,13 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 15px;">
         <tr>
           <td width="25%">6. จำนวนคนงานทั้งหมด</td>
-          <td class="u" width="15%" align="center">2</td>
+          <td class="u" width="15%" align="center">${totalWorkers}</td>
           <td width="10%">คน</td>
           <td width="15%">คนงานชาย</td>
-          <td class="u" width="12%" align="center">2</td>
+          <td class="u" width="12%" align="center">${maleWorkers}</td>
           <td width="8%">คน</td>
           <td width="15%">คนงานหญิง</td>
-          <td class="u" width="12%" align="center">0</td>
+          <td class="u" width="12%" align="center">${femaleWorkers}</td>
           <td width="8%">คน</td>
         </tr>
       </table>
@@ -2257,33 +2125,22 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
         <tr>
           <td width="20%">7. ช่วงเวลาทำงาน</td>
           <td width="12%">ตั้งแต่เวลา</td>
-          <td class="u" width="15%" align="center">08:00</td>
+          <td class="u" width="15%" align="center">${startTime}</td>
           <td width="8%">ถึงเวลา</td>
-          <td class="u" width="15%" align="center">17:00</td>
+          <td class="u" width="15%" align="center">${endTime}</td>
           <td width="10%">น.</td>
         </tr>
       </table>
 
       <p style="margin-top: 6pt;">8. ในรอบปีที่ผ่านมา สถานประกอบกิจการเคยถูกร้องเรียนก่อปัญหาเหตุรำคาญหรือมลพิษสิ่งแวดล้อม</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 20px;">
-        <tr><td colspan="3"><span class="chk">☑</span> ไม่เคย</td></tr>
-        <tr><td colspan="3"><span class="chk">☐</span> เคย จำนวน <span class="u">......</span> ครั้ง ระบุเรื่อง/ประเด็นที่ถูกร้องเรียน</td></tr>
+        <tr><td colspan="3"><span class="chk">${!hadComplaints ? '☑' : '☐'}</span> ไม่เคย</td></tr>
+        <tr><td colspan="3"><span class="chk">${hadComplaints ? '☑' : '☐'}</span> เคย จำนวน <span class="u">${escapeHtml(complaintDetail)}</span></td></tr>
       </table>
 
       <p class="bold" style="margin-top: 12pt;">ส่วนที่ 2 วัตถุดิบและสารเคมีที่ใช้ในกระบวนการผลิต (ระบุชนิดและปริมาณ/เดือน)</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-left: 20px; margin-bottom: 12pt;">
-        <tr>
-          <td width="5%">1)</td>
-          <td class="u" width="32%" align="center">น้ำมันหล่อลื่น / จาระบี</td>
-          <td width="28%" align="right">ปริมาณที่ใช้ (ต่อปี/เดือน)&nbsp;&nbsp;</td>
-          <td class="u" width="35%" align="center">20 ลิตร</td>
-        </tr>
-        <tr>
-          <td width="5%">2)</td>
-          <td class="u" width="32%" align="center">-</td>
-          <td width="28%" align="right">ปริมาณที่ใช้ (ต่อปี/เดือน)&nbsp;&nbsp;</td>
-          <td class="u" width="35%" align="center">-</td>
-        </tr>
+        ${rawMatRows}
       </table>
       
       <p class="bold">ส่วนที่ 3 รายการตรวจสอบสุขลักษณะสถานประกอบกิจการ</p>
@@ -2299,31 +2156,11 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
           <th width="7%" style="background:#f2f2f2; text-align:center;">ไม่ใช่</th>
           <th width="7%" style="background:#f2f2f2; text-align:center; font-size:12pt;">ไม่เกี่ยวข้อง</th>
         </tr>
-  `;
-
-  ministryQuestions.forEach((item) => {
-    if (item.type === 'heading') {
-      htmlContent += `<tr><td colspan="6" style="background:#fafafa; font-weight:bold;">${item.text}</td></tr>`;
-    } else {
-      const isHeader = item.num === '8';
-      const chkYes = isHeader ? '' : '<span class="chk">✓</span>';
-      htmlContent += `
-        <tr>
-          <td valign="top">${item.num}. ${item.text}</td>
-          <td valign="middle" align="center">${chkYes}</td>
-          <td valign="middle" align="center"></td>
-          <td valign="middle" align="center"></td>
-          <td valign="top"></td>
-          <td valign="top"></td>
-        </tr>`;
-    }
-  });
-
-  htmlContent += `
+        ${criteriaRows}
       </table>
 
       <p class="bold" style="margin-top: 15pt;">ข้อเสนอแนะ/สรุปผลการตรวจประเมิน:</p>
-      <div class="u" style="width: 100%; min-height: 40pt;">ผ่านเกณฑ์มาตรฐานการประเมินสุขลักษณะสถานประกอบกิจการ</div>
+      <div class="u" style="width: 100%; min-height: 40pt;">${escapeHtml(additionalNotes)}</div>
       
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 40pt;">
         <tr>
@@ -2337,17 +2174,17 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
               </tr>
               <tr>
                 <td></td>
-                <td align="center" style="padding-top: 5pt;">( ${inspector} )</td>
+                <td align="center" style="padding-top: 5pt;">( ${escapeHtml(inspector)} )</td>
                 <td></td>
               </tr>
               <tr>
                 <td align="left" style="padding-top: 5pt;">ตำแหน่ง</td>
-                <td align="center" style="padding-top: 5pt;">${inspectorPos}</td>
+                <td align="center" style="padding-top: 5pt;">${escapeHtml(inspectorPos)}</td>
                 <td></td>
               </tr>
               <tr>
                 <td align="left" style="padding-top: 5pt;">วันที่ตรวจ</td>
-                <td class="u" align="center" style="padding-top: 5pt;">${inspectDate}</td>
+                <td class="u" align="center" style="padding-top: 5pt;">${escapeHtml(inspectDate)}</td>
                 <td></td>
               </tr>
             </table>
@@ -2367,6 +2204,192 @@ export function exportInspectionReportWord(license: LicenseRecord, signers: Sign
   link.href = URL.createObjectURL(blob);
   const safeName = shopName.replace(/[\\/:"*?<>|]/g, '');
   link.setAttribute('download', `แบบพิมพ์รายงาน_${safeName.trim()}.doc`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Direct Excel (.xls) export of 25-criteria Inspection Report
+ */
+export function exportInspectionReportExcel(license: LicenseRecord, signers: SignerSettings) {
+  const insp = license.inspectionData;
+  const bName = insp?.businessName || license.businessName || '-';
+  const owner = insp?.ownerName || license.ownerName || '-';
+  const phone = insp?.ownerPhone || insp?.businessPhone || license.businessPhone || license.ownerPhone || '-';
+  const bType = (insp?.selectedCategories && insp.selectedCategories.length > 0)
+    ? insp.selectedCategories.join(', ')
+    : (license.businessCategory || '-');
+  const addrNo = insp?.addressNo || license.businessAddressNo || license.ownerAddressNo || '-';
+  const moo = insp?.moo || license.businessMoo || license.ownerMoo || '-';
+  const road = insp?.road || license.businessRoad || ((license.ownerRoad && license.ownerRoad !== '-') ? license.ownerRoad : '-');
+  const tumbon = insp?.subdistrict || license.businessSubdistrict || 'บางเป้า';
+  const amphoe = insp?.district || license.businessDistrict || 'กันตัง';
+  const changwat = insp?.province || license.businessProvince || 'ตรัง';
+  const inspector = insp?.inspectorName || signers.inspectorName || 'พันจ่าเอกอานัส เด็นหมาด';
+  const inspectorPos = insp?.inspectorPosition || signers.inspectorPos || 'เจ้าพนักงานสาธารณสุขชำนาญงาน';
+  const inspectDate = license.approvalDate || new Date().toLocaleDateString('th-TH');
+
+  const criteriaRows = OFFICIAL_25_CRITERIA.map((crit) => {
+    if (crit.isSubItemHeader) {
+      return `
+        <tr style="background-color: #f1f5f9; font-weight: bold;">
+          <td colspan="7" style="padding: 6px 8px; border: 1px solid #cbd5e1;">${crit.itemNumber} ${crit.title}</td>
+        </tr>
+      `;
+    }
+    const ans = insp?.criteriaAnswers ? insp.criteriaAnswers[crit.id] : null;
+    const isYes = ans?.answer === 'yes' ? '✓' : '';
+    const isNo = ans?.answer === 'no' ? '✓' : '';
+    const isNa = ans?.answer === 'na' ? '✓' : '';
+    const findings = ans?.findings || '';
+    const recommendations = ans?.recommendations || '';
+    return `
+      <tr>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold;">${crit.itemNumber}</td>
+        <td style="border: 1px solid #cbd5e1;">${crit.title}</td>
+        <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; color: #166534;">${isYes}</td>
+        <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; color: #991b1b;">${isNo}</td>
+        <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; color: #475569;">${isNa}</td>
+        <td style="border: 1px solid #cbd5e1;">${escapeHtml(findings)}</td>
+        <td style="border: 1px solid #cbd5e1;">${escapeHtml(recommendations)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const rawMaterials = insp?.rawMaterials || [];
+  const rawMatRows = rawMaterials.length > 0 
+    ? rawMaterials.map((m, idx) => `
+        <tr>
+          <td style="border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
+          <td colspan="3" style="border: 1px solid #cbd5e1;">${escapeHtml(m.name || '-')}</td>
+          <td colspan="3" style="border: 1px solid #cbd5e1;">${escapeHtml(m.monthlyQuantity || '-')}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="7" style="border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">- ไม่มีข้อมูลวัตถุดิบและสารเคมี -</td></tr>`;
+
+  const excelContent = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta charset="utf-8">
+      <!--[if gte mso 9]>
+      <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>รายงานผลการตรวจสุขลักษณะ</x:Name>
+              <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+      </xml>
+      <![endif]-->
+      <style>
+        body, table, td, th { font-family: 'Sarabun', 'TH SarabunPSK', sans-serif; font-size: 13px; }
+        .title { font-size: 16px; font-weight: bold; text-align: center; color: #0f172a; }
+        .section-header { background-color: #047857; color: #ffffff; font-weight: bold; font-size: 14px; }
+        .table-header { background-color: #e2e8f0; font-weight: bold; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+        <tr>
+          <td colspan="7" class="title" style="padding: 12px; background-color: #ecfdf5; border: 1px solid #059669;">
+            แบบประเมินมาตรฐานการจัดการอนามัยสิ่งแวดล้อมสำหรับสถานประกอบกิจการที่เป็นอันตรายต่อสุขภาพ<br>
+            เทศบาลตำบลบางเป้า อำเภอกันตัง จังหวัดตรัง
+          </td>
+        </tr>
+        <tr><td colspan="7" style="border: none; height: 10px;"></td></tr>
+        <tr class="section-header">
+          <td colspan="7" style="padding: 8px;">ส่วนที่ 1 ข้อมูลทั่วไปของสถานประกอบกิจการ</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">ชื่อสถานประกอบการ</td>
+          <td colspan="3" style="border: 1px solid #cbd5e1;">${escapeHtml(bName)}</td>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">ประเภทกิจการ</td>
+          <td colspan="2" style="border: 1px solid #cbd5e1;">${escapeHtml(bType)}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">ผู้ดำเนินกิจการ</td>
+          <td colspan="3" style="border: 1px solid #cbd5e1;">${escapeHtml(owner)}</td>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">โทรศัพท์</td>
+          <td colspan="2" style="border: 1px solid #cbd5e1;">${escapeHtml(phone)}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">ที่ตั้ง</td>
+          <td colspan="6" style="border: 1px solid #cbd5e1;">เลขที่ ${escapeHtml(addrNo)} หมู่ที่ ${escapeHtml(moo)} ถนน ${escapeHtml(road)} ตำบล ${escapeHtml(tumbon)} อำเภอ ${escapeHtml(amphoe)} จังหวัด ${escapeHtml(changwat)}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">ลักษณะอาคาร</td>
+          <td colspan="3" style="border: 1px solid #cbd5e1;">${escapeHtml(insp?.buildingType || '-')} ${escapeHtml(insp?.buildingDetails || '')}</td>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">เครื่องจักร/แรงม้า</td>
+          <td colspan="2" style="border: 1px solid #cbd5e1;">${insp?.machineCount || 0} เครื่อง / ${insp?.horsepower || 0} แรงม้า</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">จำนวนคนงาน</td>
+          <td colspan="3" style="border: 1px solid #cbd5e1;">รวม ${(insp?.maleWorkers || 0) + (insp?.femaleWorkers || 0)} คน (ชาย ${insp?.maleWorkers || 0}, หญิง ${insp?.femaleWorkers || 0})</td>
+          <td style="font-weight: bold; background: #f8fafc; border: 1px solid #cbd5e1;">วันเวลาทำงาน</td>
+          <td colspan="2" style="border: 1px solid #cbd5e1;">${insp?.workingDaysPerWeek || 6} วัน/สัปดาห์ (${insp?.startTime || '08:00'} - ${insp?.endTime || '17:00'} น.)</td>
+        </tr>
+
+        <tr><td colspan="7" style="border: none; height: 10px;"></td></tr>
+        <tr class="section-header">
+          <td colspan="7" style="padding: 8px;">ส่วนที่ 2 วัตถุดิบและสารเคมีที่ใช้ในกระบวนการผลิต</td>
+        </tr>
+        <tr class="table-header">
+          <th style="width: 8%; border: 1px solid #cbd5e1;">ลำดับ</th>
+          <th colspan="3" style="width: 52%; border: 1px solid #cbd5e1;">ชนิดวัตถุดิบ/สารเคมี</th>
+          <th colspan="3" style="width: 40%; border: 1px solid #cbd5e1;">ปริมาณที่ใช้ (ต่อปี/เดือน)</th>
+        </tr>
+        ${rawMatRows}
+
+        <tr><td colspan="7" style="border: none; height: 10px;"></td></tr>
+        <tr class="section-header">
+          <td colspan="7" style="padding: 8px;">ส่วนที่ 3 รายการตรวจสอบสุขลักษณะสถานประกอบกิจการ (25 ข้อ)</td>
+        </tr>
+        <tr class="table-header">
+          <th style="width: 8%; border: 1px solid #cbd5e1;">ข้อที่</th>
+          <th style="width: 42%; border: 1px solid #cbd5e1;">รายการประเมินสุขลักษณะ</th>
+          <th style="width: 8%; border: 1px solid #cbd5e1;">ใช่</th>
+          <th style="width: 8%; border: 1px solid #cbd5e1;">ไม่ใช่</th>
+          <th style="width: 10%; border: 1px solid #cbd5e1;">ไม่เกี่ยวข้อง</th>
+          <th style="width: 12%; border: 1px solid #cbd5e1;">ข้อเท็จจริงที่พบ</th>
+          <th style="width: 12%; border: 1px solid #cbd5e1;">คำแนะนำ</th>
+        </tr>
+        ${criteriaRows}
+
+        <tr><td colspan="7" style="border: none; height: 10px;"></td></tr>
+        <tr class="section-header">
+          <td colspan="7" style="padding: 8px;">ข้อเสนอแนะ / สรุปผลการประเมิน</td>
+        </tr>
+        <tr>
+          <td colspan="7" style="padding: 10px; border: 1px solid #cbd5e1; background-color: #fafafa;">
+            ${escapeHtml(insp?.additionalNotes || (insp?.overallResult === 'passed' ? 'สถานประกอบการผ่านเกณฑ์มาตรฐานการตรวจประเมินสุขลักษณะขั้นพื้นฐาน' : '-'))}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="4" style="border: none;"></td>
+          <td colspan="3" style="border: 1px solid #cbd5e1; padding: 10px; background-color: #f8fafc; text-align: center;">
+            ลงชื่อ ..................................................... ผู้ตรวจประเมิน<br>
+            ( ${escapeHtml(inspector)} )<br>
+            ตำแหน่ง ${escapeHtml(inspectorPos)}<br>
+            วันที่ตรวจ ${escapeHtml(inspectDate)}
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + excelContent], {
+    type: 'application/vnd.ms-excel;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const safeName = bName.replace(/[\\/:"*?<>|]/g, '').trim();
+  link.setAttribute('download', `รายงานผลตรวจ_${safeName}.xls`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
