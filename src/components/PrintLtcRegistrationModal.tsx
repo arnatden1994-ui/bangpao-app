@@ -55,6 +55,31 @@ export const THAI_MONTHS_SHORT = [
   'ธ.ค.',
 ];
 
+// Helper: ทำความสะอาดข้อความการจัดสรรให้เหมาะสมกับรอบที่พิมพ์ ตัด [ปี 2569] และ รอบ X: ออก
+export function cleanAllocationTextForRound(text: string, targetRound?: string): string {
+  if (!text) return '-';
+  let cleaned = text.trim();
+
+  // กรณีมีแยกท่อนด้วย | เช่น "[ปี 2569] รอบ 1: ผ้าอ้อม (100 ชิ้น) | รอบ 2: ผ้าอ้อม (200 ชิ้น)"
+  if (targetRound && cleaned.includes('|')) {
+    const parts = cleaned.split('|');
+    const matchedPart = parts.find((p) => {
+      const rMatch = p.match(/รอบ\s*(?:ที่)?\s*([0-9]+|urgent)/i);
+      return rMatch && rMatch[1] === String(targetRound);
+    });
+    if (matchedPart) {
+      cleaned = matchedPart.trim();
+    }
+  }
+
+  // ลบ [ปี 2569] หรือ [ปี 2570]
+  cleaned = cleaned.replace(/\[\s*ปี\s*\d+\s*\]\s*/gi, '');
+  // ลบ "รอบ X:" หรือ "รอบที่ X:"
+  cleaned = cleaned.replace(/รอบ\s*(?:ที่)?\s*(?:[0-9]+|urgent)\s*:\s*/gi, '');
+
+  return cleaned.trim() || '-';
+}
+
 // Helper: ดึงจำนวนผ้าอ้อมจาก allocationText หรือข้อมูล roundItems
 export function extractDiaperQuantity(
   allocationText: string,
@@ -62,44 +87,90 @@ export function extractDiaperQuantity(
   fiscalYear?: string,
   round?: string
 ): number {
+  // 1. ตรวจสอบจากโครงสร้างข้อมูล roundItems ของ patient ก่อน (มีความแม่นยำสูงที่สุด)
   if (patient) {
     const items: LtcRoundItem[] =
       (fiscalYear && round && patient.yearRoundItems?.[fiscalYear]?.[round]) ||
       (round && patient.roundItems?.[round]) ||
-      patient.roundItems?.['1'] ||
+      (round && patient.yearRoundItems?.[fiscalYear || '2569']?.[round]) ||
       [];
-    const diaperItem = items.find((i) => i.itemName?.includes('ผ้าอ้อม'));
-    if (diaperItem && diaperItem.quantity > 0) {
-      return diaperItem.quantity;
+
+    if (items.length > 0) {
+      const diaperItem = items.find((i) => {
+        const n = (i.itemName || '').toLowerCase();
+        return n.includes('ผ้าอ้อม') || (/(?:xxl|2xl|xl|size\s*[sml])/i.test(n) && !n.includes('รองซับ') && !n.includes('นม'));
+      });
+      if (diaperItem && diaperItem.quantity > 0) {
+        return diaperItem.quantity;
+      }
+      // หากในรอบนั้นมีรายการระบุชัดเจน แต่ไม่มีผ้าอ้อมเลย (เช่น ได้แต่นม หรือแผ่นรองซับ) -> 0 ชิ้นแน่นอน
+      const hasOnlyMilkOrUnderpad = items.every((i) => {
+        const n = (i.itemName || '').toLowerCase();
+        return n.includes('นม') || n.includes('รองซับ') || n.includes('อาหารเสริม');
+      });
+      if (hasOnlyMilkOrUnderpad) {
+        return 0;
+      }
     }
   }
 
   if (!allocationText) return 0;
-  const clean = allocationText.trim();
+  let clean = allocationText.trim();
 
-  // หากขึ้นต้นด้วย นม และไม่มีคำว่าผ้าอ้อม ถือว่าไม่มีผ้าอ้อม (0 ชิ้น)
-  if (/^นม/i.test(clean) && !/ผ้าอ้อม/i.test(clean)) {
+  // ลบ [ปี ....] และ รอบ ...: ออกก่อนเสมอ เพื่อไม่ให้จับตัวเลขปี พ.ศ. 2569 หรือเลขรอบผิด
+  clean = clean.replace(/\[\s*ปี\s*\d+\s*\]/gi, '').trim();
+  clean = clean.replace(/รอบ\s*(?:ที่)?\s*(?:[0-9]+|urgent)\s*:\s*/gi, '').trim();
+
+  // หากขึ้นต้นด้วย นม หรืออาหารเสริม หรือแผ่นรองซับ และไม่มีคำว่าผ้าอ้อม ถือว่าไม่มีผ้าอ้อม (0 ชิ้น)
+  const hasDiaperKeyword = /ผ้าอ้อม/i.test(clean);
+  const hasSizeKeyword = /\b(?:2XL|XXL|XL|M|L|S)\b/i.test(clean);
+  const isOnlyNonDiaper = /^(?:นม|อาหารเสริม|แผ่นรองซับ)/i.test(clean) && !hasDiaperKeyword;
+  if (isOnlyNonDiaper) {
+    return 0;
+  }
+  if (!hasDiaperKeyword && !hasSizeKeyword && !/ชิ้น/i.test(clean)) {
     return 0;
   }
 
-  // รูปแบบ "M 390 ชิ้น", "L 310 / นม", "390 ชิ้น", "30 ชิ้น", "2XL 350"
-  const match = clean.match(/(?:(?:2XL|XXL|XL|M|L|S)\s+)?(\d+)(?:\s*ชิ้น)?/i);
-  if (match && match[1]) {
-    const num = parseInt(match[1], 10);
-    if (!isNaN(num) && !clean.startsWith('นม')) {
-      return num;
-    }
+  // แบบที่ 1: "ผ้าอ้อม... (324 ชิ้น)" หรือ "ผ้าอ้อมสำหรับเด็ก ขนาด XXL (324 ชิ้น)"
+  const diaperPattern = /ผ้าอ้อม[^(0-9)]*\(?(?:ขนาด\s*)?(?:[2XSLM]+)?\)?\s*\(?(\d+)\s*ชิ้น\)?/i;
+  const match1 = clean.match(diaperPattern);
+  if (match1 && match1[1]) {
+    const num = parseInt(match1[1], 10);
+    if (!isNaN(num) && num > 0 && num < 2000) return num;
+  }
+
+  // แบบที่ 2: ตัวเลขตามด้วยคำว่า ชิ้น เช่น "390 ชิ้น", "200 ชิ้น", "(324 ชิ้น)"
+  const matchPiece = clean.match(/(\d+)\s*ชิ้น/i);
+  if (matchPiece && matchPiece[1]) {
+    const num = parseInt(matchPiece[1], 10);
+    if (!isNaN(num) && num > 0 && num < 2000) return num;
+  }
+
+  // แบบที่ 3: รูปแบบ Size ตามด้วยตัวเลข เช่น "M 390", "2XL 350", "L 310"
+  const matchSize = clean.match(/(?:2XL|XXL|XL|M|L|S)\s*\(?(\d+)\)?/i);
+  if (matchSize && matchSize[1]) {
+    const num = parseInt(matchSize[1], 10);
+    if (!isNaN(num) && num > 0 && num < 2000) return num;
+  }
+
+  // แบบที่ 4: ตัวเลขในวงเล็บ เช่น "(324)" หรือ "(390)"
+  const matchParen = clean.match(/\((\d+)\)/);
+  if (matchParen && matchParen[1]) {
+    const num = parseInt(matchParen[1], 10);
+    if (!isNaN(num) && num > 0 && num < 2000) return num;
   }
 
   return 0;
 }
 
-// Helper: คำนวณวันสิ้นสุดโครงการตามสูตร "ผ้าอ้อม 3 ชิ้นต่อวัน" (เช่น แจก 30 ชิ้น ใช้ได้ 10 วัน)
+// Helper: คำนวณวันสิ้นสุดโครงการตามสูตร "ผ้าอ้อม 3 ชิ้นต่อวัน" (เช่น แจก 30 ชิ้น ใช้ได้ 10 วัน, 390 ชิ้น = 130 วัน)
 export function computeLtcEndDate(
   diaperQty: number,
   baseDateInput: string | Date,
   formatStyle: 'day_month' | 'short_year' | 'full_year' = 'day_month'
 ): { endDateText: string; days: number } {
+  // หากไม่ได้รับผ้าอ้อม (diaperQty <= 0) ไม่ต้องใส่วันที่สิ้นสุดโครงการ ให้แสดงเป็น '-'
   if (diaperQty <= 0) {
     return { endDateText: '-', days: 0 };
   }
@@ -153,25 +224,21 @@ export function formatShortLtcAddress(patient: LtcPatient): string {
   return addr || '-';
 }
 
-// Helper: แปลงรายการสิ่งของที่จัดสรรให้เป็นรหัสย่อตามไฟล์ต้นฉบับ เช่น "M 390 ชิ้น", "L 310 / นม", "นม 3", "2XL 350 / นม"
+// Helper: แปลงรายการสิ่งของที่จัดสรรให้เป็นรหัสย่อตามไฟล์ต้นฉบับ เช่น "ผ้าอ้อม (XXL 324 ชิ้น)", "ผ้าอ้อมผู้ใหญ่ (M 390 ชิ้น)", "นมผง (3 กระป๋อง)"
 export function formatShortLtcAllocation(
   patient: LtcPatient,
   fiscalYear: string,
   round: string
 ): string {
-  if (patient.allocationText && patient.allocationText.trim()) {
-    return patient.allocationText.trim();
-  }
-
   const items: LtcRoundItem[] =
     patient.yearRoundItems?.[fiscalYear]?.[round] ||
     patient.roundItems?.[round] ||
-    patient.roundItems?.['1'] ||
     [];
 
   if (items.length > 0) {
     let diaperPart = '';
     let milkQty = 0;
+    const others: string[] = [];
 
     for (const item of items) {
       const name = item.itemName || '';
@@ -182,26 +249,33 @@ export function formatShortLtcAllocation(
         else if (/L/i.test(name)) size = 'L';
         else if (/M/i.test(name)) size = 'M';
         else if (/S/i.test(name)) size = 'S';
-        diaperPart = size ? `${size} ${item.quantity}` : `${item.quantity}`;
+        diaperPart = size ? `ผ้าอ้อม (${size} ${item.quantity} ชิ้น)` : `ผ้าอ้อม (${item.quantity} ชิ้น)`;
       } else if (name.includes('นม')) {
         milkQty += item.quantity || 0;
+      } else {
+        others.push(`${item.itemName} (${item.quantity} ${item.unit || 'ชิ้น'})`);
       }
     }
 
-    if (diaperPart && milkQty > 0) {
-      return `${diaperPart} / นม`;
-    }
-    if (diaperPart) {
-      return diaperPart;
-    }
-    if (milkQty > 0) {
-      return `นม ${milkQty}`;
-    }
+    const parts: string[] = [];
+    if (diaperPart) parts.push(diaperPart);
+    if (milkQty > 0) parts.push(`นมผง (${milkQty} กระป๋อง)`);
+    if (others.length > 0) parts.push(...others);
 
-    return items.map((i) => `${i.itemName} ${i.quantity} ${i.unit}`).join(', ');
+    if (parts.length > 0) {
+      return parts.join(', ');
+    }
   }
 
-  return patient.equipmentNeeded || '-';
+  if (patient.allocationText && patient.allocationText.trim()) {
+    return cleanAllocationTextForRound(patient.allocationText, round);
+  }
+
+  if (patient.equipmentNeeded && patient.equipmentNeeded.trim()) {
+    return cleanAllocationTextForRound(patient.equipmentNeeded, round);
+  }
+
+  return '-';
 }
 
 export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps> = ({
@@ -265,21 +339,13 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
 
   useEffect(() => {
     const mapped: LtcRegistrationRow[] = sourcePatients.map((p, idx) => {
-      const alloc =
-        idx === 0 && formatShortLtcAllocation(p, fiscalYear, round) === 'M 390'
-          ? 'M 390 ชิ้น'
-          : formatShortLtcAllocation(p, fiscalYear, round);
-
-      let endNote = p.projectEndDateNote || '';
-      if (!endNote) {
-        const diaperQty = extractDiaperQuantity(alloc, p, fiscalYear, round);
-        endNote = computeLtcEndDate(diaperQty, calcBaseDate, yearFormat).endDateText;
-      } else if (yearFormat !== 'day_month' && endNote !== '-') {
-        const diaperQty = extractDiaperQuantity(alloc, p, fiscalYear, round);
-        if (diaperQty > 0) {
-          endNote = computeLtcEndDate(diaperQty, calcBaseDate, yearFormat).endDateText;
-        }
-      }
+      const alloc = formatShortLtcAllocation(p, fiscalYear, round);
+      const diaperQty = extractDiaperQuantity(alloc, p, fiscalYear, round);
+      // คำนวณวันสิ้นสุดโครงการจากจำนวนผ้าอ้อมจริงของแต่ละรายในรอบนี้
+      // กรณีไม่ได้รับผ้าอ้อม (diaperQty <= 0) หรือได้แต่นมผง ไม่ต้องใส่ ให้แสดงเป็น '-'
+      const endNote = diaperQty > 0
+        ? computeLtcEndDate(diaperQty, calcBaseDate, yearFormat).endDateText
+        : '-';
 
       return {
         id: p.id,
@@ -289,11 +355,11 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
         allocationText: alloc,
         signature1: '',
         signature2: '',
-        projectEndDateNote: endNote || '-',
+        projectEndDateNote: endNote,
       };
     });
     setRows(mapped);
-  }, [sourcePatients, fiscalYear, round]);
+  }, [sourcePatients, fiscalYear, round, calcBaseDate, yearFormat]);
 
   // ฟังก์ชันคำนวณวันสิ้นสุดโครงการใหม่อัตโนมัติทุกรายชื่อตามสูตร 3 ชิ้น/วัน
   const handleAutoCalculateAllEndDates = (
@@ -304,7 +370,7 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
       prev.map((row) => {
         const patient = sourcePatients.find((p) => p.id === row.id);
         const diaperQty = extractDiaperQuantity(row.allocationText, patient, fiscalYear, round);
-        const { endDateText, days } = computeLtcEndDate(diaperQty, targetBaseDate, targetFormat);
+        const { endDateText } = computeLtcEndDate(diaperQty, targetBaseDate, targetFormat);
         return {
           ...row,
           projectEndDateNote: endDateText,
@@ -361,16 +427,23 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
   };
 
   const handleResetRows = () => {
-    const mapped: LtcRegistrationRow[] = sourcePatients.map((p, idx) => ({
-      id: p.id,
-      orderNo: idx + 1,
-      fullName: p.fullName || '',
-      shortAddress: formatShortLtcAddress(p),
-      allocationText: formatShortLtcAllocation(p, fiscalYear, round),
-      signature1: '',
-      signature2: '',
-      projectEndDateNote: p.projectEndDateNote || '-',
-    }));
+    const mapped: LtcRegistrationRow[] = sourcePatients.map((p, idx) => {
+      const alloc = formatShortLtcAllocation(p, fiscalYear, round);
+      const diaperQty = extractDiaperQuantity(alloc, p, fiscalYear, round);
+      const endNote = diaperQty > 0
+        ? computeLtcEndDate(diaperQty, calcBaseDate, yearFormat).endDateText
+        : '-';
+      return {
+        id: p.id,
+        orderNo: idx + 1,
+        fullName: p.fullName || '',
+        shortAddress: formatShortLtcAddress(p),
+        allocationText: alloc,
+        signature1: '',
+        signature2: '',
+        projectEndDateNote: endNote,
+      };
+    });
     setRows(mapped);
   };
 
@@ -744,7 +817,13 @@ export const PrintLtcRegistrationModal: React.FC<PrintLtcRegistrationModalProps>
               <input
                 type="date"
                 value={calcBaseDate}
-                onChange={(e) => setCalcBaseDate(e.target.value)}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setCalcBaseDate(newDate);
+                  if (newDate) {
+                    handleAutoCalculateAllEndDates(yearFormat, newDate);
+                  }
+                }}
                 className="bg-slate-800 text-white text-xs px-2 py-0.5 rounded border border-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
