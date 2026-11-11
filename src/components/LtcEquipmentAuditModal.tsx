@@ -18,6 +18,8 @@ import {
   FileText,
   User,
   ExternalLink,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import {
   LtcPatient,
@@ -52,13 +54,17 @@ export type FastEquipmentType =
   | 'oxygen'
   | 'walker';
 
-export interface AuditPatientItem {
-  patient: LtcPatient;
-  equipmentType: FastEquipmentType;
+export interface PatientEquipmentItem {
+  type: FastEquipmentType;
   equipmentName: string;
   assetCode: string;
   existingLoanId?: string;
   loanDate: string;
+}
+
+export interface AuditPatientItem {
+  patient: LtcPatient;
+  equipments: PatientEquipmentItem[];
 }
 
 const EQUIPMENT_OPTIONS: {
@@ -69,6 +75,7 @@ const EQUIPMENT_OPTIONS: {
   icon: string;
   defaultPrefix: string;
   color: string;
+  activeColor: string;
 }[] = [
   {
     type: 'none',
@@ -78,6 +85,7 @@ const EQUIPMENT_OPTIONS: {
     icon: '❌',
     defaultPrefix: '',
     color: 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200',
+    activeColor: 'bg-slate-700 text-white border-slate-800 shadow-sm',
   },
   {
     type: 'bed',
@@ -86,7 +94,8 @@ const EQUIPMENT_OPTIONS: {
     category: 'bed',
     icon: '🛏️',
     defaultPrefix: 'ทต.บป.BED',
-    color: 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100',
+    color: 'bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100',
+    activeColor: 'bg-indigo-700 text-white border-indigo-800 shadow-sm ring-2 ring-indigo-400',
   },
   {
     type: 'wheelchair',
@@ -95,7 +104,8 @@ const EQUIPMENT_OPTIONS: {
     category: 'wheelchair',
     icon: '♿',
     defaultPrefix: 'ทต.บป.WCH',
-    color: 'bg-sky-50 text-sky-800 border-sky-300 hover:bg-sky-100',
+    color: 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100',
+    activeColor: 'bg-sky-700 text-white border-sky-800 shadow-sm ring-2 ring-sky-400',
   },
   {
     type: 'air_mattress',
@@ -104,7 +114,8 @@ const EQUIPMENT_OPTIONS: {
     category: 'air_mattress',
     icon: '💨',
     defaultPrefix: 'ทต.บป.MAT',
-    color: 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100',
+    color: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100',
+    activeColor: 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-400',
   },
   {
     type: 'oxygen',
@@ -113,7 +124,8 @@ const EQUIPMENT_OPTIONS: {
     category: 'oxygen_concentrator',
     icon: '🫁',
     defaultPrefix: 'ทต.บป.OXY',
-    color: 'bg-teal-50 text-teal-800 border-teal-300 hover:bg-teal-100',
+    color: 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100',
+    activeColor: 'bg-teal-700 text-white border-teal-800 shadow-sm ring-2 ring-teal-400',
   },
   {
     type: 'walker',
@@ -122,7 +134,8 @@ const EQUIPMENT_OPTIONS: {
     category: 'walker',
     icon: '🦯',
     defaultPrefix: 'ทต.บป.WLK',
-    color: 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100',
+    color: 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100',
+    activeColor: 'bg-amber-700 text-white border-amber-800 shadow-sm ring-2 ring-amber-400',
   },
 ];
 
@@ -143,22 +156,25 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'borrowing' | 'none'>('all');
   const [printLoanTarget, setPrintLoanTarget] = useState<EquipmentLoan | null>(null);
 
-  // Initialize Audit Items based on patients and existing active loans
+  // Initialize Audit Items based on patients and existing active loans (supporting multi-borrowing!)
   const [auditItems, setAuditItems] = useState<AuditPatientItem[]>(() => {
     return patients.map((pt) => {
-      // Find if this patient already has an active loan in loans
-      const activeLoan = loans.find(
+      // Find ALL active loans for this patient in loans
+      const activeLoans = loans.filter(
         (l) =>
           (l.status === 'borrowed' || l.status === 'approved') &&
           ((l.patientIdCard && pt.idCard && l.patientIdCard === pt.idCard) ||
             (l.patientName &&
-              (l.patientName.includes(pt.fullName) || pt.fullName.includes(l.patientName))))
+              (l.patientName.includes(pt.fullName) || pt.fullName.includes(l.patientName))) ||
+            (l.borrowerIdCard && pt.idCard && l.borrowerIdCard === pt.idCard) ||
+            (l.borrowerName &&
+              (l.borrowerName.includes(pt.fullName) || pt.fullName.includes(l.borrowerName))))
       );
 
-      if (activeLoan) {
+      const items: PatientEquipmentItem[] = activeLoans.map((l) => {
         let type: FastEquipmentType = 'bed';
-        const name = (activeLoan.equipmentName || '').toLowerCase();
-        const cat = (activeLoan.equipmentCategory || '').toLowerCase();
+        const name = (l.equipmentName || '').toLowerCase();
+        const cat = (l.equipmentCategory || '').toLowerCase();
         if (name.includes('รถเข็น') || name.includes('วีลแชร์') || cat === 'wheelchair') {
           type = 'wheelchair';
         } else if (name.includes('ที่นอน') || cat === 'air_mattress') {
@@ -172,22 +188,17 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
         }
 
         return {
-          patient: pt,
-          equipmentType: type,
-          equipmentName: activeLoan.equipmentName,
-          assetCode: activeLoan.equipmentCode || '',
-          existingLoanId: activeLoan.id,
-          loanDate: activeLoan.loanDate || activeLoan.borrowDate || new Date().toISOString().split('T')[0],
+          type,
+          equipmentName: l.equipmentName || '',
+          assetCode: l.equipmentCode || '',
+          existingLoanId: l.id,
+          loanDate: l.loanDate || l.borrowDate || new Date().toISOString().split('T')[0],
         };
-      }
+      });
 
-      // Default: ไม่มียืมอุปกรณ์ (ตามที่ผู้ใช้ระบุ: ไม่ได้ยืมทุกราย)
       return {
         patient: pt,
-        equipmentType: 'none',
-        equipmentName: '',
-        assetCode: '',
-        loanDate: new Date().toISOString().split('T')[0],
+        equipments: items,
       };
     });
   });
@@ -213,39 +224,58 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
     return map;
   }, [equipmentUnits]);
 
-  // Update item
-  const handleSelectEquipmentType = (patientId: string, type: FastEquipmentType) => {
+  // Toggle Equipment (allows multi-select: 1 patient can borrow multiple equipment!)
+  const handleToggleEquipmentType = (patientId: string, type: FastEquipmentType) => {
+    const nowIso = new Date().toISOString().split('T')[0];
     setAuditItems((prev) =>
       prev.map((item) => {
         if (item.patient.id !== patientId) return item;
+
         if (type === 'none') {
+          // Clear all equipment for this patient
           return {
             ...item,
-            equipmentType: 'none',
-            equipmentName: '',
-            assetCode: '',
+            equipments: [],
           };
         }
-        const opt = EQUIPMENT_OPTIONS.find((o) => o.type === type);
-        // Suggested asset code
-        const suggestedCodes = availableUnitsByCat[type] || [];
-        const nextCode = suggestedCodes.length > 0 ? suggestedCodes[0] : `${opt?.defaultPrefix || 'EQ'}-001`;
 
-        return {
-          ...item,
-          equipmentType: type,
-          equipmentName: opt?.name || '',
-          assetCode: item.assetCode || nextCode,
-        };
+        const exists = item.equipments.some((e) => e.type === type);
+        if (exists) {
+          // Toggle off
+          return {
+            ...item,
+            equipments: item.equipments.filter((e) => e.type !== type),
+          };
+        } else {
+          // Toggle on: add this equipment
+          const opt = EQUIPMENT_OPTIONS.find((o) => o.type === type);
+          const suggestedCodes = availableUnitsByCat[type] || [];
+          const nextCode = suggestedCodes.length > 0 ? suggestedCodes[0] : `${opt?.defaultPrefix || 'EQ'}-001`;
+          const newItem: PatientEquipmentItem = {
+            type,
+            equipmentName: opt?.name || '',
+            assetCode: nextCode,
+            loanDate: nowIso,
+          };
+          return {
+            ...item,
+            equipments: [...item.equipments, newItem],
+          };
+        }
       })
     );
   };
 
-  const handleUpdateAssetCode = (patientId: string, code: string) => {
+  const handleUpdateAssetCode = (patientId: string, type: FastEquipmentType, code: string) => {
     setAuditItems((prev) =>
       prev.map((item) => {
         if (item.patient.id !== patientId) return item;
-        return { ...item, assetCode: code };
+        return {
+          ...item,
+          equipments: item.equipments.map((eq) =>
+            eq.type === type ? { ...eq, assetCode: code } : eq
+          ),
+        };
       })
     );
   };
@@ -255,14 +285,19 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
     return auditItems.filter((item) => {
       const pt = item.patient;
       if (villageFilter !== 'all' && (pt.moo || '1') !== villageFilter) return false;
-      if (statusFilter === 'borrowing' && item.equipmentType === 'none') return false;
-      if (statusFilter === 'none' && item.equipmentType !== 'none') return false;
+      const isBorrowing = item.equipments.length > 0;
+      if (statusFilter === 'borrowing' && !isBorrowing) return false;
+      if (statusFilter === 'none' && isBorrowing) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesName = pt.fullName.toLowerCase().includes(q);
         const matchesIdCard = pt.idCard?.includes(q);
         const matchesAddr = pt.address.toLowerCase().includes(q);
-        const matchesEquip = item.assetCode.toLowerCase().includes(q) || item.equipmentName.toLowerCase().includes(q);
+        const matchesEquip = item.equipments.some(
+          (eq) =>
+            eq.assetCode.toLowerCase().includes(q) ||
+            eq.equipmentName.toLowerCase().includes(q)
+        );
         if (!matchesName && !matchesIdCard && !matchesAddr && !matchesEquip) return false;
       }
       return true;
@@ -276,36 +311,45 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
     let airMattress = 0;
     let oxygen = 0;
     let walker = 0;
-    let none = 0;
+    let householdsBorrowing = 0;
+    let householdsNone = 0;
+    let totalEquipmentUnits = 0;
 
     auditItems.forEach((item) => {
-      if (item.equipmentType === 'bed') bed++;
-      else if (item.equipmentType === 'wheelchair') wheelchair++;
-      else if (item.equipmentType === 'air_mattress') airMattress++;
-      else if (item.equipmentType === 'oxygen') oxygen++;
-      else if (item.equipmentType === 'walker') walker++;
-      else none++;
+      if (item.equipments.length === 0) {
+        householdsNone++;
+      } else {
+        householdsBorrowing++;
+        item.equipments.forEach((eq) => {
+          totalEquipmentUnits++;
+          if (eq.type === 'bed') bed++;
+          else if (eq.type === 'wheelchair') wheelchair++;
+          else if (eq.type === 'air_mattress') airMattress++;
+          else if (eq.type === 'oxygen') oxygen++;
+          else if (eq.type === 'walker') walker++;
+        });
+      }
     });
 
-    const totalBorrowing = auditItems.length - none;
     return {
-      total: auditItems.length,
+      totalPatients: auditItems.length,
+      householdsBorrowing,
+      householdsNone,
+      totalEquipmentUnits,
       bed,
       wheelchair,
       airMattress,
       oxygen,
       walker,
-      none,
-      totalBorrowing,
     };
   }, [auditItems]);
 
-  // Batch Save
+  // Batch Save all loans for all patients (supporting multiple equipment per patient!)
   const handleSaveAll = () => {
     const thaiYear = new Date().getFullYear() + 543;
     const nowIso = new Date().toISOString().split('T')[0];
 
-    // Filter out previous dummy loans that belonged to these patients
+    // Filter out previous loans for these patients
     const patientIds = new Set(patients.map((p) => p.id));
     const patientNames = new Set(patients.map((p) => p.fullName));
 
@@ -320,49 +364,51 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
     let count = 1;
 
     auditItems.forEach((item) => {
-      if (item.equipmentType === 'none') return; // Do not create loan for non-borrowers!
-
       const pt = item.patient;
-      const opt = EQUIPMENT_OPTIONS.find((o) => o.type === item.equipmentType);
-      const codeStr = item.assetCode.trim() || `${opt?.defaultPrefix || 'EQ'}-${String(count).padStart(3, '0')}`;
-      const contractNo = `LN-${thaiYear}/${String(count).padStart(3, '0')}`;
+      item.equipments.forEach((eq) => {
+        const opt = EQUIPMENT_OPTIONS.find((o) => o.type === eq.type);
+        const codeStr =
+          eq.assetCode.trim() ||
+          `${opt?.defaultPrefix || 'EQ'}-${String(count).padStart(3, '0')}`;
+        const contractNo = `LN-${thaiYear}/${String(count).padStart(3, '0')}`;
 
-      const newLoan: EquipmentLoan = {
-        id: item.existingLoanId || `LOAN-LTC-${pt.id}-${Date.now()}`,
-        loanCode: contractNo,
-        contractNumber: contractNo,
-        docNo: contractNo,
-        equipmentId: opt?.category || 'EQ-001',
-        equipmentCode: codeStr,
-        equipmentName: item.equipmentName || opt?.name || 'เตียงผู้ป่วย',
-        equipmentCategory: opt?.category || 'bed',
-        borrowerName: pt.caregiverName || pt.fullName,
-        borrowerIdCard: pt.idCard || '',
-        borrowerPhone: pt.caregiverPhone || pt.phone || '',
-        phone: pt.caregiverPhone || pt.phone || '',
-        borrowerAddress: pt.address,
-        borrowerRelation: pt.caregiverName ? 'ญาติผู้ดูแล' : 'ตนเอง',
-        relationshipWithPatient: pt.caregiverName ? 'ญาติผู้ดูแล' : 'ตนเอง',
-        patientName: pt.fullName,
-        patientIdCard: pt.idCard,
-        patientAge: pt.age,
-        patientDiagnosis: pt.diagnosis || 'ผู้มีภาวะพึ่งพิง LTC',
-        patientAddress: pt.address,
-        address: pt.address,
-        moo: pt.moo || '1',
-        latitude: pt.latitude,
-        longitude: pt.longitude,
-        status: 'borrowed',
-        loanDate: item.loanDate || nowIso,
-        borrowDate: item.loanDate || nowIso,
-        dueDate: `${parseInt(nowIso.split('-')[0]) + 1}-${nowIso.split('-')[1]}-${nowIso.split('-')[2]}`,
-        officerInCharge: 'พันจ่าเอกอานัส เด็นหมาด',
-        notes: `บันทึกจากการสำรวจอุปกรณ์ผู้ป่วย LTC ทต.บางเป้า (ประจำบ้านผู้ป่วย)`,
-        createdAt: nowIso,
-      };
+        const newLoan: EquipmentLoan = {
+          id: eq.existingLoanId || `LOAN-LTC-${pt.id}-${eq.type}-${Date.now()}-${count}`,
+          loanCode: contractNo,
+          contractNumber: contractNo,
+          docNo: contractNo,
+          equipmentId: opt?.category || 'EQ-001',
+          equipmentCode: codeStr,
+          equipmentName: eq.equipmentName || opt?.name || 'อุปกรณ์การแพทย์',
+          equipmentCategory: opt?.category || 'bed',
+          borrowerName: pt.caregiverName || pt.fullName,
+          borrowerIdCard: pt.idCard || '',
+          borrowerPhone: pt.caregiverPhone || pt.phone || '',
+          phone: pt.caregiverPhone || pt.phone || '',
+          borrowerAddress: pt.address,
+          borrowerRelation: pt.caregiverName ? 'ญาติผู้ดูแล' : 'ตนเอง',
+          relationshipWithPatient: pt.caregiverName ? 'ญาติผู้ดูแล' : 'ตนเอง',
+          patientName: pt.fullName,
+          patientIdCard: pt.idCard,
+          patientAge: pt.age,
+          patientDiagnosis: pt.diagnosis || 'ผู้มีภาวะพึ่งพิง LTC',
+          patientAddress: pt.address,
+          address: pt.address,
+          moo: pt.moo || '1',
+          latitude: pt.latitude,
+          longitude: pt.longitude,
+          status: 'borrowed',
+          loanDate: eq.loanDate || nowIso,
+          borrowDate: eq.loanDate || nowIso,
+          dueDate: `${parseInt(nowIso.split('-')[0]) + 1}-${nowIso.split('-')[1]}-${nowIso.split('-')[2]}`,
+          officerInCharge: 'พันจ่าเอกอานัส เด็นหมาด',
+          notes: `บันทึกจากการสำรวจอุปกรณ์ผู้ป่วย LTC ทต.บางเป้า (ประจำบ้านผู้ป่วย)`,
+          createdAt: nowIso,
+        };
 
-      newCreatedLoans.push(newLoan);
-      count++;
+        newCreatedLoans.push(newLoan);
+        count++;
+      });
     });
 
     const finalLoans = [...newCreatedLoans, ...preservedLoans];
@@ -370,24 +416,24 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
     onClose();
   };
 
-  // Quick Print for an item
-  const handlePrintItem = (item: AuditPatientItem) => {
+  // Quick Print for a specific equipment of a patient
+  const handlePrintSingleItem = (pt: LtcPatient, eq: PatientEquipmentItem) => {
     const thaiYear = new Date().getFullYear() + 543;
-    const pt = item.patient;
-    const opt = EQUIPMENT_OPTIONS.find((o) => o.type === item.equipmentType);
+    const opt = EQUIPMENT_OPTIONS.find((o) => o.type === eq.type);
     const contractNo = `LN-${thaiYear}/001`;
 
     const tempLoan: EquipmentLoan = {
-      id: item.existingLoanId || `TEMP-${Date.now()}`,
+      id: eq.existingLoanId || `TEMP-${Date.now()}`,
       loanCode: contractNo,
       contractNumber: contractNo,
       docNo: contractNo,
       equipmentId: opt?.category || 'EQ-001',
-      equipmentCode: item.assetCode || 'ทต.บป.______',
-      equipmentName: item.equipmentName || opt?.name || 'เตียงผู้ป่วยมือหมุน 2 ไกร์',
+      equipmentCode: eq.assetCode || 'ทต.บป.EQ-001',
+      equipmentName: eq.equipmentName || opt?.name || 'เตียงผู้ป่วย',
       equipmentCategory: opt?.category || 'bed',
       borrowerName: pt.caregiverName || pt.fullName,
-      borrowerPhone: pt.caregiverPhone || pt.phone || '',
+      borrowerIdCard: pt.idCard || '.............................',
+      borrowerPhone: pt.caregiverPhone || pt.phone || '......................',
       phone: pt.caregiverPhone || pt.phone || '',
       borrowerAddress: pt.address,
       borrowerRelation: pt.caregiverName ? 'ญาติผู้ดูแล' : 'ตนเอง',
@@ -399,49 +445,51 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
       patientAddress: pt.address,
       address: pt.address,
       moo: pt.moo || '1',
-      latitude: pt.latitude,
-      longitude: pt.longitude,
       status: 'borrowed',
-      loanDate: item.loanDate,
-      borrowDate: item.loanDate,
-      dueDate: '',
+      loanDate: eq.loanDate || new Date().toISOString().split('T')[0],
+      borrowDate: eq.loanDate || new Date().toISOString().split('T')[0],
+      dueDate: '1 ปีนับจากวันที่ได้รับอุปกรณ์',
       officerInCharge: 'พันจ่าเอกอานัส เด็นหมาด',
-      notes: 'สัญญายืมอุปกรณ์การแพทย์สำหรับผู้ป่วย LTC',
+      notes: 'สัญญายืมอุปกรณ์การแพทย์ตำบลบางเป้า',
     };
 
     setPrintLoanTarget(tempLoan);
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/80 backdrop-blur-xs flex justify-center items-start p-2 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl my-3 flex flex-col max-h-[94vh] border border-slate-200 overflow-hidden">
-        
-        {/* 1. Modal Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-teal-800 via-teal-900 to-slate-900 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+      <div className="bg-white rounded-2xl max-w-6xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[94vh]">
+        {/* 1. Header */}
+        <div className="px-5 py-3.5 bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-300 flex items-center justify-center border border-teal-400/30">
-              <Stethoscope className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shadow-inner">
+              <Stethoscope className="w-5 h-5 text-teal-200" />
             </div>
             <div>
-              <div className="font-extrabold text-base sm:text-lg flex items-center gap-2">
-                <span>ตารางสำรวจและจับคู่อุปกรณ์ผู้มีภาวะพึ่งพิง LTC ({patients.length} ราย ทต.บางเป้า)</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-500/30 text-teal-200 border border-teal-400/30 font-bold">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-extrabold tracking-tight">
+                  ตารางสำรวจและจับคู่อุปกรณ์ผู้มีภาวะพึ่งพิง LTC ({patients.length} ราย ทต.บางเป้า)
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-400 text-emerald-950 border border-emerald-300">
                   อัปเดตตรงหน้างาน 100%
                 </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-200 text-indigo-900 border border-indigo-300">
+                  ✨ 1 คน ยืมได้หลายอุปกรณ์
+                </span>
               </div>
-              <p className="text-xs text-teal-200/80 mt-0.5">
-                เลือกบันทึกเฉพาะครัวเรือนที่ยืมอุปกรณ์จริง (เตียง, รถเข็น, ที่นอนลม ฯลฯ) โดยผู้ที่ไม่ได้ยืมให้คงไว้เป็น "ไม่มียืมอุปกรณ์"
+              <p className="text-xs text-teal-200 mt-0.5">
+                เลือกบันทึกเฉพาะครัวเรือนที่ยืมอุปกรณ์จริง (เตียง, รถเข็น, ที่นอนลม ฯลฯ) โดยผู้ที่ไม่ได้ยืมให้คงไว้เป็น &ldquo;ไม่มียืมอุปกรณ์&rdquo;
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Quick Print Blank Template */}
+            {/* Print Blank Template Button */}
             <button
               type="button"
               onClick={() => setPrintLoanTarget(createBlankMedicalLoan())}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              title="พิมพ์แบบฟอร์มเปล่าขนาด A4 สำหรับนำไปให้ประชาชนลงนามที่บ้าน"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-sm cursor-pointer transition-colors"
+              title="พิมพ์แม่แบบสัญญายืมอุปกรณ์ A4 (แบบฟอร์มเปล่าสำหรับถือไปให้เซ็นหน้างาน)"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>🖨️ พิมพ์แบบฟอร์มเปล่า A4</span>
@@ -450,53 +498,91 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white cursor-pointer transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* 2. KPI Summary Stat Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 p-3 sm:px-5 bg-slate-50 border-b border-slate-200 text-xs shrink-0">
-          <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
-            <div className="text-[11px] text-slate-500 font-bold">ผู้ป่วยทั้งหมด</div>
-            <div className="text-xl font-black text-slate-800">{stats.total} <span className="text-[11px] font-normal text-slate-400">ราย</span></div>
-          </div>
+        {/* 2. Top Statistics Cards */}
+        <div className="p-3 sm:px-5 bg-slate-50 border-b border-slate-200 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-xs">
+            {/* Total Patients */}
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="text-[11px] font-semibold text-slate-500">ผู้ป่วยทั้งหมด</div>
+              <div className="text-lg font-black text-slate-900 mt-0.5">
+                {stats.totalPatients} <span className="text-xs font-normal text-slate-500">ราย</span>
+              </div>
+            </div>
 
-          <div className="bg-white p-2.5 rounded-xl border border-indigo-200 shadow-2xs bg-indigo-50/30">
-            <div className="text-[11px] text-indigo-700 font-bold">🛏️ เตียงผู้ป่วย</div>
-            <div className="text-xl font-black text-indigo-900">{stats.bed} <span className="text-[11px] font-normal text-indigo-500">หลัง</span></div>
-          </div>
+            {/* Bed */}
+            <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
+              <div className="text-[11px] font-bold text-indigo-700 flex items-center gap-1">
+                <span>🛏️</span>
+                <span>เตียงผู้ป่วย</span>
+              </div>
+              <div className="text-lg font-black text-indigo-900 mt-0.5">
+                {stats.bed} <span className="text-xs font-normal text-slate-500">หลัง</span>
+              </div>
+            </div>
 
-          <div className="bg-white p-2.5 rounded-xl border border-sky-200 shadow-2xs bg-sky-50/30">
-            <div className="text-[11px] text-sky-700 font-bold">♿ รถเข็นวีลแชร์</div>
-            <div className="text-xl font-black text-sky-900">{stats.wheelchair} <span className="text-[11px] font-normal text-sky-500">คัน</span></div>
-          </div>
+            {/* Wheelchair */}
+            <div className="bg-white p-2.5 rounded-xl border border-sky-100 shadow-2xs">
+              <div className="text-[11px] font-bold text-sky-700 flex items-center gap-1">
+                <span>♿</span>
+                <span>รถเข็นวีลแชร์</span>
+              </div>
+              <div className="text-lg font-black text-sky-900 mt-0.5">
+                {stats.wheelchair} <span className="text-xs font-normal text-slate-500">คัน</span>
+              </div>
+            </div>
 
-          <div className="bg-white p-2.5 rounded-xl border border-emerald-200 shadow-2xs bg-emerald-50/30">
-            <div className="text-[11px] text-emerald-700 font-bold">💨 ที่นอนลม</div>
-            <div className="text-xl font-black text-emerald-900">{stats.airMattress} <span className="text-[11px] font-normal text-emerald-500">หลัง</span></div>
-          </div>
+            {/* Air Mattress */}
+            <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-2xs">
+              <div className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                <span>💨</span>
+                <span>ที่นอนลม</span>
+              </div>
+              <div className="text-lg font-black text-emerald-900 mt-0.5">
+                {stats.airMattress} <span className="text-xs font-normal text-slate-500">หลัง</span>
+              </div>
+            </div>
 
-          <div className="bg-white p-2.5 rounded-xl border border-teal-200 shadow-2xs bg-teal-50/30">
-            <div className="text-[11px] text-teal-700 font-bold">🫁 เครื่อง O2</div>
-            <div className="text-xl font-black text-teal-900">{stats.oxygen} <span className="text-[11px] font-normal text-teal-500">เครื่อง</span></div>
-          </div>
+            {/* Oxygen */}
+            <div className="bg-white p-2.5 rounded-xl border border-teal-100 shadow-2xs">
+              <div className="text-[11px] font-bold text-teal-700 flex items-center gap-1">
+                <span>🫁</span>
+                <span>เครื่อง O2</span>
+              </div>
+              <div className="text-lg font-black text-teal-900 mt-0.5">
+                {stats.oxygen} <span className="text-xs font-normal text-slate-500">เครื่อง</span>
+              </div>
+            </div>
 
-          <div className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs bg-amber-50/30">
-            <div className="text-[11px] text-amber-700 font-bold">🦯 วอล์คเกอร์/อื่นๆ</div>
-            <div className="text-xl font-black text-amber-900">{stats.walker} <span className="text-[11px] font-normal text-amber-500">ชิ้น</span></div>
-          </div>
+            {/* Walker */}
+            <div className="bg-white p-2.5 rounded-xl border border-amber-100 shadow-2xs">
+              <div className="text-[11px] font-bold text-amber-700 flex items-center gap-1">
+                <span>🦯</span>
+                <span>วอล์คเกอร์/อื่นๆ</span>
+              </div>
+              <div className="text-lg font-black text-amber-900 mt-0.5">
+                {stats.walker} <span className="text-xs font-normal text-slate-500">ชิ้น</span>
+              </div>
+            </div>
 
-          {/* Highlight: ไม่มียืมอุปกรณ์ */}
-          <div className="bg-white p-2.5 rounded-xl border border-slate-300 shadow-2xs bg-slate-100/60 col-span-2 sm:col-span-1">
-            <div className="text-[11px] text-slate-600 font-bold">⚪ ไม่มียืมอุปกรณ์</div>
-            <div className="text-xl font-black text-slate-700">
-              {stats.none}{' '}
-              <span className="text-[10px] font-bold text-slate-500">
-                ({Math.round((stats.none / (stats.total || 1)) * 100)}%)
-              </span>
+            {/* Non-borrowers summary */}
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                <span>⚪</span>
+                <span>ไม่มียืมอุปกรณ์</span>
+              </div>
+              <div className="text-lg font-black text-slate-600 mt-0.5">
+                {stats.householdsNone}{' '}
+                <span className="text-[11px] font-normal text-slate-400">
+                  ({Math.round((stats.householdsNone / (stats.totalPatients || 1)) * 100)}%)
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -545,7 +631,9 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                 type="button"
                 onClick={() => setStatusFilter('all')}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
-                  statusFilter === 'all' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  statusFilter === 'all'
+                    ? 'bg-white text-teal-800 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 ทั้งหมด ({auditItems.length})
@@ -554,19 +642,23 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                 type="button"
                 onClick={() => setStatusFilter('borrowing')}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
-                  statusFilter === 'borrowing' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  statusFilter === 'borrowing'
+                    ? 'bg-white text-teal-800 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                มียืม ({stats.totalBorrowing})
+                มียืม ({stats.householdsBorrowing})
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('none')}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
-                  statusFilter === 'none' ? 'bg-white text-slate-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  statusFilter === 'none'
+                    ? 'bg-white text-slate-800 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                ไม่มียืม ({stats.none})
+                ไม่มียืม ({stats.householdsNone})
               </button>
             </div>
           </div>
@@ -586,11 +678,11 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                   <th className="py-2.5 px-3 w-[220px]">ผู้มีภาวะพึ่งพิง & ระดับ ADL</th>
                   <th className="py-2.5 px-3 w-[170px]">ที่อยู่ & จุดอ้างอิง</th>
                   <th className="py-2.5 px-3 w-[150px]">ผู้ดูแล & เบอร์โทร</th>
-                  <th className="py-2.5 px-3 min-w-[340px]">
-                    อุปกรณ์ที่ยืมใช้งานจริง (คลิกเพื่อเปลี่ยน)
+                  <th className="py-2.5 px-3 min-w-[370px]">
+                    อุปกรณ์ที่ยืมใช้งานจริง (คลิกเพื่อเลือก/ยกเลิก - ยืมได้หลายอุปกรณ์)
                   </th>
-                  <th className="py-2.5 px-3 w-[160px]">รหัสครุภัณฑ์ / หมายเลข</th>
-                  <th className="py-2.5 px-3 w-[90px] text-center">พิมพ์สัญญา</th>
+                  <th className="py-2.5 px-3 w-[180px]">รหัสครุภัณฑ์ / หมายเลข</th>
+                  <th className="py-2.5 px-3 w-[100px] text-center">พิมพ์สัญญา</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-xs">
@@ -605,7 +697,7 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                     const pt = item.patient;
                     const mooNum = pt.moo || '1';
                     const village = BANGPAO_VILLAGES[mooNum] || `หมู่ ${mooNum}`;
-                    const isBorrowing = item.equipmentType !== 'none';
+                    const isBorrowing = item.equipments.length > 0;
 
                     return (
                       <tr
@@ -615,13 +707,13 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                         }`}
                       >
                         {/* 1. Sequence & Village */}
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3 px-3 text-center align-top">
                           <span className="font-mono font-bold text-slate-600">#{idx + 1}</span>
                           <div className="text-[10px] text-slate-400 font-medium">ม.{mooNum}</div>
                         </td>
 
                         {/* 2. Patient Info */}
-                        <td className="py-3 px-3">
+                        <td className="py-3 px-3 align-top">
                           <div className="font-extrabold text-slate-900 text-sm">{pt.fullName}</div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span
@@ -643,7 +735,7 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                         </td>
 
                         {/* 3. Address & Village */}
-                        <td className="py-3 px-3">
+                        <td className="py-3 px-3 align-top">
                           <div className="font-semibold text-slate-800">{pt.shortAddress || pt.address}</div>
                           <div className="text-[11px] text-teal-700 font-medium">ม.{mooNum} {village}</div>
                           {pt.landmark && (
@@ -654,9 +746,9 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                         </td>
 
                         {/* 4. Caregiver */}
-                        <td className="py-3 px-3">
+                        <td className="py-3 px-3 align-top">
                           <div className="font-semibold text-slate-800">{pt.caregiverName || 'ญาติผู้ดูแล'}</div>
-                          {(pt.caregiverPhone || pt.phone) ? (
+                          {pt.caregiverPhone || pt.phone ? (
                             <div className="text-[11px] text-teal-700 font-mono font-bold flex items-center gap-1">
                               <span>📞</span>
                               <span>{pt.caregiverPhone || pt.phone}</span>
@@ -666,76 +758,114 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                           )}
                         </td>
 
-                        {/* 5. Fast Equipment Options Pills */}
-                        <td className="py-3 px-3">
+                        {/* 5. Fast Equipment Options Pills (Multi-select toggles!) */}
+                        <td className="py-3 px-3 align-top">
                           <div className="flex flex-wrap items-center gap-1.5">
                             {EQUIPMENT_OPTIONS.map((opt) => {
-                              const isSelected = item.equipmentType === opt.type;
+                              const isNoneOpt = opt.type === 'none';
+                              const isSelected = isNoneOpt
+                                ? item.equipments.length === 0
+                                : item.equipments.some((e) => e.type === opt.type);
+
                               return (
                                 <button
                                   key={opt.type}
                                   type="button"
-                                  onClick={() => handleSelectEquipmentType(pt.id, opt.type)}
-                                  className={`px-2 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                                  onClick={() => handleToggleEquipmentType(pt.id, opt.type)}
+                                  className={`px-2 py-1 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1 cursor-pointer select-none ${
                                     isSelected
-                                      ? opt.type === 'none'
-                                        ? 'bg-slate-700 text-white border-slate-800 shadow-xs'
-                                        : 'bg-teal-700 text-white border-teal-800 shadow-xs ring-1 ring-teal-500'
-                                      : opt.color
+                                      ? opt.activeColor
+                                      : `${opt.color} opacity-85 hover:opacity-100`
                                   }`}
+                                  title={
+                                    isNoneOpt
+                                      ? 'ล้างอุปกรณ์ทั้งหมด (ไม่มีการยืม)'
+                                      : `คลิกเพื่อเลือกหรือยกเลิกการยืม ${opt.label}`
+                                  }
                                 >
                                   <span>{opt.icon}</span>
                                   <span>{opt.label}</span>
-                                  {isSelected && <CheckCircle2 className="w-3 h-3 text-white ml-0.5" />}
+                                  {isSelected && !isNoneOpt && (
+                                    <CheckCircle2 className="w-3 h-3 text-white ml-0.5 shrink-0" />
+                                  )}
                                 </button>
                               );
                             })}
                           </div>
-                        </td>
-
-                        {/* 6. Asset Code / Serial */}
-                        <td className="py-3 px-3">
-                          {isBorrowing ? (
-                            <div className="space-y-1">
-                              <input
-                                type="text"
-                                value={item.assetCode}
-                                onChange={(e) => handleUpdateAssetCode(pt.id, e.target.value)}
-                                placeholder="รหัสครุภัณฑ์ เช่น BED-001"
-                                className="w-full px-2 py-1 bg-white border border-teal-300 rounded-md font-mono text-xs font-bold text-teal-900 outline-none focus:ring-2 focus:ring-teal-500"
-                              />
-                              {/* Suggestions from stock if available */}
-                              {availableUnitsByCat[item.equipmentType]?.length > 0 && (
-                                <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                                  <span>ในคลัง:</span>
-                                  <span
-                                    onClick={() => handleUpdateAssetCode(pt.id, availableUnitsByCat[item.equipmentType][0])}
-                                    className="text-teal-700 underline cursor-pointer font-mono font-bold"
-                                    title="คลิกเพื่อใช้รหัสนี้"
-                                  >
-                                    {availableUnitsByCat[item.equipmentType][0]}
-                                  </span>
-                                </div>
-                              )}
+                          {item.equipments.length > 1 && (
+                            <div className="mt-1.5 text-[10px] text-indigo-700 font-bold flex items-center gap-1">
+                              <span>✨</span>
+                              <span>ยืม {item.equipments.length} รายการ</span>
                             </div>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 italic">- ไม่ได้ยืม -</span>
                           )}
                         </td>
 
-                        {/* 7. Print Contract */}
-                        <td className="py-3 px-3 text-center">
+                        {/* 6. Asset Code / Serial for Each Selected Equipment */}
+                        <td className="py-3 px-3 align-top">
                           {isBorrowing ? (
-                            <button
-                              type="button"
-                              onClick={() => handlePrintItem(item)}
-                              className="p-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition-colors inline-flex items-center justify-center cursor-pointer shadow-2xs"
-                              title="พิมพ์แบบฟอร์มสัญญายืม A4 2 หน้าสำหรับรายนี้"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="space-y-2">
+                              {item.equipments.map((eq) => {
+                                const opt = EQUIPMENT_OPTIONS.find((o) => o.type === eq.type);
+                                return (
+                                  <div key={eq.type} className="space-y-0.5 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-700">
+                                      <span className="flex items-center gap-1 truncate">
+                                        <span>{opt?.icon}</span>
+                                        <span className="truncate">{opt?.label}</span>
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleEquipmentType(pt.id, eq.type)}
+                                        className="text-slate-400 hover:text-rose-600 cursor-pointer text-[10px]"
+                                        title="ลบรายการนี้"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={eq.assetCode}
+                                      onChange={(e) => handleUpdateAssetCode(pt.id, eq.type, e.target.value)}
+                                      placeholder="ระบุเลขครุภัณฑ์..."
+                                      className="w-full px-2 py-0.5 bg-white border border-teal-300 rounded font-mono text-[11px] font-extrabold text-teal-950 outline-none focus:ring-1 focus:ring-teal-500"
+                                      list={`assets-${eq.type}`}
+                                    />
+                                    <datalist id={`assets-${eq.type}`}>
+                                      {(availableUnitsByCat[eq.type] || []).map((code) => (
+                                        <option key={code} value={code} />
+                                      ))}
+                                    </datalist>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           ) : (
-                            <span className="text-[11px] text-slate-300">-</span>
+                            <span className="text-slate-400 text-xs italic">- ไม่ได้ยืม -</span>
+                          )}
+                        </td>
+
+                        {/* 7. Print Contract per equipment */}
+                        <td className="py-3 px-3 text-center align-top">
+                          {isBorrowing ? (
+                            <div className="flex flex-col items-center gap-1">
+                              {item.equipments.map((eq) => {
+                                const opt = EQUIPMENT_OPTIONS.find((o) => o.type === eq.type);
+                                return (
+                                  <button
+                                    key={eq.type}
+                                    type="button"
+                                    onClick={() => handlePrintSingleItem(pt, eq)}
+                                    className="w-full inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 text-[10px] font-extrabold cursor-pointer transition-colors shadow-2xs"
+                                    title={`พิมพ์สัญญายืม ${eq.equipmentName} (${eq.assetCode})`}
+                                  >
+                                    <Printer className="w-3 h-3 text-teal-700 shrink-0" />
+                                    <span>{opt?.icon} {eq.assetCode ? eq.assetCode.slice(-6) : 'สัญญา'}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-xs">-</span>
                           )}
                         </td>
                       </tr>
@@ -747,12 +877,12 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
           </div>
         </div>
 
-        {/* 5. Modal Footer Action Bar */}
-        <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>
-              กำลังผูกอุปกรณ์จริง: <strong className="text-teal-900 font-extrabold">{stats.totalBorrowing}</strong> ครัวเรือน | ไม่มียืมอุปกรณ์: <strong className="text-slate-700 font-extrabold">{stats.none}</strong> ครัวเรือน
+        {/* 5. Bottom Save Bar */}
+        <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-slate-600 font-semibold">
+              กำลังผูกอุปกรณ์จริง: <strong className="text-emerald-800">{stats.householdsBorrowing} ครัวเรือน</strong> (รวม {stats.totalEquipmentUnits} รายการอุปกรณ์) | ไม่มียืมอุปกรณ์: <strong className="text-slate-600">{stats.householdsNone} ครัวเรือน</strong>
             </span>
           </div>
 
@@ -760,30 +890,31 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 hover:bg-slate-100 cursor-pointer transition-colors"
             >
               ยกเลิก
             </button>
+
             <button
               type="button"
               onClick={handleSaveAll}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer active:scale-95"
+              className="px-5 py-2 rounded-xl text-xs font-black text-white bg-teal-700 hover:bg-teal-800 shadow-md flex items-center gap-1.5 cursor-pointer transition-all hover:scale-[1.02]"
             >
               <Save className="w-4 h-4" />
-              <span>💾 บันทึกข้อมูลการยืมทั้งหมด ({stats.totalBorrowing} รายการ)</span>
+              <span>💾 บันทึกข้อมูลการยืมทั้งหมด ({stats.totalEquipmentUnits} รายการ)</span>
             </button>
           </div>
         </div>
-
       </div>
 
-      {/* Sub-Modal: Print Contract / Template */}
+      {/* Print Modal target */}
       {printLoanTarget && (
         <PrintEquipmentLoanModal
-          loan={printLoanTarget}
-          isOpen={Boolean(printLoanTarget)}
+          isOpen={!!printLoanTarget}
           onClose={() => setPrintLoanTarget(null)}
-          savedSignerSettings={savedSignerSettings}
+          loan={printLoanTarget}
+          equipmentUnits={equipmentUnits}
+          signerSettings={savedSignerSettings}
         />
       )}
     </div>

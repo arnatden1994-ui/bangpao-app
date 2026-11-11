@@ -83,6 +83,7 @@ import {
 } from './NhsoLtcCombinedView.tsx';
 import { PrintEquipmentLoanModal } from './PrintEquipmentLoanModal.tsx';
 import { LtcEquipmentAuditModal } from './LtcEquipmentAuditModal.tsx';
+import { EditMedicalLoanModal } from './EditMedicalLoanModal.tsx';
 import {
   createBlankMedicalLoan,
   exportOfficialMedicalLoanDocx,
@@ -204,6 +205,7 @@ interface MedicalEquipmentViewProps {
   onReturnEquipment: (loanId: string, returnCondition?: 'complete' | 'damaged', notes?: string) => void;
   onPrintContract: (loan: EquipmentLoan) => void;
   onAddRegisteredLoan?: (loan: EquipmentLoan) => void;
+  onUpdateLoan?: (loan: EquipmentLoan) => void;
   onUpdateLoanStatus?: (loanId: string, status: EquipmentLoan['status'], extra?: Partial<EquipmentLoan>) => void;
   onDeleteLoan?: (loanId: string) => void;
   onAddEquipment?: (item: MedicalEquipment) => void;
@@ -229,6 +231,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   onReturnEquipment,
   onPrintContract,
   onAddRegisteredLoan,
+  onUpdateLoan,
   onUpdateLoanStatus,
   onDeleteLoan,
   onClearDummyLoans,
@@ -297,6 +300,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
   // Modals State
   const [printModalLoan, setPrintModalLoan] = useState<EquipmentLoan | null>(null);
+  const [editingLoan, setEditingLoan] = useState<EquipmentLoan | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isShareCitizenFormOpen, setIsShareCitizenFormOpen] = useState(false);
   const [isCopiedShareLink, setIsCopiedShareLink] = useState(false);
@@ -4339,6 +4343,17 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                    </button>
 
                                    {/* 4. พิมพ์สัญญา A4 */}
+                                  {/* 3.8 ปุ่มแก้ไขข้อมูลการยืม */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingLoan(loan)}
+                                    className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                    title="แก้ไขข้อมูลผู้ยืม, ผู้ป่วย, อุปกรณ์, หรือรายละเอียดการยืม"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                                    <span>แก้ไข</span>
+                                  </button>
+
                                   <button
                                     type="button"
                                     onClick={() => setPrintModalLoan(loan)}
@@ -5311,6 +5326,26 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
               onBatchUpdateLoans(updatedLoans);
             }
           }}
+          savedSignerSettings={savedSignerSettings}
+        />
+      )}
+
+      {/* Edit Medical Loan Modal */}
+      {editingLoan && (
+        <EditMedicalLoanModal
+          isOpen={Boolean(editingLoan)}
+          loan={editingLoan}
+          onClose={() => setEditingLoan(null)}
+          onSaveLoan={(updatedLoan) => {
+            if (onUpdateLoan) {
+              onUpdateLoan(updatedLoan);
+            } else if (onUpdateLoanStatus) {
+              onUpdateLoanStatus(updatedLoan.id, updatedLoan.status, updatedLoan);
+            }
+            setEditingLoan(null);
+          }}
+          equipmentUnits={propUnits}
+          equipmentList={equipmentList}
           savedSignerSettings={savedSignerSettings}
         />
       )}

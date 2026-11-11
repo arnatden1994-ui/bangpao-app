@@ -1343,26 +1343,41 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
           `;
         }
 
-        // Equipment Loan check for this household
-        const eqLoan = loans.find(
+        // Equipment Loan check for this household (supporting multi-equipment!)
+        const householdLoans = loans.filter(
           (l) =>
             (l.status === 'borrowed' || l.status === 'approved') &&
             ((matched?.idCard && l.patientIdCard && l.patientIdCard === matched.idCard) ||
-              (matched?.fullName && l.patientName && (l.patientName.includes(matched.fullName) || matched.fullName.includes(l.patientName))) ||
-              (stop.patientName && l.patientName && (l.patientName.includes(stop.patientName) || stop.patientName.includes(l.patientName))))
+              (matched?.idCard && l.borrowerIdCard && l.borrowerIdCard === matched.idCard) ||
+              (matched?.fullName &&
+                l.patientName &&
+                (l.patientName.includes(matched.fullName) ||
+                  matched.fullName.includes(l.patientName))) ||
+              (stop.patientName &&
+                l.patientName &&
+                (l.patientName.includes(stop.patientName) ||
+                  stop.patientName.includes(l.patientName))))
         );
 
-        if (eqLoan) {
-          const shortEqName = eqLoan.equipmentName.includes('เตียง')
-            ? 'เตียงผู้ป่วย'
-            : eqLoan.equipmentName.includes('รถเข็น') || eqLoan.equipmentName.includes('วีลแชร์')
-            ? 'รถเข็นวีลแชร์'
-            : eqLoan.equipmentName.includes('ที่นอน')
-            ? 'ที่นอนลม'
-            : eqLoan.equipmentName.split(' ')[0];
+        if (householdLoans.length > 0) {
+          const eqBadges = householdLoans
+            .map((l) => {
+              const shortEqName = l.equipmentName.includes('เตียง')
+                ? 'เตียง'
+                : l.equipmentName.includes('รถเข็น') || l.equipmentName.includes('วีลแชร์')
+                ? 'วีลแชร์'
+                : l.equipmentName.includes('ที่นอน')
+                ? 'ที่นอนลม'
+                : l.equipmentName.includes('ออกซิเจน')
+                ? 'เครื่อง O2'
+                : l.equipmentName.split(' ')[0];
+              return `${shortEqName} (${l.equipmentCode || 'ครุภัณฑ์ ทต.บางเป้า'})`;
+            })
+            .join(', ');
+
           itemsHtml += `
             <div style="margin-top: 3.5px; padding: 2px 6px; background: #e0e7ff; border: 1px solid #c7d2fe; border-radius: 4px; color: #3730a3; font-size: 9.5px; font-weight: 700; line-height: 1.3;">
-              🛏️ <strong>ครุภัณฑ์ที่บ้าน:</strong> ${shortEqName} (${eqLoan.equipmentCode || 'ครุภัณฑ์ ทต.บางเป้า'})
+              🛏️ <strong>ครุภัณฑ์ที่บ้าน (${householdLoans.length} ชิ้น):</strong> ${eqBadges}
             </div>
           `;
         }

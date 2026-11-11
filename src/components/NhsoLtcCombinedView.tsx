@@ -6053,7 +6053,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                           : selectedYearFilter;
                       const displayRound =
                         selectedRoundFilter === 'all' ? 'รวมทุกรอบ' : `รอบที่ ${selectedRoundFilter}`;
-                      const ptLoan = loans.find(
+                      const ptLoans = loans.filter(
                         (l) =>
                           l.status !== 'returned' &&
                           ((matchedPt?.idCard && l.patientIdCard === matchedPt.idCard) ||
@@ -6125,21 +6125,24 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                   <span>{matchedPt?.caregiverPhone || matchedPt?.phone}</span>
                                 </div>
                               )}
-                              {ptLoan && (
-                                <div className="pt-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => matchedPt && setQuickLoanPatient(matchedPt)}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
-                                    title={`ยืมอุปกรณ์: ${ptLoan.equipmentName} (${ptLoan.equipmentCode || 'ไม่มีเลข'}) - คลิกเพื่อดู/แก้ไข/พิมพ์สัญญา`}
-                                  >
-                                    <span>🛏️ {ptLoan.equipmentName.slice(0, 16)}</span>
-                                    {ptLoan.equipmentCode && (
-                                      <span className="font-mono text-[9px] text-indigo-600">
-                                        ({ptLoan.equipmentCode})
-                                      </span>
-                                    )}
-                                  </button>
+                              {ptLoans.length > 0 && (
+                                <div className="pt-0.5 flex items-center gap-1 flex-wrap">
+                                  {ptLoans.map((l) => (
+                                    <button
+                                      key={l.id}
+                                      type="button"
+                                      onClick={() => matchedPt && setQuickLoanPatient(matchedPt)}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                                      title={`ยืมอุปกรณ์: ${l.equipmentName} (${l.equipmentCode || 'ไม่มีเลข'}) - คลิกเพื่อดู/แก้ไข/พิมพ์สัญญา`}
+                                    >
+                                      <span>🛏️ {l.equipmentName.slice(0, 14)}</span>
+                                      {l.equipmentCode && (
+                                        <span className="font-mono text-[9px] text-indigo-600">
+                                          ({l.equipmentCode})
+                                        </span>
+                                      )}
+                                    </button>
+                                  ))}
                                 </div>
                               )}
                             </div>
@@ -6307,18 +6310,18 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                   type="button"
                                   onClick={() => setQuickLoanPatient(matchedPt)}
                                   className={`px-1.5 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-0.5 cursor-pointer transition-colors ${
-                                    ptLoan
+                                    ptLoans.length > 0
                                       ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-300'
                                       : 'bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-800 border-slate-200'
                                   }`}
                                   title={
-                                    ptLoan
-                                      ? `จัดการยืมอุปกรณ์: ${ptLoan.equipmentName} (${ptLoan.equipmentCode || 'ไม่มีเลข'})`
+                                    ptLoans.length > 0
+                                      ? `จัดการยืมอุปกรณ์ (${ptLoans.length} ชิ้น): ${ptLoans.map((l) => l.equipmentName).join(', ')}`
                                       : `บันทึกยืมอุปกรณ์การแพทย์/เตียงสำหรับ ${matchedPt.fullName}`
                                   }
                                 >
                                   <span>🛏️</span>
-                                  <span>{ptLoan ? 'มีเตียง' : 'ยืมเตียง'}</span>
+                                  <span>{ptLoans.length > 0 ? `อุปกรณ์ (${ptLoans.length})` : 'ยืมเตียง'}</span>
                                 </button>
                               )}
 
@@ -7433,7 +7436,7 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                           const baseCoords = BANGPAO_COORDS[mooNum] || BANGPAO_COORDS['1'];
                           const lat = p.latitude ?? baseCoords.lat;
                           const lng = p.longitude ?? baseCoords.lng;
-                          const pLoan = loans.find(
+                          const pLoans = loans.filter(
                             (l) =>
                               l.status !== 'returned' &&
                               ((p.idCard && l.patientIdCard === p.idCard) ||
@@ -7492,19 +7495,22 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                   </div>
 
                                   {/* ข้อมูลการยืมอุปกรณ์/เตียง (ถ้ามี) */}
-                                  {pLoan && (
-                                    <div className="pt-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => setQuickLoanPatient(p)}
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] font-bold shadow-2xs cursor-pointer transition-colors"
-                                        title={`ยืมอุปกรณ์: ${pLoan.equipmentName} (${pLoan.equipmentCode || 'ไม่มีเลข'}) - คลิกเพื่อดู/แก้ไข/พิมพ์สัญญา`}
-                                      >
-                                        <span>🛏️ ยืมครุภัณฑ์: {pLoan.equipmentName}</span>
-                                        {pLoan.equipmentCode && (
-                                          <span className="font-mono text-[10px] text-indigo-600">({pLoan.equipmentCode})</span>
-                                        )}
-                                      </button>
+                                  {pLoans.length > 0 && (
+                                    <div className="pt-0.5 flex items-center gap-1 flex-wrap">
+                                      {pLoans.map((l) => (
+                                        <button
+                                          key={l.id}
+                                          type="button"
+                                          onClick={() => setQuickLoanPatient(p)}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] font-bold shadow-2xs cursor-pointer transition-colors"
+                                          title={`ยืมอุปกรณ์: ${l.equipmentName} (${l.equipmentCode || 'ไม่มีเลข'}) - คลิกเพื่อดู/แก้ไข/พิมพ์สัญญา`}
+                                        >
+                                          <span>🛏️ {l.equipmentName}</span>
+                                          {l.equipmentCode && (
+                                            <span className="font-mono text-[10px] text-indigo-600">({l.equipmentCode})</span>
+                                          )}
+                                        </button>
+                                      ))}
                                     </div>
                                   )}
                                 </div>
@@ -7570,13 +7576,13 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
                                         : 'bg-slate-50 text-slate-700 hover:bg-indigo-50 hover:text-indigo-800 border-slate-200'
                                     }`}
                                     title={
-                                      pLoan
-                                        ? `ยืมอุปกรณ์: ${pLoan.equipmentName} (${pLoan.equipmentCode || 'ไม่มีเลข'}) - คลิกเพื่อดู/แก้ไข/พิมพ์สัญญา`
+                                      pLoans.length > 0
+                                        ? `จัดการยืมอุปกรณ์ (${pLoans.length} ชิ้น): ${pLoans.map((l) => l.equipmentName).join(', ')} - คลิกเพื่อดู/แก้ไข/พิมพ์สัญญา`
                                         : `บันทึกยืมอุปกรณ์การแพทย์/เตียงสำหรับ ${p.fullName}`
                                     }
                                   >
                                     <span>🛏️</span>
-                                    <span>{pLoan ? 'มีเตียง' : 'ยืมเตียง'}</span>
+                                    <span>{pLoans.length > 0 ? `อุปกรณ์ (${pLoans.length})` : 'ยืมเตียง'}</span>
                                   </button>
                                   <button
                                     type="button"
@@ -8329,22 +8335,20 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
           isOpen={!!quickLoanPatient}
           onClose={() => setQuickLoanPatient(null)}
           patient={quickLoanPatient}
-          existingLoan={
-            loans.find(
-              (l) =>
-                l.status !== 'returned' &&
-                ((quickLoanPatient.idCard && l.patientIdCard === quickLoanPatient.idCard) ||
-                  (quickLoanPatient.idCard && l.borrowerIdCard === quickLoanPatient.idCard) ||
-                  (quickLoanPatient.fullName &&
-                    l.patientName &&
-                    (l.patientName.includes(quickLoanPatient.fullName) ||
-                      quickLoanPatient.fullName.includes(l.patientName))) ||
-                  (quickLoanPatient.name &&
-                    l.patientName &&
-                    (l.patientName.includes(quickLoanPatient.name) ||
-                      quickLoanPatient.name.includes(l.patientName))))
-            ) || null
-          }
+          existingLoans={loans.filter(
+            (l) =>
+              l.status !== 'returned' &&
+              ((quickLoanPatient.idCard && l.patientIdCard === quickLoanPatient.idCard) ||
+                (quickLoanPatient.idCard && l.borrowerIdCard === quickLoanPatient.idCard) ||
+                (quickLoanPatient.fullName &&
+                  l.patientName &&
+                  (l.patientName.includes(quickLoanPatient.fullName) ||
+                    quickLoanPatient.fullName.includes(l.patientName))) ||
+                (quickLoanPatient.name &&
+                  l.patientName &&
+                  (l.patientName.includes(quickLoanPatient.name) ||
+                    quickLoanPatient.name.includes(l.patientName))))
+          )}
           equipmentUnits={equipmentUnits}
           equipmentList={equipmentList}
           onSaveLoan={(savedLoan) => {
@@ -8354,7 +8358,6 @@ export const NhsoLtcCombinedView: React.FC<NhsoLtcCombinedViewProps> = ({
             } else {
               onAddRegisteredLoan?.(savedLoan);
             }
-            setQuickLoanPatient(null);
             onShowToast?.(`บันทึกข้อมูลการยืม ${savedLoan.equipmentName} เรียบร้อยแล้ว`, 'success');
           }}
           onRemoveLoan={(loanId) => {

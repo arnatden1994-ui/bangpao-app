@@ -1533,6 +1533,13 @@ unsubLicenses();
                 savedSignerSettings={signerSettings}
                 onClearDummyLoans={handleClearDummyLoans}
                 onBatchUpdateLoans={handleBatchUpdateLoans}
+                onUpdateLoan={(updatedLoan) => {
+                  setLoans((prev) =>
+                    prev.map((l) => (l.id === updatedLoan.id ? updatedLoan : l))
+                  );
+                  saveToFirestore(COLLECTIONS.LOANS, updatedLoan, updatedLoan.id).catch(() => {});
+                  showToast('success', `อัปเดตข้อมูลการยืม "${updatedLoan.equipmentName}" เรียบร้อยแล้ว`);
+                }}
                 onAddEquipmentUnit={(newUnit) => {
                   setEquipmentUnits((prev) => [newUnit, ...prev]);
                   showToast('success', `เพิ่มทะเบียน "${newUnit.assetCode}" เข้าคลังเรียบร้อยแล้ว`);
