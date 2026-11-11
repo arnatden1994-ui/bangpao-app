@@ -144,17 +144,17 @@ const createStatusPinIcon = (
     return L.divIcon({
       className: 'custom-hq-pin-icon',
       html: `
-        <div style="position:relative;width:40px;height:48px;filter:drop-shadow(0 4px 7px rgba(0,0,0,0.55));cursor:pointer;">
-          <svg viewBox="0 0 24 32" width="40" height="48">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12z" fill="#0284c7" stroke="#ffffff" stroke-width="2.2"/>
-            <circle cx="12" cy="11" r="7.5" fill="#ffffff"/>
-            <text x="12" y="15" font-size="10" text-anchor="middle" font-family="'Prompt',sans-serif">🏢</text>
+        <div style="position:relative;width:26px;height:34px;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.4));cursor:pointer;transition:transform 0.15s ease;">
+          <svg viewBox="0 0 24 32" width="26" height="34">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 8.8 12 20 12 20s12-11.2 12-20c0-6.63-5.37-12-12-12z" fill="#0284c7" stroke="#ffffff" stroke-width="1.8"/>
+            <circle cx="12" cy="11.5" r="6" fill="#ffffff"/>
+            <text x="12" y="15" font-size="8.5" text-anchor="middle" font-family="'Prompt',sans-serif">🏢</text>
           </svg>
         </div>
       `,
-      iconSize: [40, 48],
-      iconAnchor: [20, 48],
-      popupAnchor: [0, -48],
+      iconSize: [26, 34],
+      iconAnchor: [13, 34],
+      popupAnchor: [0, -34],
     });
   }
 
@@ -173,26 +173,26 @@ const createStatusPinIcon = (
   }
 
   const activeRing = isActive
-    ? `<div style="position:absolute;top:-4px;left:-4px;right:-4px;bottom:0px;border-radius:999px;border:3px solid #38bdf8;box-shadow:0 0 12px #38bdf8;pointer-events:none;"></div>`
+    ? `<div style="position:absolute;top:-2.5px;left:-2.5px;right:-2.5px;bottom:1.5px;border-radius:999px;border:2px solid #38bdf8;box-shadow:0 0 8px rgba(56,189,248,0.75);pointer-events:none;"></div>`
     : '';
 
-  const scaleStyle = isActive ? 'transform:scale(1.22);transform-origin:bottom center;' : '';
+  const scaleStyle = isActive ? 'transform:scale(1.12);transform-origin:bottom center;' : '';
 
   return L.divIcon({
     className: 'custom-status-pin-icon',
     html: `
-      <div style="position:relative;width:34px;height:44px;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.55));cursor:pointer;${scaleStyle}transition:transform 0.15s ease;">
+      <div style="position:relative;width:22px;height:30px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));cursor:pointer;${scaleStyle}transition:transform 0.15s ease;">
         ${activeRing}
-        <svg viewBox="0 0 24 32" width="34" height="44">
-          <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12z" fill="${pinColor}" stroke="#ffffff" stroke-width="2.4"/>
-          <circle cx="12" cy="11" r="7.2" fill="#ffffff"/>
-          <text x="12" y="14.3" font-size="${centerText.length > 2 ? '7' : '8.5'}" text-anchor="middle" font-family="'Prompt',sans-serif" font-weight="900" fill="${centerColor}">${centerText}</text>
+        <svg viewBox="0 0 24 32" width="22" height="30">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 8.8 12 20 12 20s12-11.2 12-20c0-6.63-5.37-12-12-12z" fill="${pinColor}" stroke="#ffffff" stroke-width="1.8"/>
+          <circle cx="12" cy="11.2" r="5.6" fill="#ffffff"/>
+          <text x="12" y="13.8" font-size="${centerText.length > 2 ? '6' : '7.5'}" text-anchor="middle" font-family="'Prompt',sans-serif" font-weight="900" fill="${centerColor}">${centerText}</text>
         </svg>
       </div>
     `,
-    iconSize: [34, 44],
-    iconAnchor: [17, 44],
-    popupAnchor: [0, -44],
+    iconSize: [22, 30],
+    iconAnchor: [11, 30],
+    popupAnchor: [0, -30],
   });
 };
 
@@ -961,14 +961,14 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         </div>
       `);
       hqMarker.bindTooltip(`
-        <div style="background:#0284c7;color:#ffffff;padding:2px 7px;border-radius:6px;font-family:'Prompt',sans-serif;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.5);border:1.5px solid #ffffff;white-space:nowrap;display:flex;align-items:center;gap:4px;">
-          <span style="font-size:10px;">🏢</span>
+        <div style="background:#0284c7;color:#ffffff;padding:1.5px 6px;border-radius:999px;font-family:'Prompt',sans-serif;font-size:10px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.35);border:1.2px solid #ffffff;white-space:nowrap;display:flex;align-items:center;gap:3.5px;">
+          <span style="font-size:9.5px;">🏢</span>
           <span>ทต.บางเป้า (คลังอุปกรณ์)</span>
         </div>
       `, {
         permanent: true,
         direction: 'bottom',
-        offset: [0, 8],
+        offset: [0, 6],
         className: 'custom-status-tooltip',
       });
 
@@ -1058,8 +1058,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
           }
 
           const tooltipHtml = `
-            <div style="background:${tooltipBg};color:#ffffff;padding:2px 7px;border-radius:6px;font-family:'Prompt',sans-serif;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.5);border:1.5px solid #ffffff;white-space:nowrap;display:flex;align-items:center;gap:4px;">
-              <span style="font-size:9.5px;background:#ffffff;color:${tooltipBg};border-radius:4px;padding:0 3.5px;font-weight:900;">${statusTag}</span>
+            <div style="background:${tooltipBg};color:#ffffff;padding:1.5px 6px;border-radius:999px;font-family:'Prompt',sans-serif;font-size:10px;font-weight:700;box-shadow:0 2px 5px rgba(0,0,0,0.35);border:1.2px solid #ffffff;white-space:nowrap;display:flex;align-items:center;gap:3.5px;letter-spacing:0.2px;">
+              <span style="font-size:8.5px;background:#ffffff;color:${tooltipBg};border-radius:999px;padding:0 3.5px;font-weight:900;">${statusTag}</span>
               <span>ม.${loan.moo} ${shortName}</span>
             </div>
           `;
@@ -1067,7 +1067,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
           marker.bindTooltip(tooltipHtml, {
             permanent: true,
             direction: 'top',
-            offset: [0, -42],
+            offset: [0, -30],
             className: 'custom-status-tooltip',
           });
         }
