@@ -131,6 +131,22 @@ const formatIdCard13 = (val?: string): string => {
   return `${digits.slice(0, 1)}-${digits.slice(1, 5)}-${digits.slice(5, 10)}-${digits.slice(10, 12)}-${digits.slice(12)}`;
 };
 
+export interface HouseholdLoanGroup {
+  id: string;
+  householdKey: string;
+  patientName: string;
+  patientIdCard?: string;
+  borrowerName: string;
+  borrowerPhone: string;
+  phone: string;
+  address: string;
+  moo: string;
+  latitude: number;
+  longitude: number;
+  loans: EquipmentLoan[];
+  primaryStatus: 'borrowed' | 'pending' | 'returned';
+}
+
 // High-contrast SVG status pins with sharp drop-shadow for satellite maps
 const createStatusPinIcon = (
   status: 'borrowed' | 'returned' | 'pending' | 'hq',
@@ -162,14 +178,18 @@ const createStatusPinIcon = (
   let centerText = 'ยืม';
   let centerColor = '#059669';
 
-  if (status === 'returned') {
+  if (queueNumber) {
+    pinColor = '#ea580c'; // Orange for in queue
+    centerText = `#${queueNumber}`;
+    centerColor = '#ea580c';
+  } else if (status === 'returned') {
     pinColor = '#7c3aed'; // Vibrant Purple for returned (ส่งคืนแล้ว)
     centerText = 'คืน';
     centerColor = '#7c3aed';
   } else if (status === 'pending') {
-    pinColor = '#ea580c'; // Amber / Orange for pending (รอนำส่ง)
-    centerText = queueNumber ? `#${queueNumber}` : 'รอ';
-    centerColor = '#ea580c';
+    pinColor = '#d97706'; // Amber for pending (รอนำส่ง)
+    centerText = 'รอ';
+    centerColor = '#d97706';
   }
 
   const activeRing = isActive
@@ -622,19 +642,56 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     return mapped.sort((a, b) => getLoanSortTimestamp(b) - getLoanSortTimestamp(a));
   }, [loans]);
 
-  // Sync selectedStopIds initially
-  useEffect(() => {
-    if (selectedStopIds.length === 0 && normalizedLoans.length > 0) {
-      const defaultQueue = normalizedLoans
-        .filter((l) => l.status === 'pending' || l.status === 'approved')
-        .map((l) => l.id);
-      if (defaultQueue.length > 0) {
-        setSelectedStopIds(defaultQueue);
+  // Household Loan Groups (1 Group = 1 Household, combining all equipment items borrowed by this patient)
+  const householdGroups = useMemo<HouseholdLoanGroup[]>(() => {
+    const map = new Map<string, HouseholdLoanGroup>();
+
+    normalizedLoans.forEach((loan) => {
+      const cleanPt = (loan.patientName || '').replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/, '').replace(/\s+/g, '').trim();
+      const idKey = loan.patientIdCard ? loan.patientIdCard.replace(/\D/g, '') : '';
+      const key = idKey && idKey.length === 13 ? idKey : (cleanPt || loan.id);
+
+      if (!map.has(key)) {
+        map.set(key, {
+          id: loan.id,
+          householdKey: key,
+          patientName: loan.patientName || 'ผู้มีภาวะพึ่งพิง',
+          patientIdCard: loan.patientIdCard,
+          borrowerName: loan.borrowerName || loan.patientName || '-',
+          borrowerPhone: loan.borrowerPhone || loan.phone || '',
+          phone: loan.phone || loan.borrowerPhone || '',
+          address: loan.address || loan.borrowerAddress || '',
+          moo: String(loan.moo || '1'),
+          latitude: Number(loan.latitude),
+          longitude: Number(loan.longitude),
+          loans: [loan],
+          primaryStatus: loan.status === 'pending' || loan.status === 'approved' ? 'pending' : loan.status === 'borrowed' ? 'borrowed' : 'returned',
+        });
       } else {
-        setSelectedStopIds(normalizedLoans.slice(0, 5).map((l) => l.id));
+        const h = map.get(key)!;
+        h.loans.push(loan);
+        if (loan.status === 'pending' || loan.status === 'approved') {
+          h.primaryStatus = 'pending';
+        } else if (loan.status === 'borrowed' && h.primaryStatus !== 'pending') {
+          h.primaryStatus = 'borrowed';
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }, [normalizedLoans]);
+
+  // Initial Sync: Only pre-select if there are actually pending items to deliver!
+  useEffect(() => {
+    if (selectedStopIds.length === 0 && householdGroups.length > 0) {
+      const pendingStops = householdGroups
+        .filter((h) => h.primaryStatus === 'pending')
+        .map((h) => h.id);
+      if (pendingStops.length > 0) {
+        setSelectedStopIds(pendingStops);
       }
     }
-  }, [normalizedLoans]);
+  }, [householdGroups]);
 
   // Filtered Loans for Dashboard
   const filteredLoans = useMemo(() => {
@@ -719,21 +776,37 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     });
   }, [normalizedLoans, regTableMooFilter, regTableStatusFilter, regTableSearch]);
 
-  const orderedSelectedLoans = useMemo(() => {
-    const list: EquipmentLoan[] = [];
+  const orderedSelectedHouseholds = useMemo(() => {
+    const list: HouseholdLoanGroup[] = [];
+    const seen = new Set<string>();
     selectedStopIds.forEach((id) => {
-      const found = normalizedLoans.find((l) => l.id === id);
-      if (found) list.push(found);
+      const found = householdGroups.find(
+        (h) => h.id === id || h.householdKey === id || h.loans.some((l) => l.id === id)
+      );
+      if (found && !seen.has(found.householdKey)) {
+        seen.add(found.householdKey);
+        list.push(found);
+      }
     });
     return list;
-  }, [selectedStopIds, normalizedLoans]);
+  }, [selectedStopIds, householdGroups]);
 
-  // KPI Statistics
+  const orderedSelectedLoans = useMemo(() => {
+    return orderedSelectedHouseholds.flatMap((h) => h.loans);
+  }, [orderedSelectedHouseholds]);
+
+  // KPI Statistics (Both Households & Total Equipment Units)
   const totalLoanCount = normalizedLoans.length;
   const activeBorrowedCount = normalizedLoans.filter((l) => l.status === 'borrowed').length;
   const pendingDispatchCount = normalizedLoans.filter((l) => l.status === 'pending' || l.status === 'approved').length;
   const returnedCount = normalizedLoans.filter((l) => l.status === 'returned').length;
-  const deliveredPercent = totalLoanCount > 0 ? Math.round((activeBorrowedCount / totalLoanCount) * 100) : 0;
+
+  const totalHouseholdsCount = householdGroups.length;
+  const activeBorrowedHouseholdsCount = householdGroups.filter((h) => h.primaryStatus === 'borrowed').length;
+  const pendingDispatchHouseholdsCount = householdGroups.filter((h) => h.primaryStatus === 'pending').length;
+  const returnedHouseholdsCount = householdGroups.filter((h) => h.primaryStatus === 'returned').length;
+
+  const deliveredPercent = totalHouseholdsCount > 0 ? Math.round((activeBorrowedHouseholdsCount / totalHouseholdsCount) * 100) : 0;
 
   // Helper to resolve live custodian & location for an individual unit
   const resolveUnitDetails = (unit: MedicalEquipmentUnit) => {
@@ -972,29 +1045,62 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         className: 'custom-status-tooltip',
       });
 
-      // 2. Filter loans according to mapPinStatusFilter
-      const loansForMap = filteredLoans.filter((loan) => {
-        if (mapPinStatusFilter === 'all') return true;
-        if (mapPinStatusFilter === 'borrowed') return loan.status === 'borrowed';
-        if (mapPinStatusFilter === 'returned') return loan.status === 'returned';
-        if (mapPinStatusFilter === 'pending') return loan.status === 'pending' || loan.status === 'approved';
-        return true;
+      // 2. Filter loans according to mapPinStatusFilter & Group by Household!
+      const householdMap = new Map<string, HouseholdLoanGroup>();
+      filteredLoans.forEach((loan) => {
+        if (mapPinStatusFilter === 'borrowed' && loan.status !== 'borrowed') return;
+        if (mapPinStatusFilter === 'returned' && loan.status !== 'returned') return;
+        if (mapPinStatusFilter === 'pending' && loan.status !== 'pending' && loan.status !== 'approved') return;
+
+        const cleanPt = (loan.patientName || '').replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/, '').replace(/\s+/g, '').trim();
+        const idKey = loan.patientIdCard ? loan.patientIdCard.replace(/\D/g, '') : '';
+        const key = idKey && idKey.length === 13 ? idKey : (cleanPt || loan.id);
+
+        if (!householdMap.has(key)) {
+          householdMap.set(key, {
+            id: loan.id,
+            householdKey: key,
+            patientName: loan.patientName || 'ผู้มีภาวะพึ่งพิง',
+            patientIdCard: loan.patientIdCard,
+            borrowerName: loan.borrowerName || loan.patientName || '-',
+            borrowerPhone: loan.borrowerPhone || loan.phone || '',
+            phone: loan.phone || loan.borrowerPhone || '',
+            address: loan.address || loan.borrowerAddress || '',
+            moo: String(loan.moo || '1'),
+            latitude: Number(loan.latitude),
+            longitude: Number(loan.longitude),
+            loans: [loan],
+            primaryStatus: loan.status === 'pending' || loan.status === 'approved' ? 'pending' : loan.status === 'borrowed' ? 'borrowed' : 'returned',
+          });
+        } else {
+          const h = householdMap.get(key)!;
+          h.loans.push(loan);
+          if (loan.status === 'pending' || loan.status === 'approved') {
+            h.primaryStatus = 'pending';
+          } else if (loan.status === 'borrowed' && h.primaryStatus !== 'pending') {
+            h.primaryStatus = 'borrowed';
+          }
+        }
       });
 
-      // 3. Render Status Pins
-      loansForMap.forEach((loan) => {
-        const isDelivered = loan.status === 'borrowed';
-        const isReturned = loan.status === 'returned';
-        const queueIndex = isDelivered || isReturned ? -1 : orderedSelectedLoans.findIndex((l) => l.id === loan.id);
-        const queueNumber = queueIndex >= 0 ? queueIndex + 1 : null;
-        const statusType: 'borrowed' | 'returned' | 'pending' = isReturned ? 'returned' : isDelivered ? 'borrowed' : 'pending';
-        const isActive = activeLoanPin?.id === loan.id;
+      const householdsForMap = Array.from(householdMap.values());
 
-        const pinIcon = createStatusPinIcon(statusType, queueNumber, isActive);
+      // 3. Render Status Pins per Household (No duplicate/overlapping pins!)
+      householdsForMap.forEach((household) => {
+        const queueIndex = orderedSelectedHouseholds.findIndex(
+          (h) => h.id === household.id || h.householdKey === household.householdKey
+        );
+        const queueNumber = queueIndex >= 0 ? queueIndex + 1 : null;
+        const isDelivered = household.primaryStatus === 'borrowed';
+        const isReturned = household.primaryStatus === 'returned';
+        const statusType: 'borrowed' | 'returned' | 'pending' = household.primaryStatus;
+        const isActive = activeLoanPin && (activeLoanPin.id === household.id || household.loans.some((l) => l.id === activeLoanPin.id));
+
+        const pinIcon = createStatusPinIcon(statusType, queueNumber, Boolean(isActive));
         if (!pinIcon) return;
 
-        const lat = Number(loan.latitude);
-        const lng = Number(loan.longitude);
+        const lat = Number(household.latitude);
+        const lng = Number(household.longitude);
         if (isNaN(lat) || isNaN(lng)) return;
 
         const marker = L.marker([lat, lng], {
@@ -1010,32 +1116,30 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
           ? `<span style="background:#7c3aed;color:#ffffff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;">🔄 ส่งคืนแล้ว</span>`
           : `<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;">รอจัดรอบส่งมอบ</span>`;
 
-        const statusBadgeHtml = isDelivered
-          ? `<span style="background:#dcfce7;color:#166534;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;border:1px solid #86efac;">🟢 ยืมใช้งานอยู่</span>`
-          : isReturned
-          ? `<span style="background:#f3e8ff;color:#6b21a8;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;border:1px solid #d8b4fe;">🔄 ส่งคืนแล้ว</span>`
-          : `<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;border:1px solid #fde68a;">⏳ รอส่งมอบ</span>`;
+        const equipItemsHtml = household.loans
+          .map(
+            (l) =>
+              `<div style="color:#0f766e;font-size:11px;font-weight:700;">🦼 ${l.equipmentName} <span style="font-family:monospace;font-size:10px;color:#0d9488;">(${l.equipmentCode || 'รหัสครุภัณฑ์'})</span></div>`
+          )
+          .join('');
 
         marker.bindPopup(`
           <div style="font-family:'Prompt',sans-serif;font-size:12px;line-height:1.5;min-width:240px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;">
-              <strong style="font-size:13px;color:#0f172a;">${loan.patientName}</strong>
+              <strong style="font-size:13px;color:#0f172a;">${household.patientName}</strong>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
               ${queueBadgeHtml}
-              ${statusBadgeHtml}
+              <span style="background:#e0f2fe;color:#0369a1;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;">อุปกรณ์ ${household.loans.length} ชิ้น</span>
             </div>
-            <div style="color:#0f766e;font-weight:700;font-size:11px;margin-bottom:3px;">
-              🦼 <strong>อุปกรณ์:</strong> ${loan.equipmentName}
+            <div style="margin-bottom:6px;padding:4px 6px;background:#f0fdfa;border-radius:6px;border:1px solid #ccfbf1;">
+              ${equipItemsHtml}
             </div>
             <div style="color:#334155;font-size:11px;">
-              📍 <strong>หมู่ที่ ${loan.moo} ${BANGPAO_VILLAGES[loan.moo || '1'] || ''}</strong> • ${loan.address || loan.borrowerAddress || ''}
+              📍 <strong>หมู่ที่ ${household.moo} ${BANGPAO_VILLAGES[household.moo] || ''}</strong> • ${household.address}
             </div>
             <div style="color:#475569;font-size:11px;margin-top:2px;">
-              👤 <strong>ผู้ขอยืม:</strong> ${loan.borrowerName} (${loan.phone || loan.borrowerPhone || '-'})
-            </div>
-            <div style="color:#64748b;font-size:10px;font-family:monospace;margin-top:4px;">
-              GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}
+              👤 <strong>ผู้ขอยืม:</strong> ${household.borrowerName} (${household.phone || '-'})
             </div>
             <div style="margin-top:8px;padding-top:6px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;gap:6px;">
               <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;font-weight:700;font-size:11px;text-decoration:none;">
@@ -1046,21 +1150,27 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         `);
 
         if (showPinLabels) {
-          const shortName = (loan.patientName || '').split(' ')[0];
+          const shortName = (household.patientName || '').split(' ')[0];
           let tooltipBg = '#059669';
           let statusTag = '🟢 ยืมอยู่';
-          if (isReturned) {
+          if (queueNumber) {
+            tooltipBg = '#ea580c';
+            statusTag = `🚩 คิว #${queueNumber}`;
+          } else if (isReturned) {
             tooltipBg = '#7c3aed';
             statusTag = '🟣 ส่งคืนแล้ว';
           } else if (!isDelivered) {
-            tooltipBg = '#ea580c';
-            statusTag = queueNumber ? `🟡 คิว #${queueNumber}` : '🟡 รอนำส่ง';
+            tooltipBg = '#d97706';
+            statusTag = '🟡 รอนำส่ง';
           }
+
+          const equipCountTag = household.loans.length > 1 ? `<span style="font-size:8px;background:rgba(255,255,255,0.25);border-radius:4px;padding:0 3px;">${household.loans.length}ชิ้น</span>` : '';
 
           const tooltipHtml = `
             <div style="background:${tooltipBg};color:#ffffff;padding:1.5px 6px;border-radius:999px;font-family:'Prompt',sans-serif;font-size:10px;font-weight:700;box-shadow:0 2px 5px rgba(0,0,0,0.35);border:1.2px solid #ffffff;white-space:nowrap;display:flex;align-items:center;gap:3.5px;letter-spacing:0.2px;">
               <span style="font-size:8.5px;background:#ffffff;color:${tooltipBg};border-radius:999px;padding:0 3.5px;font-weight:900;">${statusTag}</span>
-              <span>ม.${loan.moo} ${shortName}</span>
+              <span>ม.${household.moo} ${shortName}</span>
+              ${equipCountTag}
             </div>
           `;
 
@@ -1073,15 +1183,15 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         }
 
         marker.on('click', () => {
-          setActiveLoanPin(loan);
+          setActiveLoanPin(household.loans[0]);
         });
 
-        overviewMarkerMapRef.current[loan.id] = marker;
+        overviewMarkerMapRef.current[household.id] = marker;
       });
     }, 50);
 
     return () => clearTimeout(timer);
-  }, [subTab, filteredLoans, mapPinStatusFilter, orderedSelectedLoans, showPinLabels, activeLoanPin?.id, totalAssetsAvailable]);
+  }, [subTab, filteredLoans, mapPinStatusFilter, orderedSelectedHouseholds, showPinLabels, activeLoanPin?.id, totalAssetsAvailable]);
 
   // Route Polyline on Leaflet
   useEffect(() => {
@@ -1091,11 +1201,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     if (!L || !layer) return;
 
     layer.clearLayers();
-    if (!isRouteDrawn || orderedSelectedLoans.length === 0) return;
+    if (!isRouteDrawn || orderedSelectedHouseholds.length === 0) return;
 
     const latlngs: [number, number][] = [
       [BANGPAO_MUNICIPALITY_COORDS.lat, BANGPAO_MUNICIPALITY_COORDS.lng],
-      ...orderedSelectedLoans.map((l) => [Number(l.latitude), Number(l.longitude)] as [number, number]),
+      ...orderedSelectedHouseholds.map((h) => [Number(h.latitude), Number(h.longitude)] as [number, number]),
     ];
 
     L.polyline(latlngs, {
@@ -1627,16 +1737,21 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   // Queue Operations
   const handleMoveQueueItem = (idx: number, direction: 'up' | 'down') => {
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= selectedStopIds.length) return;
-    const copy = [...selectedStopIds];
+    if (targetIdx < 0 || targetIdx >= orderedSelectedHouseholds.length) return;
+    const copy = orderedSelectedHouseholds.map((h) => h.id);
     const temp = copy[idx];
     copy[idx] = copy[targetIdx];
     copy[targetIdx] = temp;
     setSelectedStopIds(copy);
   };
 
-  const handleRemoveFromQueue = (loanId: string) => {
-    setSelectedStopIds((prev) => prev.filter((id) => id !== loanId));
+  const handleRemoveFromQueue = (stopId: string) => {
+    const target = householdGroups.find((h) => h.id === stopId || h.householdKey === stopId || h.loans.some((l) => l.id === stopId));
+    if (!target) {
+      setSelectedStopIds((prev) => prev.filter((id) => id !== stopId));
+      return;
+    }
+    setSelectedStopIds((prev) => prev.filter((id) => id !== target.id && !target.loans.some((l) => l.id === id)));
   };
 
   const clearQueueToPickInOrder = () => {
@@ -1646,23 +1761,42 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   };
 
   const selectOnlyPendingLoans = () => {
-    const pendingIds = normalizedLoans
-      .filter((l) => l.status === 'pending' || l.status === 'approved')
-      .map((l) => l.id);
+    const pendingIds = householdGroups
+      .filter((h) => h.primaryStatus === 'pending')
+      .map((h) => h.id);
     setSelectedStopIds(pendingIds);
-    setQueueToastMsg(`ดึงผู้ขอยืมที่รอส่งมอบ ${pendingIds.length} รายเข้าคิวแล้ว`);
+    setQueueToastMsg(`ดึงบ้านที่รอนำส่ง ${pendingIds.length} หลังเข้าคิวแล้ว`);
+    setTimeout(() => setQueueToastMsg(null), 3000);
+  };
+
+  const selectAllHouseholds = () => {
+    const allIds = householdGroups.map((h) => h.id);
+    setSelectedStopIds(allIds);
+    setQueueToastMsg(`ดึงบ้านทั้งหมด ${allIds.length} หลังเข้าคิวแล้ว`);
+    setTimeout(() => setQueueToastMsg(null), 3000);
+  };
+
+  const toggleHouseholdInQueue = (householdId: string) => {
+    const target = householdGroups.find((h) => h.id === householdId || h.householdKey === householdId || h.loans.some((l) => l.id === householdId));
+    if (!target) return;
+    const exists = selectedStopIds.some((id) => id === target.id || target.loans.some((l) => l.id === id));
+    if (exists) {
+      setSelectedStopIds((prev) => prev.filter((id) => id !== target.id && !target.loans.some((l) => l.id === id)));
+      setQueueToastMsg(`นำบ้าน ${target.patientName} ออกจากคิวแล้ว`);
+    } else {
+      setSelectedStopIds((prev) => [...prev, target.id]);
+      setQueueToastMsg(`เพิ่มบ้าน ${target.patientName} เข้าคิวจัดส่งเรียบร้อยแล้ว`);
+    }
     setTimeout(() => setQueueToastMsg(null), 3000);
   };
 
   // Nearest Neighbor TSP Auto-sort
   const autoSortNearestFromHq = () => {
-    if (selectedStopIds.length === 0) {
-      selectOnlyPendingLoans();
-      return;
+    let currentList = [...orderedSelectedHouseholds];
+    if (currentList.length === 0) {
+      currentList = [...householdGroups];
     }
-    const currentList = selectedStopIds
-      .map((id) => normalizedLoans.find((l) => l.id === id))
-      .filter(Boolean) as EquipmentLoan[];
+    if (currentList.length === 0) return;
 
     const remaining = [...currentList];
     const sortedIds: string[] = [];
@@ -1689,22 +1823,19 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
     setSelectedStopIds(sortedIds);
     setIsRouteDrawn(true);
-    setQueueToastMsg(`⚡ เรียงลำดับใกล้สุดจาก ทต.บางเป้า (${sortedIds.length} จุด) เรียบร้อยแล้ว`);
+    setQueueToastMsg(`⚡ เรียงลำดับใกล้สุดจาก ทต.บางเป้า (${sortedIds.length} หลัง) เรียบร้อยแล้ว`);
     setTimeout(() => setQueueToastMsg(null), 3500);
   };
 
   const autoSortByMoo = () => {
-    const currentList = (selectedStopIds.length > 0 ? selectedStopIds : normalizedLoans.map((l) => l.id))
-      .map((id) => normalizedLoans.find((l) => l.id === id))
-      .filter(Boolean) as EquipmentLoan[];
-
+    let currentList = orderedSelectedHouseholds.length > 0 ? [...orderedSelectedHouseholds] : [...householdGroups];
     const sortedIds = [...currentList]
       .sort((a, b) => Number(a.moo || '1') - Number(b.moo || '1'))
-      .map((l) => l.id);
+      .map((h) => h.id);
 
     setSelectedStopIds(sortedIds);
     setIsRouteDrawn(true);
-    setQueueToastMsg(`เรียงลำดับตาม ม.1 ➔ ม.7 (${sortedIds.length} จุด) เรียบร้อยแล้ว`);
+    setQueueToastMsg(`เรียงลำดับตาม ม.1 ➔ ม.7 (${sortedIds.length} หลัง) เรียบร้อยแล้ว`);
     setTimeout(() => setQueueToastMsg(null), 3500);
   };
 
@@ -2253,12 +2384,12 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     <p className="text-[11px] text-slate-500">
                       จุดบริการ: <strong>ทต.บางเป้า (เริ่มต้น)</strong> • แสดงหมุด: <strong>
                         {mapPinStatusFilter === 'all'
-                          ? `ทั้งหมด (${filteredLoans.length} จุด)`
+                          ? `ทั้งหมด (${householdGroups.length} หลัง / ${filteredLoans.length} รายการ)`
                           : mapPinStatusFilter === 'borrowed'
-                          ? `ยืมใช้งานอยู่ (${activeBorrowedCount} จุด)`
+                          ? `ยืมใช้งานอยู่ (${activeBorrowedHouseholdsCount} หลัง / ${activeBorrowedCount} รายการ)`
                           : mapPinStatusFilter === 'returned'
-                          ? `ส่งคืนแล้ว (${returnedCount} จุด)`
-                          : `รอนำส่ง (${pendingDispatchCount} จุด)`}
+                          ? `ส่งคืนแล้ว (${returnedHouseholdsCount} หลัง / ${returnedCount} รายการ)`
+                          : `รอนำส่ง (${pendingDispatchHouseholdsCount} หลัง / ${pendingDispatchCount} รายการ)`}
                       </strong>
                     </p>
                   </div>
@@ -2274,10 +2405,10 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                       onChange={(e) => setMapPinStatusFilter(e.target.value as any)}
                       className="text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded px-1.5 py-0.5 cursor-pointer focus:ring-2 focus:ring-teal-500"
                     >
-                      <option value="all">📌 แสดงหมุดทั้งหมด ({filteredLoans.length} จุด)</option>
-                      <option value="borrowed">🟢 เฉพาะที่ยืมใช้งานอยู่ ({activeBorrowedCount} จุด)</option>
-                      <option value="returned">🟣 เฉพาะที่ส่งคืนแล้ว ({returnedCount} จุด)</option>
-                      <option value="pending">🟡 เฉพาะที่รอนำส่ง ({pendingDispatchCount} จุด)</option>
+                      <option value="all">📌 แสดงหมุดทั้งหมด ({householdGroups.length} หลัง / ${filteredLoans.length} ชิ้น)</option>
+                      <option value="borrowed">🟢 เฉพาะที่ยืมใช้งานอยู่ ({activeBorrowedHouseholdsCount} หลัง / {activeBorrowedCount} ชิ้น)</option>
+                      <option value="returned">🟣 เฉพาะที่ส่งคืนแล้ว ({returnedHouseholdsCount} หลัง / {returnedCount} ชิ้น)</option>
+                      <option value="pending">🟡 เฉพาะที่รอนำส่ง ({pendingDispatchHouseholdsCount} หลัง / {pendingDispatchCount} ชิ้น)</option>
                     </select>
                   </div>
 
@@ -2324,7 +2455,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                       : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                   }`}
                 >
-                  📌 ทั้งหมด ({filteredLoans.length})
+                  📌 ทั้งหมด ({householdGroups.length} หลัง)
                 </button>
 
                 <button
@@ -2337,7 +2468,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
-                  <span>🟢 ยืมใช้งานอยู่ ({activeBorrowedCount})</span>
+                  <span>🟢 ยืมใช้งานอยู่ ({activeBorrowedHouseholdsCount} หลัง)</span>
                 </button>
 
                 <button
@@ -2350,7 +2481,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-purple-500 border border-white shrink-0"></span>
-                  <span>🟣 ส่งคืนแล้ว ({returnedCount})</span>
+                  <span>🟣 ส่งคืนแล้ว ({returnedHouseholdsCount} หลัง)</span>
                 </button>
 
                 <button
@@ -2363,7 +2494,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500 border border-white shrink-0"></span>
-                  <span>🟡 รอนำส่ง ({pendingDispatchCount})</span>
+                  <span>🟡 รอนำส่ง ({pendingDispatchHouseholdsCount} หลัง)</span>
                 </button>
 
                 <div className="ml-auto text-[11px] text-sky-800 font-bold flex items-center gap-1 shrink-0 bg-sky-50 px-2 py-1 rounded-lg border border-sky-200">
@@ -2375,26 +2506,31 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
               {/* Mini Queue Flow Pill Ribbon */}
               <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 overflow-x-auto text-[11px] font-semibold text-slate-700">
                 <span className="shrink-0 px-2 py-0.5 rounded-md bg-teal-800 text-white font-extrabold text-[10px]">
-                  สรุปลำดับคิวส่ง ({orderedSelectedLoans.length} จุด)
+                  สรุปลำดับคิวส่ง ({orderedSelectedHouseholds.length} หลัง)
                 </span>
                 <span className="shrink-0 text-slate-400">🏢 ทต.บางเป้า</span>
-                {orderedSelectedLoans.map((l, i) => (
-                  <React.Fragment key={l.id}>
+                {orderedSelectedHouseholds.map((h, i) => (
+                  <React.Fragment key={h.id}>
                     <span className="text-slate-400 shrink-0">➔</span>
                     <button
                       type="button"
                       onClick={() => {
-                        setActiveLoanPin(l);
+                        setActiveLoanPin(h.loans[0]);
                         if (overviewMapInstanceRef.current) {
-                          overviewMapInstanceRef.current.setView([Number(l.latitude), Number(l.longitude)], 17);
-                          const m = overviewMarkerMapRef.current[l.id];
+                          overviewMapInstanceRef.current.setView([Number(h.latitude), Number(h.longitude)], 17);
+                          const m = overviewMarkerMapRef.current[h.id];
                           if (m) m.openPopup();
                         }
                       }}
                       className="shrink-0 px-2 py-0.5 rounded-md bg-white hover:bg-teal-50 border border-slate-300 hover:border-teal-400 text-slate-800 cursor-pointer flex items-center gap-1"
                     >
                       <span className="text-teal-700 font-black">#{i + 1}</span>
-                      <span>ม.{l.moo} {(l.patientName || '').split(' ')[0]}</span>
+                      <span>ม.{h.moo} {(h.patientName || '').split(' ')[0]}</span>
+                      {h.loans.length > 1 && (
+                        <span className="text-[9px] bg-teal-100 text-teal-800 px-1 rounded font-bold">
+                          {h.loans.length}ชิ้น
+                        </span>
+                      )}
                     </button>
                   </React.Fragment>
                 ))}
@@ -2502,6 +2638,29 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {/* Toggle in Delivery/Visit Queue */}
+                      {(() => {
+                        const inQueue = orderedSelectedHouseholds.some(
+                          (h) => h.id === activeLoanPin.id || h.loans.some((l) => l.id === activeLoanPin.id)
+                        );
+                        const qIdx = orderedSelectedHouseholds.findIndex(
+                          (h) => h.id === activeLoanPin.id || h.loans.some((l) => l.id === activeLoanPin.id)
+                        );
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => toggleHouseholdInQueue(activeLoanPin.id)}
+                            className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-2xs text-xs cursor-pointer transition-colors ${
+                              inQueue
+                                ? 'bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300'
+                                : 'bg-amber-600 hover:bg-amber-700 text-white'
+                            }`}
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            <span>{inQueue ? `➖ ถอดจากคิว (#${qIdx + 1})` : '➕ เพิ่มเข้าคิวนำส่ง'}</span>
+                          </button>
+                        );
+                      })()}
                       <a
                         href={`https://www.google.com/maps/dir/?api=1&destination=${activeLoanPin.latitude},${activeLoanPin.longitude}`}
                         target="_blank"
@@ -2546,11 +2705,11 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     <span>จัดลำดับแผนการส่งมอบ (เลือกบ้านก่อน-หลังอิสระ)</span>
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    คิวจัดรอบส่งมอบ — เลื่อนขึ้น-ลง, เปลี่ยนลำดับ # หรือลากสลับการ์ด
+                    คิวจัดรอบส่งมอบ — เลื่อนขึ้น-ลง, เปลี่ยนลำดับ # หรือคลิกหมุดบนแผนที่
                   </p>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[11px] font-extrabold shrink-0">
-                  ในคิว {orderedSelectedLoans.length} / {normalizedLoans.length} บ้าน
+                  ในคิว {orderedSelectedHouseholds.length} / {householdGroups.length} หลัง
                 </span>
               </div>
 
@@ -2591,15 +2750,24 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   <span className="truncate">เรียง ม.1➔ม.7</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={selectedStopIds.length === 0 ? selectOnlyPendingLoans : clearQueueToPickInOrder}
-                  className="flex items-center justify-center px-2 py-1.5 font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer"
-                >
-                  <span className="truncate">
-                    {selectedStopIds.length === 0 ? `ดึงรอส่งทั้งหมด (${pendingDispatchCount})` : `ล้างคิว (${orderedSelectedLoans.length})`}
-                  </span>
-                </button>
+                {pendingDispatchHouseholdsCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={selectOnlyPendingLoans}
+                    className="flex items-center justify-center px-2 py-1.5 font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer"
+                  >
+                    <span className="truncate">ดึงรอส่ง ({pendingDispatchHouseholdsCount})</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={selectAllHouseholds}
+                    className="flex items-center justify-center px-2 py-1.5 font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer"
+                    title="ดึงทุกบ้านที่มียืมอุปกรณ์เข้าคิวเพื่อตรวจเยี่ยมหรือส่งมอบ"
+                  >
+                    <span className="truncate">ดึงทุกบ้าน ({householdGroups.length})</span>
+                  </button>
+                )}
               </div>
 
               {/* Row 2: Action Toolbar */}
@@ -2607,7 +2775,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsRouteDrawn(!isRouteDrawn)}
-                  disabled={orderedSelectedLoans.length === 0}
+                  disabled={orderedSelectedHouseholds.length === 0}
                   className={`py-2 px-2.5 rounded-xl font-extrabold text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
                     isRouteDrawn ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white'
                   }`}
@@ -2628,7 +2796,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 <button
                   type="button"
                   onClick={() => window.open(getGoogleMapsRouteUrl(), '_blank')}
-                  disabled={orderedSelectedLoans.length === 0}
+                  disabled={orderedSelectedHouseholds.length === 0}
                   className="py-2 px-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-40 text-white font-extrabold text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                 >
                   <Navigation className="w-3.5 h-3.5 shrink-0" />
@@ -2638,7 +2806,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsShareModalOpen(true)}
-                  disabled={orderedSelectedLoans.length === 0}
+                  disabled={orderedSelectedHouseholds.length === 0}
                   className="py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                 >
                   <Share2 className="w-3.5 h-3.5 shrink-0" />
@@ -2648,18 +2816,36 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
               {/* Delivery Queue Cards List */}
               <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-                {orderedSelectedLoans.length === 0 ? (
-                  <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">
-                    <Truck className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <div>ยังไม่มีบ้านในคิวนำส่ง</div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      กดปุ่ม <strong>"ดึงรอส่งทั้งหมด"</strong> หรือคลิกหมุดบนแผนที่เพื่อเพิ่มเข้าคิว
+                {orderedSelectedHouseholds.length === 0 ? (
+                  <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs space-y-2">
+                    <Truck className="w-8 h-8 mx-auto text-slate-300" />
+                    <div className="font-extrabold text-slate-700">ยังไม่มีบ้านในคิวนำส่ง</div>
+                    <div className="text-[11px] text-slate-500">
+                      กดปุ่มด้านล่าง หรือคลิกหมุดบนแผนที่เพื่อเพิ่มบ้านเข้าคิวนำส่ง/ตรวจเยี่ยม
+                    </div>
+                    <div className="flex items-center justify-center gap-2 pt-2">
+                      {pendingDispatchHouseholdsCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={selectOnlyPendingLoans}
+                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                        >
+                          🚚 ดึงเฉพาะรอส่ง ({pendingDispatchHouseholdsCount} หลัง)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={selectAllHouseholds}
+                        className="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs cursor-pointer shadow-xs"
+                      >
+                        📋 ดึงทุกบ้านเข้าคิว ({householdGroups.length} หลัง)
+                      </button>
                     </div>
                   </div>
                 ) : (
-                  orderedSelectedLoans.map((loan, idx) => (
+                  orderedSelectedHouseholds.map((household, idx) => (
                     <div
-                      key={loan.id}
+                      key={household.id}
                       className="p-3 rounded-xl border border-slate-200 bg-white hover:border-teal-400 hover:shadow-xs transition-all space-y-2"
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -2669,10 +2855,10 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                           </span>
                           <div>
                             <div className="font-extrabold text-slate-900 text-xs sm:text-sm">
-                              {loan.patientName}
+                              {household.patientName}
                             </div>
                             <div className="text-[11px] text-slate-500">
-                              หมู่ที่ {loan.moo} {BANGPAO_VILLAGES[loan.moo || '1'] || ''} • ผู้ยืม: {loan.borrowerName}
+                              หมู่ที่ {household.moo} {BANGPAO_VILLAGES[household.moo || '1'] || ''} • ผู้ยืม: {household.borrowerName}
                             </div>
                           </div>
                         </div>
@@ -2690,7 +2876,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                           <button
                             type="button"
                             onClick={() => handleMoveQueueItem(idx, 'down')}
-                            disabled={idx === orderedSelectedLoans.length - 1}
+                            disabled={idx === orderedSelectedHouseholds.length - 1}
                             className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-20 text-slate-600 cursor-pointer"
                             title="เลื่อนลง"
                           >
@@ -2698,7 +2884,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleRemoveFromQueue(loan.id)}
+                            onClick={() => handleRemoveFromQueue(household.id)}
                             className="p-1 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
                             title="นำออกจากคิว"
                           >
@@ -2707,66 +2893,54 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] bg-slate-50 p-2 rounded-lg">
-                        <span className="font-semibold text-teal-900 truncate">
-                          🦼 {loan.equipmentName}
-                        </span>
-                        <span className="font-mono text-slate-600 shrink-0">
-                          📞 {loan.phone || loan.borrowerPhone || '-'}
-                        </span>
+                      {/* Equipment List at this Stop */}
+                      <div className="bg-slate-50 p-2 rounded-lg space-y-1 text-[11px]">
+                        {household.loans.map((eq) => (
+                          <div key={eq.id} className="flex items-center justify-between gap-1">
+                            <span className="font-semibold text-teal-900 truncate">
+                              🦼 {eq.equipmentName} <span className="font-mono text-[10px] text-teal-700">({eq.equipmentCode || 'รหัสครุภัณฑ์'})</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPrintModalLoan(eq)}
+                              className="text-teal-700 hover:text-teal-900 underline text-[10px] font-bold shrink-0 cursor-pointer"
+                            >
+                              สัญญา A4
+                            </button>
+                          </div>
+                        ))}
+                        <div className="text-[10px] text-slate-500 font-mono flex items-center justify-between pt-1 border-t border-slate-200">
+                          <span className="truncate">📍 {household.address}</span>
+                          <span className="shrink-0">📞 {household.phone || household.borrowerPhone || '-'}</span>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${household.latitude},${household.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sky-700 hover:text-sky-900 font-bold flex items-center gap-1 text-[11px]"
+                        >
+                          <Navigation className="w-3 h-3" />
+                          <span>นำทาง</span>
+                        </a>
+
                         <button
                           type="button"
-                          onClick={() => setPrintModalLoan(loan)}
-                          className="text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 cursor-pointer"
+                          onClick={() => {
+                            setActiveLoanPin(household.loans[0]);
+                            if (overviewMapInstanceRef.current) {
+                              overviewMapInstanceRef.current.setView([Number(household.latitude), Number(household.longitude)], 17);
+                              const m = overviewMarkerMapRef.current[household.id];
+                              if (m) m.openPopup();
+                            }
+                          }}
+                          className="text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 text-[11px] cursor-pointer"
                         >
-                          <Printer className="w-3 h-3" />
-                          <span>สัญญา A4</span>
+                          <MapPin className="w-3 h-3" />
+                          <span>ดูบนแผนที่</span>
                         </button>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveLoanPin(loan);
-                              if (overviewMapInstanceRef.current) {
-                                overviewMapInstanceRef.current.setView([Number(loan.latitude), Number(loan.longitude)], 17);
-                                const m = overviewMarkerMapRef.current[loan.id];
-                                if (m) m.openPopup();
-                              }
-                            }}
-                            className="text-sky-700 hover:text-sky-900 font-bold flex items-center gap-1 cursor-pointer"
-                          >
-                            <MapPin className="w-3 h-3" />
-                            <span>ดูบนแผนที่</span>
-                          </button>
-                          {loan.latitude && loan.longitude && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                window.open(
-                                  `https://www.google.com/maps/dir/?api=1&destination=${loan.latitude},${loan.longitude}`,
-                                  '_blank'
-                                );
-                              }}
-                              className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
-                              title="เปิด Google Maps นำทางพนักงานขับรถส่งของ"
-                            >
-                              <Navigation className="w-3 h-3 text-blue-600" />
-                              <span>นำทาง</span>
-                            </button>
-                          )}
-                          {loan.status !== 'borrowed' && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAppointmentModal(loan)}
-                              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[11px] cursor-pointer"
-                            >
-                              ส่งมอบ
-                            </button>
-                          )}
-                        </div>
                       </div>
                     </div>
                   ))

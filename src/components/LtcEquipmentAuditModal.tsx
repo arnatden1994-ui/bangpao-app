@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Plus,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import {
   LtcPatient,
@@ -66,6 +67,30 @@ export interface AuditPatientItem {
   patient: LtcPatient;
   equipments: PatientEquipmentItem[];
 }
+
+const normalizeThai = (s?: string) =>
+  (s || '')
+    .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/, '')
+    .replace(/\s+/g, '')
+    .trim();
+
+const isPatientLoanMatch = (pt: LtcPatient, l: EquipmentLoan): boolean => {
+  const ptId = (pt.idCard || '').replace(/\D/g, '');
+  const loanPtId = (l.patientIdCard || '').replace(/\D/g, '');
+  const loanBrId = (l.borrowerIdCard || '').replace(/\D/g, '');
+
+  if (ptId && ptId.length === 13) {
+    if (loanPtId === ptId || loanBrId === ptId) return true;
+  }
+
+  const ptNorm = normalizeThai(pt.fullName);
+  const loanPtNorm = normalizeThai(l.patientName);
+  if (ptNorm && loanPtNorm && ptNorm.length >= 4 && loanPtNorm === ptNorm) {
+    return true;
+  }
+
+  return false;
+};
 
 const EQUIPMENT_OPTIONS: {
   type: FastEquipmentType;
@@ -156,19 +181,14 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'borrowing' | 'none'>('all');
   const [printLoanTarget, setPrintLoanTarget] = useState<EquipmentLoan | null>(null);
 
-  // Initialize Audit Items based on patients and existing active loans (supporting multi-borrowing!)
+  // Initialize Audit Items based on patients and existing active loans (strict match, default to clean/none!)
   const [auditItems, setAuditItems] = useState<AuditPatientItem[]>(() => {
     return patients.map((pt) => {
-      // Find ALL active loans for this patient in loans
+      // Find ALL active loans for this patient in loans with strict matching
       const activeLoans = loans.filter(
         (l) =>
           (l.status === 'borrowed' || l.status === 'approved') &&
-          ((l.patientIdCard && pt.idCard && l.patientIdCard === pt.idCard) ||
-            (l.patientName &&
-              (l.patientName.includes(pt.fullName) || pt.fullName.includes(l.patientName))) ||
-            (l.borrowerIdCard && pt.idCard && l.borrowerIdCard === pt.idCard) ||
-            (l.borrowerName &&
-              (l.borrowerName.includes(pt.fullName) || pt.fullName.includes(l.borrowerName))))
+          isPatientLoanMatch(pt, l)
       );
 
       const items: PatientEquipmentItem[] = activeLoans.map((l) => {
@@ -202,6 +222,22 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
       };
     });
   });
+
+  // Reset all patients to "No Equipment Borrowed" (0 items) with 1 click!
+  const handleResetAllToNone = () => {
+    if (
+      window.confirm(
+        'ยืนยันล้างการเลือกอุปกรณ์ของทุกรายให้เป็น "ไม่มียืมอุปกรณ์" ใช่หรือไม่?\n\n(ระบบจะเปลี่ยนทุกรายเป็นไม่มียืม เพื่อให้ท่านเลือกเฉพาะรายที่ยืมอุปกรณ์จริงได้อย่างถูกต้อง)'
+      )
+    ) {
+      setAuditItems((prev) =>
+        prev.map((item) => ({
+          ...item,
+          equipments: [],
+        }))
+      );
+    }
+  };
 
   // Calculate Available Asset Codes by category
   const availableUnitsByCat = useMemo(() => {
@@ -349,15 +385,10 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
     const thaiYear = new Date().getFullYear() + 543;
     const nowIso = new Date().toISOString().split('T')[0];
 
-    // Filter out previous loans for these patients
-    const patientIds = new Set(patients.map((p) => p.id));
-    const patientNames = new Set(patients.map((p) => p.fullName));
-
     // Keep loans from other sources (e.g. general public), remove old matches for these patients
     const preservedLoans = loans.filter((l) => {
-      if (l.patientIdCard && patients.some((p) => p.idCard === l.patientIdCard)) return false;
-      if (l.patientName && patientNames.has(l.patientName)) return false;
-      return true;
+      const matchPt = patients.find((p) => isPatientLoanMatch(p, l));
+      return !matchPt;
     });
 
     const newCreatedLoans: EquipmentLoan[] = [];
@@ -661,6 +692,17 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                 ไม่มียืม ({stats.householdsNone})
               </button>
             </div>
+
+            {/* Reset All to None Button */}
+            <button
+              type="button"
+              onClick={handleResetAllToNone}
+              className="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-[11px] flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              title="ล้างการเลือกอุปกรณ์ของทุกรายให้เป็น 'ไม่มียืมอุปกรณ์' เพื่อเริ่มเลือกใหม่อย่างอิสระ"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+              <span>ล้างการเลือกทั้งหมดเป็นไม่มียืม</span>
+            </button>
           </div>
 
           <div className="text-slate-500 text-[11px]">
@@ -761,11 +803,24 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                         {/* 5. Fast Equipment Options Pills (Multi-select toggles!) */}
                         <td className="py-3 px-3 align-top">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {EQUIPMENT_OPTIONS.map((opt) => {
-                              const isNoneOpt = opt.type === 'none';
-                              const isSelected = isNoneOpt
-                                ? item.equipments.length === 0
-                                : item.equipments.some((e) => e.type === opt.type);
+                            {/* Option 1: None */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleEquipmentType(pt.id, 'none')}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-black border transition-all flex items-center gap-1 cursor-pointer select-none ${
+                                item.equipments.length === 0
+                                  ? 'bg-slate-700 text-white border-slate-800 shadow-sm ring-2 ring-slate-400'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-300'
+                              }`}
+                              title={item.equipments.length === 0 ? 'รายนี้ไม่ได้ยืมอุปกรณ์ใดๆ' : 'คลิกเพื่อล้างอุปกรณ์ทั้งหมดของรายนี้เป็นไม่มียืม'}
+                            >
+                              <span>❌</span>
+                              <span>{item.equipments.length === 0 ? 'ไม่มียืมอุปกรณ์' : 'ล้างเป็นไม่มียืม'}</span>
+                            </button>
+
+                            {/* Options 2-6: Equipment choices */}
+                            {EQUIPMENT_OPTIONS.filter((o) => o.type !== 'none').map((opt) => {
+                              const isSelected = item.equipments.some((e) => e.type === opt.type);
 
                               return (
                                 <button
@@ -778,24 +833,30 @@ export const LtcEquipmentAuditModal: React.FC<LtcEquipmentAuditModalProps> = ({
                                       : `${opt.color} opacity-85 hover:opacity-100`
                                   }`}
                                   title={
-                                    isNoneOpt
-                                      ? 'ล้างอุปกรณ์ทั้งหมด (ไม่มีการยืม)'
+                                    isSelected
+                                      ? `คลิกเพื่อยกเลิกการยืม ${opt.label}`
                                       : `คลิกเพื่อเลือกหรือยกเลิกการยืม ${opt.label}`
                                   }
                                 >
                                   <span>{opt.icon}</span>
                                   <span>{opt.label}</span>
-                                  {isSelected && !isNoneOpt && (
+                                  {isSelected && (
                                     <CheckCircle2 className="w-3 h-3 text-white ml-0.5 shrink-0" />
                                   )}
                                 </button>
                               );
                             })}
                           </div>
-                          {item.equipments.length > 1 && (
-                            <div className="mt-1.5 text-[10px] text-indigo-700 font-bold flex items-center gap-1">
-                              <span>✨</span>
-                              <span>ยืม {item.equipments.length} รายการ</span>
+                          {item.equipments.length > 0 ? (
+                            <div className="mt-1.5 text-[10px] text-teal-800 font-extrabold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+                              <span>
+                                ยืมจริง {item.equipments.length} ชิ้น: {item.equipments.map((e) => EQUIPMENT_OPTIONS.find((o) => o.type === e.type)?.label).join(' + ')}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-[10px] text-slate-400 font-medium">
+                              ⚪ ไม่มียืมอุปกรณ์
                             </div>
                           )}
                         </td>

@@ -1099,12 +1099,22 @@ unsubLicenses();
   };
 
   const handleClearDummyLoans = () => {
+    const toDelete = [...loans];
     setLoans([]);
     saveStoredLoans([]);
-    showToast('info', 'ล้างข้อมูลตัวอย่างสัญญาเดิมเรียบร้อยแล้ว');
+    for (const l of toDelete) {
+      deleteFromFirestore(COLLECTIONS.LOANS, l.id).catch(() => {});
+    }
+    showToast('info', 'ล้างข้อมูลตัวอย่างสัญญาเดิมทั้งหมดเรียบร้อยแล้ว');
   };
 
   const handleBatchUpdateLoans = (newLoans: EquipmentLoan[]) => {
+    const newIds = new Set(newLoans.map((l) => l.id));
+    for (const old of loans) {
+      if (!newIds.has(old.id)) {
+        deleteFromFirestore(COLLECTIONS.LOANS, old.id).catch(() => {});
+      }
+    }
     setLoans(newLoans);
     saveStoredLoans(newLoans);
     try {
