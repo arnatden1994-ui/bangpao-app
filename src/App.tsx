@@ -1098,6 +1098,24 @@ unsubLicenses();
     showToast('info', 'รีเซ็ตข้อมูลตัวอย่างตามต้นฉบับ 36 รายการเรียบร้อยแล้ว');
   };
 
+  const handleClearDummyLoans = () => {
+    setLoans([]);
+    saveStoredLoans([]);
+    showToast('info', 'ล้างข้อมูลตัวอย่างสัญญาเดิมเรียบร้อยแล้ว');
+  };
+
+  const handleBatchUpdateLoans = (newLoans: EquipmentLoan[]) => {
+    setLoans(newLoans);
+    saveStoredLoans(newLoans);
+    try {
+      for (const l of newLoans) {
+        saveToFirestore(COLLECTIONS.LOANS, l, l.id).catch(() => {});
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+
   const badgeCounts = {
     petitions: petitions.filter((p) => p.status === 'submitted' || p.status === 'accepted').length,
     expiringLicenses: licenses.filter((l) => (l.remainingDays ?? l.daysRemaining ?? 999) <= 60).length,
@@ -1386,6 +1404,24 @@ unsubLicenses();
                 gasUrl={config.appsScriptUrl}
                 onShowToast={showToast}
                 patients={ltcPatients}
+                loans={loans}
+                equipmentUnits={equipmentUnits}
+                equipmentList={equipmentList}
+                onAddRegisteredLoan={(newLoan) => {
+                  setLoans((prev) => [newLoan, ...prev]);
+                  saveToFirestore(COLLECTIONS.LOANS, newLoan).catch(() => {});
+                }}
+                onUpdateLoan={(updatedLoan) => {
+                  setLoans((prev) =>
+                    prev.map((l) => (l.id === updatedLoan.id ? updatedLoan : l))
+                  );
+                  saveToFirestore(COLLECTIONS.LOANS, updatedLoan).catch(() => {});
+                }}
+                onDeleteLoan={(loanId) => {
+                  setLoans((prev) => prev.filter((l) => l.id !== loanId));
+                  deleteFromFirestore(COLLECTIONS.LOANS, loanId).catch(() => {});
+                }}
+                onBatchUpdateLoans={handleBatchUpdateLoans}
                 onImportOfficialPatients={async () => {
                   const merged = mergeLtcWithMaster(INITIAL_LTC_PATIENTS);
                   setLtcPatients(merged);
@@ -1489,11 +1525,14 @@ unsubLicenses();
                 equipmentList={equipmentList}
                 equipmentUnits={equipmentUnits}
                 loans={loans}
+                patients={ltcPatients}
                 userRole={currentUser.role}
                 activeSubTab={equipmentSubTab}
                 onSubTabChange={(st) => setEquipmentSubTab(st)}
                 onNewLoan={() => setEquipmentSubTab('register')}
                 savedSignerSettings={signerSettings}
+                onClearDummyLoans={handleClearDummyLoans}
+                onBatchUpdateLoans={handleBatchUpdateLoans}
                 onAddEquipmentUnit={(newUnit) => {
                   setEquipmentUnits((prev) => [newUnit, ...prev]);
                   showToast('success', `เพิ่มทะเบียน "${newUnit.assetCode}" เข้าคลังเรียบร้อยแล้ว`);

@@ -435,9 +435,9 @@ export function saveStoredEquipmentUnits(units: MedicalEquipmentUnit[]) {
 export function getStoredLoans(): EquipmentLoan[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.LOANS);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error(e);

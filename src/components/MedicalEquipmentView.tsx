@@ -69,6 +69,7 @@ import {
   UserRole,
   SignerSettings,
   DEFAULT_SIGNER_SETTINGS,
+  LtcPatient,
 } from '../types/index.ts';
 import {
   getStoredEquipmentUnits,
@@ -81,9 +82,12 @@ import {
   formatThaiDate,
 } from './NhsoLtcCombinedView.tsx';
 import { PrintEquipmentLoanModal } from './PrintEquipmentLoanModal.tsx';
+import { LtcEquipmentAuditModal } from './LtcEquipmentAuditModal.tsx';
 import {
+  createBlankMedicalLoan,
   exportOfficialMedicalLoanDocx,
   generateOfficialMedicalLoanHtml,
+  openOfficialMedicalLoanPrintWindow,
 } from '../services/medicalLoanDocGenerator.ts';
 
 import { THAI_ADMIN_DIVISIONS } from '../data/thaiAdministrativeDivisions.ts';
@@ -207,6 +211,9 @@ interface MedicalEquipmentViewProps {
   onAddEquipmentUnit?: (unit: MedicalEquipmentUnit) => void;
   onUpdateEquipmentUnit?: (unit: MedicalEquipmentUnit) => void;
   onDeleteEquipmentUnit?: (unitId: string) => void;
+  patients?: LtcPatient[];
+  onClearDummyLoans?: () => void;
+  onBatchUpdateLoans?: (newLoans: EquipmentLoan[]) => void;
   activeSubTab?: 'route' | 'register' | 'inventory' | 'loans' | 'map';
   onSubTabChange?: (tab: 'route' | 'register' | 'inventory') => void;
   savedSignerSettings?: SignerSettings;
@@ -216,6 +223,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   equipmentList,
   equipmentUnits: propUnits,
   loans,
+  patients = [],
   userRole,
   onNewLoan,
   onReturnEquipment,
@@ -223,6 +231,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   onAddRegisteredLoan,
   onUpdateLoanStatus,
   onDeleteLoan,
+  onClearDummyLoans,
+  onBatchUpdateLoans,
   onAddEquipment,
   onUpdateEquipment,
   onAddEquipmentUnit,
@@ -232,6 +242,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   onSubTabChange,
   savedSignerSettings,
 }) => {
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   // Normalize Sub-Tabs:
   // 'route' = 📊 แดชบอร์ดติดตาม (รอบส่ง/ยืม-คืน) + แผนที่ดาวเทียม GIS
   // 'register' = 📝 ลงทะเบียนขอยืมอุปกรณ์ (4 ขั้นตอน)
@@ -1320,6 +1331,45 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     );
   };
 
+  const handleAutoFillFromLtcPatient = (pt: LtcPatient) => {
+    const pMoo = pt.moo || '1';
+    const defaultCoords = BANGPAO_COORDS[pMoo] || BANGPAO_COORDS['1'];
+    const lat = pt.latitude || defaultCoords.lat;
+    const lng = pt.longitude || defaultCoords.lng;
+
+    setBorrowerForm((prev) => ({
+      ...prev,
+      borrowerName: pt.caregiverName || pt.fullName,
+      borrowerPhone: pt.caregiverPhone || pt.phone || '',
+      borrowerIdCard: '',
+      borrowerAddress: pt.address || '',
+      borrowerProvince: 'ตรัง',
+      borrowerDistrict: 'กันตัง',
+      borrowerSubdistrict: 'บางเป้า',
+      borrowerRelation: pt.caregiverName ? 'ญาติผู้ดูแล' : 'ตนเอง (ผู้ป่วยยืมเอง)',
+      patientName: pt.fullName,
+      patientIdCard: pt.idCard || '',
+      patientAge: pt.age ? String(pt.age) : '',
+      patientDisease: pt.diagnosis || 'ผู้มีภาวะพึ่งพิง LTC',
+      patientAddress: pt.address || '',
+      patientProvince: 'ตรัง',
+      patientDistrict: 'กันตัง',
+      patientSubdistrict: 'บางเป้า',
+      moo: pMoo,
+      lat,
+      lng,
+      adlCategory: (pt.adlCategory as any) || 'ติดเตียง',
+      reason: `เพื่อใช้ฟื้นฟูสมรรถภาพร่างกายผู้ป่วย ${pt.fullName} ที่บ้าน`,
+    }));
+
+    if (regMarkerRef.current) {
+      try {
+        regMarkerRef.current.setLatLng([lat, lng]);
+        regMapInstanceRef.current?.setView([lat, lng], 16, { animate: true });
+      } catch {}
+    }
+  };
+
   const handleToggleSameAddress = (checked: boolean) => {
     setSameAddressChecked(checked);
     if (checked) {
@@ -2042,7 +2092,53 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
               <div className="text-slate-500 font-medium">
                 ผลการกรอง: <strong className="text-teal-800 font-bold">{filteredLoans.length}</strong> รายการ | ในคิวนำส่ง: <strong className="text-indigo-800 font-bold">{orderedSelectedLoans.length}</strong> รายการ
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 1. Print Blank Template */}
+                <button
+                  type="button"
+                  onClick={() => setPrintModalLoan(createBlankMedicalLoan())}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-300 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                  title="พิมพ์แม่แบบสัญญายืม-คืนอุปกรณ์เปล่า ขนาด A4 2 หน้า สำหรับนำไปให้ประชาชนลงนามที่บ้าน"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>🖨️ พิมพ์แม่แบบ A4</span>
+                </button>
+
+                {/* 2. Fast Audit for LTC Patients */}
+                {patients && patients.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAuditModalOpen(true)}
+                    className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold border border-teal-300 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                    title={`เปิดตารางสำรวจและจับคู่อุปกรณ์ด่วน สำหรับผู้มีภาวะพึ่งพิง LTC (${patients.length} ราย ทต.บางเป้า)`}
+                  >
+                    <ClipboardList className="w-3.5 h-3.5 text-teal-700" />
+                    <span>📋 สำรวจอุปกรณ์ LTC ({patients.length} ราย)</span>
+                  </button>
+                )}
+
+                {/* 3. Clear Dummy Loans */}
+                {loans.length > 0 && onClearDummyLoans && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          'ยืนยันล้างข้อมูลสัญญาตัวอย่างเดิมใช่หรือไม่?\n\nการกระทำนี้จะล้างสัญญาตัวอย่าง (เช่น นายดำ สุขเกษม ฯลฯ) เพื่อให้ท่านเริ่มต้นบันทึกข้อมูลเตียงและอุปกรณ์ที่ใช้งานจริงของ ทต.บางเป้า (ครุภัณฑ์ในคลังจะถูกรีเซ็ตสถานะเป็นพร้อมให้บริการ)'
+                        )
+                      ) {
+                        onClearDummyLoans();
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-medium border border-slate-200 hover:border-rose-200 transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
+                    title="ล้างสัญญาตัวอย่างเดิมเพื่อเริ่มลงข้อมูลจริง"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>ล้างข้อมูลตัวอย่าง</span>
+                  </button>
+                )}
+
+                {/* 4. Share Citizen Form */}
                 <button
                   type="button"
                   onClick={() => setIsShareCitizenFormOpen(true)}
@@ -2051,6 +2147,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   <Share2 className="w-3.5 h-3.5" />
                   <span>แชร์ฟอร์มประชาชน</span>
                 </button>
+
+                {/* 5. Register New Loan */}
                 <button
                   type="button"
                   onClick={() => setSubTab('register')}
@@ -3035,6 +3133,44 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                       </p>
                     </div>
                   </div>
+
+                  {/* Quick Auto-Fill Selector from LTC */}
+                  {patients && patients.length > 0 && (
+                    <div className="p-3.5 bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-300 rounded-xl space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-teal-600 animate-pulse" />
+                          <span className="font-extrabold text-xs sm:text-sm text-teal-950">
+                            ⚡ ดึงข้อมูลอัตโนมัติจากผู้มีภาวะพึ่งพิง LTC ({patients.length} ราย ทต.บางเป้า)
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-teal-800 bg-teal-100 px-2.5 py-0.5 rounded-full font-bold border border-teal-200">
+                          กรอกข้อมูลให้อัตโนมัติทุกช่อง 100%
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-teal-800">
+                        เลือกรายชื่อผู้ป่วยที่ได้ไปตรวจพบว่ามีการยืมอุปกรณ์ ระบบจะดึงชื่อ-สกุล, เลขบัตร, อายุ, ที่อยู่, พิกัด GPS, ผู้ดูแล และเบอร์โทร ให้ทันที
+                      </p>
+                      <select
+                        onChange={(e) => {
+                          const ptId = e.target.value;
+                          if (!ptId) return;
+                          const pt = patients.find((p) => p.id === ptId);
+                          if (pt) {
+                            handleAutoFillFromLtcPatient(pt);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-teal-300 bg-white text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer shadow-xs"
+                      >
+                        <option value="">-- คลิกเพื่อเลือกผู้มีภาวะพึ่งพิง LTC ที่ต้องการลงบันทึกยืม --</option>
+                        {patients.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.fullName} (หมู่ {p.moo || '-'}) - {p.diagnosis || p.adlCategory || 'ผู้มีภาวะพึ่งพิง'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Card 1: ข้อมูลผู้ขอยืม */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
@@ -5160,6 +5296,24 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         onClose={() => setPrintModalLoan(null)}
         savedSignerSettings={savedSignerSettings}
       />
+
+      {/* Ltc Equipment Fast Audit Modal */}
+      {isAuditModalOpen && patients && (
+        <LtcEquipmentAuditModal
+          isOpen={isAuditModalOpen}
+          onClose={() => setIsAuditModalOpen(false)}
+          patients={patients}
+          loans={loans}
+          equipmentUnits={propUnits}
+          equipmentList={equipmentList}
+          onSaveBatchLoans={(updatedLoans) => {
+            if (onBatchUpdateLoans) {
+              onBatchUpdateLoans(updatedLoans);
+            }
+          }}
+          savedSignerSettings={savedSignerSettings}
+        />
+      )}
 
       {/* C. Share Route Modal for Driver / LINE Team */}
       {isShareModalOpen && (

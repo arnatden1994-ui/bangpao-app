@@ -44,6 +44,7 @@ import {
   LtcRoundItem,
   LtcProjectSourceType,
   UserRole,
+  EquipmentLoan,
 } from '../types/index.ts';
 import { PrintLtcRegistrationModal } from './PrintLtcRegistrationModal.tsx';
 import { INITIAL_LTC_PATIENTS } from '../data/mockData.ts';
@@ -183,6 +184,7 @@ export interface LtcRoundPlannerModalProps {
   isOpen: boolean;
   onClose: () => void;
   patients: LtcPatient[];
+  loans?: EquipmentLoan[];
   initialYear?: string;
   initialRound?: string;
   configuredYears: string[];
@@ -204,6 +206,7 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
   isOpen,
   onClose,
   patients,
+  loans = [],
   initialYear = '2569',
   initialRound = '1',
   configuredYears,
@@ -1336,6 +1339,30 @@ export const LtcRoundPlannerModal: React.FC<LtcRoundPlannerModalProps> = ({
           itemsHtml = `
             <div style="font-size: 11px; color: #047857; font-weight: 600; line-height: 1.4;">
               • ${fallbackText}
+            </div>
+          `;
+        }
+
+        // Equipment Loan check for this household
+        const eqLoan = loans.find(
+          (l) =>
+            (l.status === 'borrowed' || l.status === 'approved') &&
+            ((matched?.idCard && l.patientIdCard && l.patientIdCard === matched.idCard) ||
+              (matched?.fullName && l.patientName && (l.patientName.includes(matched.fullName) || matched.fullName.includes(l.patientName))) ||
+              (stop.patientName && l.patientName && (l.patientName.includes(stop.patientName) || stop.patientName.includes(l.patientName))))
+        );
+
+        if (eqLoan) {
+          const shortEqName = eqLoan.equipmentName.includes('เตียง')
+            ? 'เตียงผู้ป่วย'
+            : eqLoan.equipmentName.includes('รถเข็น') || eqLoan.equipmentName.includes('วีลแชร์')
+            ? 'รถเข็นวีลแชร์'
+            : eqLoan.equipmentName.includes('ที่นอน')
+            ? 'ที่นอนลม'
+            : eqLoan.equipmentName.split(' ')[0];
+          itemsHtml += `
+            <div style="margin-top: 3.5px; padding: 2px 6px; background: #e0e7ff; border: 1px solid #c7d2fe; border-radius: 4px; color: #3730a3; font-size: 9.5px; font-weight: 700; line-height: 1.3;">
+              🛏️ <strong>ครุภัณฑ์ที่บ้าน:</strong> ${shortEqName} (${eqLoan.equipmentCode || 'ครุภัณฑ์ ทต.บางเป้า'})
             </div>
           `;
         }

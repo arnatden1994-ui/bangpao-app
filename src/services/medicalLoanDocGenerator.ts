@@ -174,7 +174,52 @@ export function parseThaiAddressParts(addr?: string) {
   };
 }
 
+export function createBlankMedicalLoan(): EquipmentLoan {
+  const now = new Date();
+  const thaiYear = now.getFullYear() + 543;
+  return {
+    id: 'TEMPLATE_BLANK',
+    loanCode: `LN-${thaiYear}/____`,
+    contractNumber: `LN-${thaiYear}/____`,
+    docNo: `LN-${thaiYear}/____`,
+    equipmentId: '',
+    equipmentCode: '',
+    equipmentName: '',
+    equipmentCategory: '',
+    borrowerName: '',
+    borrowerIdCard: '',
+    borrowerPhone: '',
+    phone: '',
+    borrowerAddress: '',
+    address: '',
+    patientName: '',
+    patientIdCard: '',
+    patientAddress: '',
+    patientAge: '',
+    relationshipWithPatient: '',
+    borrowerRelation: '',
+    loanDate: '',
+    borrowDate: '',
+    dueDate: '',
+    status: 'pending',
+    officerInCharge: 'พันจ่าเอกอานัส เด็นหมาด',
+    notes: 'แบบฟอร์มเปล่าสำหรับบันทึกและลงนามหน้างาน',
+  };
+}
+
 export function getEquipmentChecklist(loan: EquipmentLoan) {
+  if (loan.id === 'TEMPLATE_BLANK' || !loan.equipmentName) {
+    return {
+      isBed: false,
+      isOxygen: false,
+      isWheelchair: false,
+      isSuction: false,
+      isAirMattress: false,
+      isOther: false,
+      code: '.................................',
+    };
+  }
+
   const eqName = ((loan.itemsSummary || '') + ' ' + (loan.equipmentName || '')).toLowerCase();
   const eqCat = (loan.equipmentCategory || '').toLowerCase();
   const code = loan.equipmentCode || 'EQ-001';
@@ -662,9 +707,10 @@ export function exportOfficialMedicalLoanDocx(
   const blob = new Blob([bytes as unknown as BlobPart], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
+  const isBlankTemplate = loan.id === 'TEMPLATE_BLANK';
   const docNo = loan.contractNumber || loan.docNo || loan.loanCode || 'ขอยืม';
   const borrowerName = (loan.borrowerName || 'ผู้ยืม').replace(/\s+/g, '_');
-  const filename = customFilename || `บันทึกข้อตกลงศูนย์สาธิตและยืมอุปกรณ์_${docNo}_${borrowerName}.docx`;
+  const filename = customFilename || (isBlankTemplate ? 'แบบฟอร์มเปล่า_บันทึกข้อตกลงยืมอุปกรณ์การแพทย์_ทต_บางเป้า.docx' : `บันทึกข้อตกลงศูนย์สาธิตและยืมอุปกรณ์_${docNo}_${borrowerName}.docx`);
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -705,11 +751,14 @@ export function generateOfficialMedicalLoanHtml(
   loan: EquipmentLoan,
   signers?: SignerSettings
 ): string {
+  const isBlankTemplate = loan.id === 'TEMPLATE_BLANK';
   const activeSigners = signers || DEFAULT_SIGNER_SETTINGS;
-  const dateObj = parseThaiLoanDate(loan.borrowDate || loan.loanDate || loan.createdAt);
+  const dateObj = isBlankTemplate
+    ? { day: '.......', month: '.....................', year: '25......' }
+    : parseThaiLoanDate(loan.borrowDate || loan.loanDate || loan.createdAt);
   const chk = getEquipmentChecklist(loan);
 
-  const docNo = loan.contractNumber || loan.docNo || loan.loanCode || '';
+  const docNo = isBlankTemplate ? '.......................' : (loan.contractNumber || loan.docNo || loan.loanCode || '.......................');
   const borrowerName = loan.borrowerName || '';
   const bNameParts = parseThaiNameParts(borrowerName);
   const bAddr = parseThaiAddressParts(loan.borrowerAddress || loan.address);
@@ -718,7 +767,7 @@ export function generateOfficialMedicalLoanHtml(
   const patientName = loan.patientName || borrowerName;
   const pNameParts = parseThaiNameParts(patientName);
   const pAddr = parseThaiAddressParts(loan.patientAddress || loan.address || loan.borrowerAddress);
-  const relation = loan.relationshipWithPatient || loan.borrowerRelation || 'ตนเอง';
+  const relation = loan.relationshipWithPatient || loan.borrowerRelation || (isBlankTemplate ? '................................' : 'ตนเอง');
 
   const mayorName = activeSigners.actingMayorName || 'นายนิติธรรม ดำสุด';
   const mayorPos = activeSigners.actingMayorPosition || 'รองนายกเทศมนตรี ปฏิบัติราชการแทน';
@@ -732,17 +781,21 @@ export function generateOfficialMedicalLoanHtml(
 
   const bNameStr = bNameParts.first
     ? `${bNameParts.prefix ? bNameParts.prefix + ' ' : ''}${bNameParts.first} &nbsp;นามสกุล&nbsp; ${bNameParts.last || '-'}`
-    : borrowerName;
+    : (isBlankTemplate ? '................................' : borrowerName);
 
   const pNameStr = pNameParts.first
     ? `${pNameParts.prefix ? pNameParts.prefix + ' ' : ''}${pNameParts.first} &nbsp;นามสกุล&nbsp; ${pNameParts.last || '-'}`
-    : patientName;
+    : (isBlankTemplate ? '................................' : patientName);
+
+  const pageTitle = isBlankTemplate
+    ? 'แบบฟอร์มเปล่า_บันทึกข้อตกลงยืมอุปกรณ์การแพทย์_ทต_บางเป้า'
+    : `บันทึกข้อตกลง_${docNo}_${borrowerName.split(' ')[0] || 'ผู้ยืม'}`;
 
   return `<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <title>บันทึกข้อตกลง_${docNo}_${borrowerName.split(' ')[0] || 'ผู้ยืม'}</title>
+  <title>${pageTitle}</title>
   <style>
     @font-face {
       font-family: 'TH SarabunIT๙';
@@ -1049,13 +1102,13 @@ export function generateOfficialMedicalLoanHtml(
 
         <!-- Borrower Information (3 Distinct Lines matching template) -->
         <div class="info-line">
-          ชื่อผู้ขอยืม(นาย/นาง/นางสาว) <span class="dot-val" style="min-width:135px; text-align:center;">${bNameParts.prefix ? bNameParts.prefix + ' ' : ''}${bNameParts.first || '-'}</span>
-          นามสกุล <span class="dot-val" style="min-width:135px; text-align:center;">${bNameParts.last || '-'}</span>
-          ที่อยู่ เลขที่ <span class="dot-val" style="min-width:60px; text-align:center;">${bAddr.houseNo || '-'}</span>
+          ชื่อผู้ขอยืม(นาย/นาง/นางสาว) <span class="dot-val" style="min-width:135px; text-align:center;">${bNameParts.first ? (bNameParts.prefix ? bNameParts.prefix + ' ' : '') + bNameParts.first : (isBlankTemplate ? '................................' : '-')}</span>
+          นามสกุล <span class="dot-val" style="min-width:135px; text-align:center;">${bNameParts.last || (isBlankTemplate ? '................................' : '-')}</span>
+          ที่อยู่ เลขที่ <span class="dot-val" style="min-width:60px; text-align:center;">${bAddr.houseNo || (isBlankTemplate ? '............' : '-')}</span>
         </div>
         <div class="info-line">
-          หมู่ที่ <span class="dot-val" style="min-width:35px; text-align:center;">${bAddr.moo || '-'}</span>
-          (ถนน/ตรอก/ซอย) <span class="dot-val" style="min-width:95px; text-align:center;">${bAddr.soi || '-'}</span>
+          หมู่ที่ <span class="dot-val" style="min-width:35px; text-align:center;">${bAddr.moo || (isBlankTemplate ? '........' : '-')}</span>
+          (ถนน/ตรอก/ซอย) <span class="dot-val" style="min-width:95px; text-align:center;">${bAddr.soi || (isBlankTemplate ? '........................' : '-')}</span>
           ตำบล <span class="dot-val" style="min-width:95px; text-align:center;">${bAddr.subdistrict || 'บางเป้า'}</span>
           อำเภอ <span class="dot-val" style="min-width:95px; text-align:center;">${bAddr.district || 'กันตัง'}</span>
         </div>
@@ -1066,19 +1119,19 @@ export function generateOfficialMedicalLoanHtml(
 
         <!-- Patient Information (3 Distinct Lines matching template) -->
         <div class="info-line">
-          เพื่อให้ผู้ป่วยชื่อ(นาย/นาง/นางสาว) <span class="dot-val" style="min-width:135px; text-align:center;">${pNameParts.prefix ? pNameParts.prefix + ' ' : ''}${pNameParts.first || '-'}</span>
-          นามสกุล <span class="dot-val" style="min-width:135px; text-align:center;">${pNameParts.last || '-'}</span>
-          ที่อยู่ เลขที่ <span class="dot-val" style="min-width:60px; text-align:center;">${pAddr.houseNo || '-'}</span>
+          เพื่อให้ผู้ป่วยชื่อ(นาย/นาง/นางสาว) <span class="dot-val" style="min-width:135px; text-align:center;">${pNameParts.first ? (pNameParts.prefix ? pNameParts.prefix + ' ' : '') + pNameParts.first : (isBlankTemplate ? '................................' : '-')}</span>
+          นามสกุล <span class="dot-val" style="min-width:135px; text-align:center;">${pNameParts.last || (isBlankTemplate ? '................................' : '-')}</span>
+          ที่อยู่ เลขที่ <span class="dot-val" style="min-width:60px; text-align:center;">${pAddr.houseNo || (isBlankTemplate ? '............' : '-')}</span>
         </div>
         <div class="info-line">
-          หมู่ที่ <span class="dot-val" style="min-width:35px; text-align:center;">${pAddr.moo || '-'}</span>
-          (ถนน/ตรอก/ซอย) <span class="dot-val" style="min-width:95px; text-align:center;">${pAddr.soi || '-'}</span>
+          หมู่ที่ <span class="dot-val" style="min-width:35px; text-align:center;">${pAddr.moo || (isBlankTemplate ? '........' : '-')}</span>
+          (ถนน/ตรอก/ซอย) <span class="dot-val" style="min-width:95px; text-align:center;">${pAddr.soi || (isBlankTemplate ? '........................' : '-')}</span>
           ตำบล <span class="dot-val" style="min-width:95px; text-align:center;">${pAddr.subdistrict || 'บางเป้า'}</span>
           อำเภอ <span class="dot-val" style="min-width:95px; text-align:center;">${pAddr.district || 'กันตัง'}</span>
         </div>
         <div class="info-line">
           จังหวัด <span class="dot-val" style="min-width:135px; text-align:center;">${pAddr.province || 'ตรัง'}</span>
-          มีความสัมพันธ์กับผู้ป่วย <span class="dot-val" style="min-width:135px; text-align:center;">${relation}</span>
+          มีความสัมพันธ์กับผู้ป่วย <span class="dot-val" style="min-width:135px; text-align:center;">${relation || '................................'}</span>
         </div>
 
         <!-- Equipment List (6 Items matching template) -->

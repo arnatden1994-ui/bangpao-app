@@ -30,10 +30,13 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
 }) => {
   if (!isOpen || !loan) return null;
 
+  const isBlankTemplate = loan.id === 'TEMPLATE_BLANK';
   const signers = savedSignerSettings || DEFAULT_SIGNER_SETTINGS;
 
-  const docNo = loan.contractNumber || loan.docNo || loan.loanCode || '';
-  const dateObj = parseThaiLoanDate(loan.borrowDate || loan.loanDate || loan.createdAt);
+  const docNo = isBlankTemplate ? '.......................' : (loan.contractNumber || loan.docNo || loan.loanCode || '.......................');
+  const dateObj = isBlankTemplate
+    ? { day: '.......', month: '.....................', year: '25......' }
+    : parseThaiLoanDate(loan.borrowDate || loan.loanDate || loan.createdAt);
   const chk = getEquipmentChecklist(loan);
 
   const borrowerRaw = loan.borrowerName || '';
@@ -44,7 +47,7 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
   const patientRaw = loan.patientName || borrowerRaw;
   const pNameParts = parseThaiNameParts(patientRaw);
   const pAddr = parseThaiAddressParts(loan.patientAddress || loan.address || loan.borrowerAddress);
-  const relation = loan.relationshipWithPatient || loan.borrowerRelation || 'ตนเอง';
+  const relation = loan.relationshipWithPatient || loan.borrowerRelation || (isBlankTemplate ? '................................' : 'ตนเอง');
 
   const mayorName = signers.actingMayorName || 'นายนิติธรรม ดำสุด';
   const mayorPos = signers.actingMayorPosition || 'รองนายกเทศมนตรี ปฏิบัติราชการแทน';
@@ -88,13 +91,15 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
             </div>
             <div>
               <div className="font-extrabold text-sm sm:text-base flex items-center gap-2">
-                <span>แบบฟอร์มขอยืมอุปกรณ์การแพทย์ (ขนาด A4 2 หน้า)</span>
+                <span>{isBlankTemplate ? 'แม่แบบ / แบบฟอร์มเปล่าขอยืมอุปกรณ์การแพทย์ (ขนาด A4 2 หน้า)' : 'แบบฟอร์มขอยืมอุปกรณ์การแพทย์ (ขนาด A4 2 หน้า)'}</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-600/90 text-white font-bold">
                   ฟอนต์ TH SarabunIT๙ ตรงแม่แบบ 100%
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                เลขที่: {docNo || '-'} • ผู้ยืม: {borrowerRaw} • อุปกรณ์: {loan.equipmentName}
+                {isBlankTemplate
+                  ? 'แม่แบบมาตรฐาน ทต.บางเป้า • พร้อมสั่งพิมพ์เพื่อนำไปให้ประชาชนลงนาม หรือส่งออกไฟล์ Word (.docx)'
+                  : `เลขที่: ${docNo || '-'} • ผู้ยืม: ${borrowerRaw} • อุปกรณ์: ${loan.equipmentName}`}
               </p>
             </div>
           </div>
@@ -198,13 +203,13 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
                 {/* Borrower Info (3 Distinct Lines matching template) */}
                 <div className="text-[15pt] leading-[1.25] space-y-0.5">
                   <div className="whitespace-nowrap">
-                    ชื่อผู้ขอยืม(นาย/นาง/นางสาว) <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{bNameParts.prefix ? bNameParts.prefix + ' ' : ''}{bNameParts.first || '-'}</span>
-                    &nbsp;นามสกุล <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{bNameParts.last || '-'}</span>
-                    &nbsp;ที่อยู่ เลขที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[60px] inline-block text-center">{bAddr.houseNo || '-'}</span>
+                    ชื่อผู้ขอยืม(นาย/นาง/นางสาว) <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{bNameParts.first ? (bNameParts.prefix ? bNameParts.prefix + ' ' : '') + bNameParts.first : (isBlankTemplate ? '................................' : '-')}</span>
+                    &nbsp;นามสกุล <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{bNameParts.last || (isBlankTemplate ? '................................' : '-')}</span>
+                    &nbsp;ที่อยู่ เลขที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[60px] inline-block text-center">{bAddr.houseNo || (isBlankTemplate ? '............' : '-')}</span>
                   </div>
                   <div className="whitespace-nowrap">
-                    หมู่ที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[35px] inline-block text-center">{bAddr.moo || '-'}</span>
-                    &nbsp;(ถนน/ตรอก/ซอย) <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{bAddr.soi || '-'}</span>
+                    หมู่ที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[35px] inline-block text-center">{bAddr.moo || (isBlankTemplate ? '........' : '-')}</span>
+                    &nbsp;(ถนน/ตรอก/ซอย) <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{bAddr.soi || (isBlankTemplate ? '........................' : '-')}</span>
                     &nbsp;ตำบล <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{bAddr.subdistrict || 'บางเป้า'}</span>
                     &nbsp;อำเภอ <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{bAddr.district || 'กันตัง'}</span>
                   </div>
@@ -215,19 +220,19 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
 
                   {/* Patient Info (3 Distinct Lines matching template) */}
                   <div className="whitespace-nowrap">
-                    เพื่อให้ผู้ป่วยชื่อ(นาย/นาง/นางสาว) <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{pNameParts.prefix ? pNameParts.prefix + ' ' : ''}{pNameParts.first || '-'}</span>
-                    &nbsp;นามสกุล <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{pNameParts.last || '-'}</span>
-                    &nbsp;ที่อยู่ เลขที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[60px] inline-block text-center">{pAddr.houseNo || '-'}</span>
+                    เพื่อให้ผู้ป่วยชื่อ(นาย/นาง/นางสาว) <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{pNameParts.first ? (pNameParts.prefix ? pNameParts.prefix + ' ' : '') + pNameParts.first : (isBlankTemplate ? '................................' : '-')}</span>
+                    &nbsp;นามสกุล <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{pNameParts.last || (isBlankTemplate ? '................................' : '-')}</span>
+                    &nbsp;ที่อยู่ เลขที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[60px] inline-block text-center">{pAddr.houseNo || (isBlankTemplate ? '............' : '-')}</span>
                   </div>
                   <div className="whitespace-nowrap">
-                    หมู่ที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[35px] inline-block text-center">{pAddr.moo || '-'}</span>
-                    &nbsp;(ถนน/ตรอก/ซอย) <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{pAddr.soi || '-'}</span>
+                    หมู่ที่ <span className="border-b border-dotted border-black px-2 font-bold min-w-[35px] inline-block text-center">{pAddr.moo || (isBlankTemplate ? '........' : '-')}</span>
+                    &nbsp;(ถนน/ตรอก/ซอย) <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{pAddr.soi || (isBlankTemplate ? '........................' : '-')}</span>
                     &nbsp;ตำบล <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{pAddr.subdistrict || 'บางเป้า'}</span>
                     &nbsp;อำเภอ <span className="border-b border-dotted border-black px-2 font-bold min-w-[95px] inline-block text-center">{pAddr.district || 'กันตัง'}</span>
                   </div>
                   <div className="whitespace-nowrap">
                     จังหวัด <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{pAddr.province || 'ตรัง'}</span>
-                    &nbsp;มีความสัมพันธ์กับผู้ป่วย <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{relation}</span>
+                    &nbsp;มีความสัมพันธ์กับผู้ป่วย <span className="border-b border-dotted border-black px-2 font-bold min-w-[135px] inline-block text-center">{relation || (isBlankTemplate ? '................................' : 'ตนเอง')}</span>
                   </div>
                 </div>
 
