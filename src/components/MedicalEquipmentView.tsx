@@ -9,6 +9,7 @@ import {
   Printer,
   Calendar,
   User,
+  Users,
   Phone,
   FileText,
   RotateCcw,
@@ -145,6 +146,26 @@ export interface HouseholdLoanGroup {
   longitude: number;
   loans: EquipmentLoan[];
   primaryStatus: 'borrowed' | 'pending' | 'returned';
+}
+
+export interface RegPatientGroup {
+  groupKey: string;
+  patientName: string;
+  patientIdCard?: string;
+  patientNationalId?: string;
+  address: string;
+  patientAddress?: string;
+  moo: string;
+  villageName: string;
+  patientDiagnosis?: string;
+  borrowerName: string;
+  borrowerRelation?: string;
+  borrowerPhone?: string;
+  phone?: string;
+  latitude?: number;
+  longitude?: number;
+  latestBorrowDate: string;
+  loans: EquipmentLoan[];
 }
 
 // High-contrast SVG status pins with sharp drop-shadow for satellite maps
@@ -593,6 +614,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const [regTableSearch, setRegTableSearch] = useState<string>('');
   const [regTableMooFilter, setRegTableMooFilter] = useState<string>('all');
   const [regTableStatusFilter, setRegTableStatusFilter] = useState<string>('all');
+  const [regTableViewMode, setRegTableViewMode] = useState<'grouped' | 'flat'>('grouped');
 
   // Helper to extract accurate timestamp for sorting newest loan requests first
   const getLoanSortTimestamp = (loan: EquipmentLoan): number => {
@@ -775,6 +797,65 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
       return true;
     });
   }, [normalizedLoans, regTableMooFilter, regTableStatusFilter, regTableSearch]);
+
+  // Grouped Loans by Patient for Registration Bottom Summary Table (Consolidates multiple equipment per person)
+  const groupedRegLoans = useMemo<RegPatientGroup[]>(() => {
+    const map = new Map<string, RegPatientGroup>();
+
+    filteredRegLoans.forEach((loan) => {
+      const cleanPt = (loan.patientName || '')
+        .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/, '')
+        .replace(/\s+/g, '')
+        .trim();
+      const idKey = (loan.patientIdCard || loan.patientNationalId || '').replace(/\D/g, '');
+      const mooNum = loan.moo ? String(loan.moo).trim() : '1';
+      // Group key: if 13-digit ID exists, use it; otherwise normalize name + moo
+      const key = idKey && idKey.length === 13 ? `id_${idKey}` : `name_${cleanPt || loan.id}_m${mooNum}`;
+
+      const villageName = BANGPAO_VILLAGES[mooNum]
+        ? `หมู่ที่ ${mooNum} ${BANGPAO_VILLAGES[mooNum]}`
+        : `หมู่ที่ ${mooNum}`;
+
+      const loanDateStr = loan.borrowDate || loan.loanDate || loan.createdAt || '';
+
+      if (!map.has(key)) {
+        map.set(key, {
+          groupKey: key,
+          patientName: loan.patientName || 'ผู้มีภาวะพึ่งพิง',
+          patientIdCard: loan.patientIdCard || loan.patientNationalId,
+          patientNationalId: loan.patientNationalId,
+          address: loan.address || loan.patientAddress || loan.borrowerAddress || 'ต.บางเป้า อ.กันตัง จ.ตรัง',
+          patientAddress: loan.patientAddress,
+          moo: mooNum,
+          villageName,
+          patientDiagnosis: loan.patientDiagnosis,
+          borrowerName: loan.borrowerName || '-',
+          borrowerRelation: loan.relationshipWithPatient || loan.borrowerRelation,
+          borrowerPhone: loan.borrowerPhone || loan.phone,
+          phone: loan.phone || loan.borrowerPhone,
+          latitude: loan.latitude && !isNaN(Number(loan.latitude)) ? Number(loan.latitude) : undefined,
+          longitude: loan.longitude && !isNaN(Number(loan.longitude)) ? Number(loan.longitude) : undefined,
+          latestBorrowDate: loanDateStr,
+          loans: [loan],
+        });
+      } else {
+        const group = map.get(key)!;
+        group.loans.push(loan);
+        if (!group.patientDiagnosis && loan.patientDiagnosis) {
+          group.patientDiagnosis = loan.patientDiagnosis;
+        }
+        if (!group.latitude && loan.latitude && !isNaN(Number(loan.latitude))) {
+          group.latitude = Number(loan.latitude);
+          group.longitude = Number(loan.longitude);
+        }
+        if (loanDateStr && loanDateStr > group.latestBorrowDate) {
+          group.latestBorrowDate = loanDateStr;
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }, [filteredRegLoans]);
 
   const orderedSelectedHouseholds = useMemo(() => {
     const list: HouseholdLoanGroup[] = [];
@@ -4204,8 +4285,10 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                       <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
                         จัดการรายการคำขอยืมอุปกรณ์ & ติดตามกระบวนการ (อนุมัติ / สัญญา / ส่งมอบ)
                       </h3>
-                      <span className="px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-xs font-extrabold">
-                        {regTableSearch || regTableMooFilter !== 'all' || regTableStatusFilter !== 'all'
+                      <span className="px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-xs font-extrabold shadow-2xs">
+                        {regTableViewMode === 'grouped'
+                          ? `พบ ${groupedRegLoans.length} ราย (${filteredRegLoans.length} รายการอุปกรณ์)`
+                          : regTableSearch || regTableMooFilter !== 'all' || regTableStatusFilter !== 'all'
                           ? `พบ ${filteredRegLoans.length} จาก ${loans.length} รายการ`
                           : `ทั้งหมด ${loans.length} รายการ`}
                       </span>
@@ -4218,6 +4301,36 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
                 {/* Filter and Search Controls */}
                 <div className="flex items-center gap-2 flex-wrap">
+                  {/* View Mode Toggle: รวมตามบุคคล vs แยกตามสัญญา */}
+                  <div className="inline-flex items-center rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setRegTableViewMode('grouped')}
+                      className={`px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
+                        regTableViewMode === 'grouped'
+                          ? 'bg-teal-700 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="รวมรายการยืมตามบุคคล/ครัวเรือน (อุปกรณ์หลายชิ้นรวมใน 1 แถว)"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>รวมตามบุคคล ({groupedRegLoans.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegTableViewMode('flat')}
+                      className={`px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
+                        regTableViewMode === 'flat'
+                          ? 'bg-teal-700 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="แสดงแยกทีละสัญญา/อุปกรณ์ (1 แถวต่อ 1 สัญญา)"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>แยกตามสัญญา ({filteredRegLoans.length})</span>
+                    </button>
+                  </div>
+
                   {/* Moo Filter */}
                   <select
                     value={regTableMooFilter}
@@ -4282,296 +4395,616 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredRegLoans.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-12 px-6 text-center text-slate-400">
-                          <div className="text-2xl mb-1">🔍</div>
-                          <div className="font-bold text-slate-600">ไม่พบรายการคำขอยืมตามเงื่อนไขที่เลือก</div>
-                          <div className="text-xs text-slate-400 mt-1">ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองสถานะเป็น &ldquo;ทุกสถานะ&rdquo;</div>
-                        </td>
-                      </tr>
+                    {regTableViewMode === 'grouped' ? (
+                      groupedRegLoans.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-12 px-6 text-center text-slate-400">
+                            <div className="text-2xl mb-1">🔍</div>
+                            <div className="font-bold text-slate-600">ไม่พบรายการคำขอยืมตามเงื่อนไขที่เลือก</div>
+                            <div className="text-xs text-slate-400 mt-1">ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองสถานะเป็น &ldquo;ทุกสถานะ&rdquo;</div>
+                          </td>
+                        </tr>
+                      ) : (
+                        groupedRegLoans.map((group) => {
+                          return (
+                            <tr key={group.groupKey} className="hover:bg-slate-50/70 transition-colors">
+                              {/* 1. ผู้ป่วย & วันที่ยื่นคำขอ */}
+                              <td className="py-4 px-3.5 align-top">
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 whitespace-nowrap shadow-2xs">
+                                      <Calendar className="w-3 h-3 text-teal-600 shrink-0" />
+                                      <span>ยื่นล่าสุด: {formatThaiDate(group.latestBorrowDate, true)}</span>
+                                    </div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-50 text-teal-800 border border-teal-300 shadow-2xs">
+                                      <Package className="w-3 h-3 text-teal-600" />
+                                      <span>ยืม {group.loans.length} รายการ</span>
+                                    </span>
+                                  </div>
+
+                                  <div className="font-extrabold text-slate-900 text-sm whitespace-nowrap pt-0.5">
+                                    {group.patientName}
+                                  </div>
+
+                                  {group.patientIdCard && (
+                                    <div className="text-[11px] font-mono text-slate-500">
+                                      🆔 {formatIdCard13(group.patientIdCard)}
+                                    </div>
+                                  )}
+
+                                  <div className="text-xs text-slate-500 leading-snug">
+                                    {group.address}
+                                  </div>
+
+                                  {group.patientDiagnosis && (
+                                    <div className="text-[11px] text-teal-700 font-medium">
+                                      🩺 {group.patientDiagnosis}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* 2. โซน/หมู่บ้าน */}
+                              <td className="py-4 px-3 whitespace-nowrap align-top">
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-teal-50 text-teal-900 border border-teal-200/80 font-bold text-xs whitespace-nowrap shadow-2xs">
+                                  {group.villageName}
+                                </span>
+                              </td>
+
+                              {/* 3. อุปกรณ์ที่ขอยืม & ครุภัณฑ์ (แยกแสดงแต่ละชิ้นชัดเจน) */}
+                              <td className="py-4 px-4 align-top">
+                                <div className="space-y-2">
+                                  {group.loans.map((loan, idx) => {
+                                    const isQueued = loan.notes?.includes('คิวจอง');
+                                    return (
+                                      <div
+                                        key={loan.id}
+                                        className="p-2.5 rounded-xl border border-slate-200/90 bg-slate-50/60 hover:bg-teal-50/30 hover:border-teal-300 transition-all space-y-1.5 shadow-2xs"
+                                      >
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                          <div className="font-extrabold text-slate-900 text-xs sm:text-[13px] flex items-center gap-1.5">
+                                            <span className="w-5 h-5 rounded-full bg-teal-700 text-white text-[11px] font-bold inline-flex items-center justify-center shrink-0 shadow-2xs">
+                                              {idx + 1}
+                                            </span>
+                                            <span className="text-slate-800">{loan.equipmentName}</span>
+                                          </div>
+                                          {isQueued ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                                              🟡 คิวจอง
+                                            </span>
+                                          ) : (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                              🟢 พร้อมจ่าย
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <div className="font-mono text-[11px] text-slate-600 flex items-center gap-2 flex-wrap pl-6">
+                                          <span>
+                                            รหัสครุภัณฑ์: <strong className="text-teal-900 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/60">{loan.equipmentCode || loan.loanCode || '-'}</strong>
+                                          </span>
+                                          <span>•</span>
+                                          <span>
+                                            สัญญา: <strong className="text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200">{loan.contractNumber || loan.loanCode || '-'}</strong>
+                                          </span>
+                                        </div>
+
+                                        <div className="text-[11px] text-slate-600 pl-6 flex items-center gap-2">
+                                          {loan.dueDate?.includes('ตามอาการ') || loan.dueDate?.includes('ไร้กำหนดคืน') ? (
+                                            <span className="text-sky-700 font-semibold">♾️ ยืมระยะยาว (ประเมินตามอาการ)</span>
+                                          ) : (
+                                            <span className="text-amber-800 font-semibold">⏱️ กำหนดคืน: {loan.dueDate}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+
+                              {/* 4. ผู้ขอยืม, เบอร์โทร & พิกัด */}
+                              <td className="py-4 px-3.5 align-top">
+                                <div className="space-y-1.5">
+                                  <div className="font-extrabold text-slate-900 text-xs whitespace-nowrap">
+                                    {group.borrowerName}
+                                    {group.borrowerRelation && (
+                                      <span className="text-slate-500 font-normal ml-1">
+                                        ({group.borrowerRelation})
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {group.phone ? (
+                                    <div className="text-[11px] text-teal-700 font-mono font-bold flex items-center gap-1 whitespace-nowrap">
+                                      <span>📞</span>
+                                      <span>{formatPhone10(group.phone)}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="text-[11px] text-slate-400">-</div>
+                                  )}
+
+                                  {group.latitude && group.longitude && (
+                                    <div className="pt-0.5 space-y-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          updateRegMapPin(group.latitude!, group.longitude!, true);
+                                          window.scrollTo({ top: 350, behavior: 'smooth' });
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 hover:border-teal-300 font-mono text-[11px] font-semibold whitespace-nowrap shadow-2xs cursor-pointer transition-colors"
+                                        title="คลิกเพื่อปักหมุดและดูตำแหน่งบ้านบนแผนที่ด้านบน"
+                                      >
+                                        <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                                        <span>{group.latitude.toFixed(5)}, {group.longitude.toFixed(5)}</span>
+                                      </button>
+
+                                      <div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            window.open(
+                                              `https://www.google.com/maps/dir/?api=1&destination=${group.latitude},${group.longitude}`,
+                                              '_blank'
+                                            );
+                                          }}
+                                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+                                          title="เปิด Google Maps นำทางพนักงานขับรถส่งของไปยังบ้านผู้ป่วย"
+                                        >
+                                          <Navigation className="w-3 h-3 text-blue-600" />
+                                          <span>นำทาง GPS</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* 5. สถานะ & จัดการกระบวนการ (แยกปุ่มจัดการรายชิ้น) */}
+                              <td className="py-4 px-3.5 text-right whitespace-nowrap align-top">
+                                <div className="space-y-2">
+                                  {group.loans.map((loan, idx) => {
+                                    const isTrouble = (loan.notes || '').includes('ติดขัด');
+                                    return (
+                                      <div
+                                        key={loan.id}
+                                        className="p-2.5 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:bg-slate-50 transition-colors text-right space-y-1.5 shadow-2xs"
+                                      >
+                                        {/* Item Identifier & Status Badge */}
+                                        <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                          <span className="text-[11px] font-bold text-slate-700 truncate max-w-[130px]" title={loan.equipmentName}>
+                                            #{idx + 1} {loan.equipmentName.replace(/พร้อม.*/, '').trim()}
+                                          </span>
+                                          <div>
+                                            {isTrouble ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                                ⚠️ ติดขัด
+                                              </span>
+                                            ) : loan.status === 'borrowed' ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                🟢 ส่งมอบแล้ว
+                                              </span>
+                                            ) : loan.status === 'approved' ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
+                                                ✍️ อนุมัติแล้ว
+                                              </span>
+                                            ) : loan.status === 'returned' ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                                                🔄 ส่งคืนแล้ว
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                                ⏳ รอลงนาม
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {isTrouble && (
+                                          <div className="text-[11px] text-rose-700 font-bold text-right truncate max-w-[240px] ml-auto" title={loan.notes}>
+                                            {loan.notes}
+                                          </div>
+                                        )}
+
+                                        {/* Action Buttons for this specific equipment */}
+                                        <div className="inline-flex items-center justify-end gap-1 flex-wrap">
+                                          {loan.status === 'pending' && onUpdateLoanStatus && (
+                                            <button
+                                              type="button"
+                                              onClick={() => onUpdateLoanStatus(loan.id, 'approved')}
+                                              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                              title="อนุมัติคำขอยืมชิ้นนี้"
+                                            >
+                                              <span>✍️</span>
+                                              <span>อนุมัติ</span>
+                                            </button>
+                                          )}
+
+                                          {(loan.status === 'approved' || loan.status === 'pending') && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenAppointmentModal(loan)}
+                                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                              title="บันทึกนัดหมายส่งมอบอุปกรณ์ชิ้นนี้"
+                                            >
+                                              <Truck className="w-3.5 h-3.5" />
+                                              <span>ส่งมอบ</span>
+                                            </button>
+                                          )}
+
+                                          {loan.status === 'borrowed' && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setReturnModalLoan(loan)}
+                                              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                              title="ตรวจรับคืนอุปกรณ์ชิ้นนี้เข้าคลัง"
+                                            >
+                                              <RotateCcw className="w-3.5 h-3.5" />
+                                              <span>รับคืน</span>
+                                            </button>
+                                          )}
+
+                                          {/* Field Job button */}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              window.location.href = `/?job=${encodeURIComponent(loan.loanCode || loan.contractNumber || loan.id)}`;
+                                            }}
+                                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                            title="เปิดหน้าใบงานภาคสนามสำหรับเจ้าหน้าที่ (กดรับงาน / ปิดจบงาน / รายงานปัญหาติดขัด)"
+                                          >
+                                            <span>👷 แจ้งหน้างาน</span>
+                                          </button>
+
+                                          {/* Edit Loan */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingLoan(loan)}
+                                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                            title="แก้ไขข้อมูลการยืมอุปกรณ์ชิ้นนี้"
+                                          >
+                                            <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                                            <span>แก้ไข</span>
+                                          </button>
+
+                                          {/* Print Official A4 */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setPrintModalLoan(loan)}
+                                            className="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                            title="พิมพ์สัญญาทางการ 2 หน้า A4 ของอุปกรณ์ชิ้นนี้"
+                                          >
+                                            <Printer className="w-3.5 h-3.5 text-teal-700" />
+                                            <span>สัญญา A4</span>
+                                          </button>
+
+                                          {/* Export Word */}
+                                          <button
+                                            type="button"
+                                            onClick={() => exportOfficialMedicalLoanDocx(loan, savedSignerSettings || DEFAULT_SIGNER_SETTINGS)}
+                                            className="px-2 py-1 bg-slate-50 hover:bg-slate-100 text-blue-700 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                            title="ส่งออกเอกสาร Word (.docx) ของอุปกรณ์ชิ้นนี้"
+                                          >
+                                            <Download className="w-3.5 h-3.5" />
+                                            <span>Word</span>
+                                          </button>
+
+                                          {/* Delete button */}
+                                          {onDeleteLoan && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (confirm(`คุณต้องการลบคำขอยืม "${loan.equipmentName}" ของ "${loan.patientName}" หรือไม่?`)) {
+                                                  onDeleteLoan(loan.id);
+                                                }
+                                              }}
+                                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                                              title="ลบคำขอนี้"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )
                     ) : (
-                      filteredRegLoans.map((loan) => {
-                        const mooNum = loan.moo ? String(loan.moo).trim() : '1';
-                        const villageName = BANGPAO_VILLAGES[mooNum]
-                          ? `หมู่ที่ ${mooNum} ${BANGPAO_VILLAGES[mooNum]}`
-                          : `หมู่ที่ ${mooNum}`;
-                        const isQueued = loan.notes?.includes('คิวจอง');
-                        const latNum = Number(loan.latitude);
-                        const lngNum = Number(loan.longitude);
+                      filteredRegLoans.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-12 px-6 text-center text-slate-400">
+                            <div className="text-2xl mb-1">🔍</div>
+                            <div className="font-bold text-slate-600">ไม่พบรายการคำขอยืมตามเงื่อนไขที่เลือก</div>
+                            <div className="text-xs text-slate-400 mt-1">ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองสถานะเป็น &ldquo;ทุกสถานะ&rdquo;</div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredRegLoans.map((loan) => {
+                          const mooNum = loan.moo ? String(loan.moo).trim() : '1';
+                          const villageName = BANGPAO_VILLAGES[mooNum]
+                            ? `หมู่ที่ ${mooNum} ${BANGPAO_VILLAGES[mooNum]}`
+                            : `หมู่ที่ ${mooNum}`;
+                          const isQueued = loan.notes?.includes('คิวจอง');
+                          const latNum = Number(loan.latitude);
+                          const lngNum = Number(loan.longitude);
 
-                        return (
-                          <tr key={loan.id} className="hover:bg-slate-50/80 transition-colors">
-                            {/* 1. ผู้ป่วย & วันที่ยื่นคำขอ */}
-                            <td className="py-3.5 px-3.5">
-                              <div className="space-y-1">
-                                <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 whitespace-nowrap shadow-2xs">
-                                  <Calendar className="w-3 h-3 text-teal-600 shrink-0" />
-                                  <span>ยื่นคำขอ: {formatThaiDate(loan.borrowDate || loan.loanDate || loan.createdAt, true)}</span>
-                                </div>
-
-                                <div className="font-extrabold text-slate-900 text-sm whitespace-nowrap pt-0.5">
-                                  {loan.patientName}
-                                </div>
-
-                                {(loan.patientIdCard || loan.patientNationalId) && (
-                                  <div className="text-[11px] font-mono text-slate-500">
-                                    🆔 {formatIdCard13(loan.patientIdCard || loan.patientNationalId)}
+                          return (
+                            <tr key={loan.id} className="hover:bg-slate-50/80 transition-colors">
+                              {/* 1. ผู้ป่วย & วันที่ยื่นคำขอ */}
+                              <td className="py-3.5 px-3.5">
+                                <div className="space-y-1">
+                                  <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 whitespace-nowrap shadow-2xs">
+                                    <Calendar className="w-3 h-3 text-teal-600 shrink-0" />
+                                    <span>ยื่นคำขอ: {formatThaiDate(loan.borrowDate || loan.loanDate || loan.createdAt, true)}</span>
                                   </div>
-                                )}
 
-                                <div className="text-xs text-slate-500 leading-snug">
-                                  {loan.address || loan.patientAddress || 'ต.บางเป้า อ.กันตัง จ.ตรัง'}
-                                </div>
-
-                                {loan.patientDiagnosis && (
-                                  <div className="text-[11px] text-teal-700 font-medium">
-                                    🩺 {loan.patientDiagnosis}
+                                  <div className="font-extrabold text-slate-900 text-sm whitespace-nowrap pt-0.5">
+                                    {loan.patientName}
                                   </div>
-                                )}
-                              </div>
-                            </td>
 
-                            {/* 2. โซน/หมู่บ้าน */}
-                            <td className="py-3.5 px-3 whitespace-nowrap">
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-teal-50 text-teal-900 border border-teal-200/80 font-bold text-xs whitespace-nowrap shadow-2xs">
-                                {villageName}
-                              </span>
-                            </td>
+                                  {(loan.patientIdCard || loan.patientNationalId) && (
+                                    <div className="text-[11px] font-mono text-slate-500">
+                                      🆔 {formatIdCard13(loan.patientIdCard || loan.patientNationalId)}
+                                    </div>
+                                  )}
 
-                            {/* 3. อุปกรณ์ที่ขอยืม & ครุภัณฑ์ */}
-                            <td className="py-3.5 px-4">
-                              <div className="space-y-1">
-                                <div className="font-extrabold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
-                                  <span>{loan.equipmentName}</span>
-                                  {isQueued ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                      🟡 เข้าคิวจอง
-                                    </span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                      🟢 พร้อมจ่าย
-                                    </span>
+                                  <div className="text-xs text-slate-500 leading-snug">
+                                    {loan.address || loan.patientAddress || 'ต.บางเป้า อ.กันตัง จ.ตรัง'}
+                                  </div>
+
+                                  {loan.patientDiagnosis && (
+                                    <div className="text-[11px] text-teal-700 font-medium">
+                                      🩺 {loan.patientDiagnosis}
+                                    </div>
                                   )}
                                 </div>
+                              </td>
 
-                                <div className="font-mono text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
-                                  <span>รหัส: <strong>{loan.equipmentCode || loan.loanCode || '-'}</strong></span>
-                                  <span>•</span>
-                                  <span>สัญญา: <strong>{loan.contractNumber || loan.loanCode || '-'}</strong></span>
+                              {/* 2. โซน/หมู่บ้าน */}
+                              <td className="py-3.5 px-3 whitespace-nowrap">
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-teal-50 text-teal-900 border border-teal-200/80 font-bold text-xs whitespace-nowrap shadow-2xs">
+                                  {villageName}
+                                </span>
+                              </td>
+
+                              {/* 3. อุปกรณ์ที่ขอยืม & ครุภัณฑ์ */}
+                              <td className="py-3.5 px-4">
+                                <div className="space-y-1">
+                                  <div className="font-extrabold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+                                    <span>{loan.equipmentName}</span>
+                                    {isQueued ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                        🟡 เข้าคิวจอง
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        🟢 พร้อมจ่าย
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="font-mono text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
+                                    <span>รหัส: <strong>{loan.equipmentCode || loan.loanCode || '-'}</strong></span>
+                                    <span>•</span>
+                                    <span>สัญญา: <strong>{loan.contractNumber || loan.loanCode || '-'}</strong></span>
+                                  </div>
+
+                                  <div className="text-[11px] text-slate-600">
+                                    {loan.dueDate?.includes('ตามอาการ') || loan.dueDate?.includes('ไร้กำหนดคืน') ? (
+                                      <span className="text-sky-700 font-semibold">♾️ ยืมระยะยาว (ประเมินตามอาการ)</span>
+                                    ) : (
+                                      <span className="text-amber-800 font-semibold">⏱️ กำหนดคืน: {loan.dueDate}</span>
+                                    )}
+                                  </div>
                                 </div>
+                              </td>
 
-                                <div className="text-[11px] text-slate-600">
-                                  {loan.dueDate?.includes('ตามอาการ') || loan.dueDate?.includes('ไร้กำหนดคืน') ? (
-                                    <span className="text-sky-700 font-semibold">♾️ ยืมระยะยาว (ประเมินตามอาการ)</span>
+                              {/* 4. ผู้ขอยืม, เบอร์โทร & พิกัด */}
+                              <td className="py-3.5 px-3.5">
+                                <div className="space-y-1">
+                                  <div className="font-extrabold text-slate-900 text-xs whitespace-nowrap">
+                                    {loan.borrowerName || '-'}
+                                    {loan.relationshipWithPatient || loan.borrowerRelation ? (
+                                      <span className="text-slate-500 font-normal ml-1">
+                                        ({loan.relationshipWithPatient || loan.borrowerRelation})
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  {(loan.borrowerPhone || loan.phone) ? (
+                                    <div className="text-[11px] text-teal-700 font-mono font-bold flex items-center gap-1 whitespace-nowrap">
+                                      <span>📞</span>
+                                      <span>{formatPhone10(loan.borrowerPhone || loan.phone)}</span>
+                                    </div>
                                   ) : (
-                                    <span className="text-amber-800 font-semibold">⏱️ กำหนดคืน: {loan.dueDate}</span>
+                                    <div className="text-[11px] text-slate-400">-</div>
+                                  )}
+
+                                  {!isNaN(latNum) && !isNaN(lngNum) && (
+                                    <div className="pt-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          updateRegMapPin(latNum, lngNum, true);
+                                          window.scrollTo({ top: 350, behavior: 'smooth' });
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 hover:border-teal-300 font-mono text-[11px] font-semibold whitespace-nowrap shadow-2xs cursor-pointer transition-colors"
+                                        title="คลิกเพื่อปักหมุดและดูตำแหน่งบ้านบนแผนที่ด้านบน"
+                                      >
+                                        <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                                        <span>{latNum.toFixed(5)}, {lngNum.toFixed(5)}</span>
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
-                              </div>
-                            </td>
+                              </td>
 
-                            {/* 4. ผู้ขอยืม, เบอร์โทร & พิกัด */}
-                            <td className="py-3.5 px-3.5">
-                              <div className="space-y-1">
-                                <div className="font-extrabold text-slate-900 text-xs whitespace-nowrap">
-                                  {loan.borrowerName || '-'}
-                                  {loan.relationshipWithPatient || loan.borrowerRelation ? (
-                                    <span className="text-slate-500 font-normal ml-1">
-                                      ({loan.relationshipWithPatient || loan.borrowerRelation})
-                                    </span>
-                                  ) : null}
-                                </div>
-
-                                {(loan.borrowerPhone || loan.phone) ? (
-                                  <div className="text-[11px] text-teal-700 font-mono font-bold flex items-center gap-1 whitespace-nowrap">
-                                    <span>📞</span>
-                                    <span>{formatPhone10(loan.borrowerPhone || loan.phone)}</span>
+                              {/* 5. สถานะ & จัดการกระบวนการ */}
+                              <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
+                                <div className="space-y-2">
+                                  <div className="flex justify-end">
+                                    {(loan.notes || '').includes('ติดขัด') ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                        ⚠️ ติดขัดปัญหาหน้างาน
+                                      </span>
+                                    ) : loan.status === 'borrowed' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        🟢 ส่งมอบแล้ว / ใช้งานอยู่
+                                      </span>
+                                    ) : loan.status === 'approved' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800 border border-sky-300">
+                                        ✍️ อนุมัติแล้ว (รอนัดส่ง)
+                                      </span>
+                                    ) : loan.status === 'returned' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                                        🔄 ส่งคืนเรียบร้อย
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                        ⏳ รอเสนอผู้บริหารลงนาม
+                                      </span>
+                                    )}
                                   </div>
-                                ) : (
-                                  <div className="text-[11px] text-slate-400">-</div>
-                                )}
+                                  {(loan.notes || '').includes('ติดขัด') && (
+                                    <div className="text-[11px] text-rose-700 font-bold text-right max-w-[230px] ml-auto truncate" title={loan.notes}>
+                                      {loan.notes}
+                                    </div>
+                                  )}
 
-                                {!isNaN(latNum) && !isNaN(lngNum) && (
-                                  <div className="pt-0.5">
+                                  {/* Action Buttons */}
+                                  <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
+                                    {/* 1. ปุ่มอนุมัติ (ถ้ายังเป็น pending) */}
+                                    {loan.status === 'pending' && onUpdateLoanStatus && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onUpdateLoanStatus(loan.id, 'approved');
+                                        }}
+                                        className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                        title="อนุมัติคำขอยืม"
+                                      >
+                                        <span>✍️</span>
+                                        <span>อนุมัติ</span>
+                                      </button>
+                                    )}
+
+                                    {/* 2. ปุ่มนัดส่งมอบ (ถ้า approved หรือ pending) */}
+                                    {(loan.status === 'approved' || loan.status === 'pending') && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenAppointmentModal(loan)}
+                                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                        title="บันทึกนัดหมายส่งมอบอุปกรณ์"
+                                      >
+                                        <Truck className="w-3.5 h-3.5" />
+                                        <span>ส่งมอบ</span>
+                                      </button>
+                                    )}
+
+                                    {/* 3. ปุ่มรับคืน (ถ้า borrowed) */}
+                                    {loan.status === 'borrowed' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setReturnModalLoan(loan)}
+                                        className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                        title="ตรวจรับคืนอุปกรณ์เข้าคลัง"
+                                      >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        <span>รับคืน</span>
+                                      </button>
+                                    )}
+
+                                    {/* ปุ่มเปิด Google Maps นำทาง */}
+                                    {loan.latitude && loan.longitude && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          window.open(
+                                            `https://www.google.com/maps/dir/?api=1&destination=${loan.latitude},${loan.longitude}`,
+                                            '_blank'
+                                          );
+                                        }}
+                                        className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                        title="เปิด Google Maps นำทางพนักงานขับรถส่งของไปยังบ้านผู้ป่วย"
+                                      >
+                                        <Navigation className="w-3.5 h-3.5 text-blue-600" />
+                                        <span>นำทาง</span>
+                                      </button>
+                                    )}
+
+                                    {/* ปุ่มใบงานภาคสนาม (รับงาน / จบงาน / ติดขัด) */}
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        updateRegMapPin(latNum, lngNum, true);
-                                        window.scrollTo({ top: 350, behavior: 'smooth' });
+                                        window.location.href = `/?job=${encodeURIComponent(loan.loanCode || loan.contractNumber || loan.id)}`;
                                       }}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 hover:border-teal-300 font-mono text-[11px] font-semibold whitespace-nowrap shadow-2xs cursor-pointer transition-colors"
-                                      title="คลิกเพื่อปักหมุดและดูตำแหน่งบ้านบนแผนที่ด้านบน"
+                                      className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                      title="เปิดหน้าใบงานภาคสนามสำหรับเจ้าหน้าที่ (กดรับงาน / ปิดจบงาน / รายงานปัญหาติดขัดเข้ากลุ่ม LINE)"
                                     >
-                                      <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
-                                      <span>{latNum.toFixed(5)}, {lngNum.toFixed(5)}</span>
+                                      <span>👷 แจ้งผลหน้างาน</span>
                                     </button>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
 
-                            {/* 5. สถานะ & จัดการกระบวนการ */}
-                            <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
-                              <div className="space-y-2">
-                                <div className="flex justify-end">
-                                  {(loan.notes || '').includes('ติดขัด') ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                                      ⚠️ ติดขัดปัญหาหน้างาน
-                                    </span>
-                                  ) : loan.status === 'borrowed' ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                      🟢 ส่งมอบแล้ว / ใช้งานอยู่
-                                    </span>
-                                  ) : loan.status === 'approved' ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800 border border-sky-300">
-                                      ✍️ อนุมัติแล้ว (รอนัดส่ง)
-                                    </span>
-                                  ) : loan.status === 'returned' ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                                      🔄 ส่งคืนเรียบร้อย
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                      ⏳ รอเสนอผู้บริหารลงนาม
-                                    </span>
-                                  )}
-                                </div>
-                                {(loan.notes || '').includes('ติดขัด') && (
-                                  <div className="text-[11px] text-rose-700 font-bold text-right max-w-[230px] ml-auto truncate" title={loan.notes}>
-                                    {loan.notes}
-                                  </div>
-                                )}
+                                    {/* 4. พิมพ์สัญญา A4 */}
+                                    {/* 3.8 ปุ่มแก้ไขข้อมูลการยืม */}
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingLoan(loan)}
+                                      className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                      title="แก้ไขข้อมูลผู้ยืม, ผู้ป่วย, อุปกรณ์, หรือรายละเอียดการยืม"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                                      <span>แก้ไข</span>
+                                    </button>
 
-                                {/* Action Buttons */}
-                                <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
-                                  {/* 1. ปุ่มอนุมัติ (ถ้ายังเป็น pending) */}
-                                  {loan.status === 'pending' && onUpdateLoanStatus && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrintModalLoan(loan)}
+                                      className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                      title="พิมพ์สัญญาทางการ 2 หน้า A4"
+                                    >
+                                      <Printer className="w-3.5 h-3.5 text-teal-700" />
+                                      <span>สัญญา A4</span>
+                                    </button>
+
+                                    {/* 5. ส่งออก Word (.docx) */}
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        onUpdateLoanStatus(loan.id, 'approved');
+                                        exportOfficialMedicalLoanDocx(loan, savedSignerSettings || DEFAULT_SIGNER_SETTINGS);
                                       }}
-                                      className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                      title="อนุมัติคำขอยืม"
+                                      className="px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-blue-700 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                      title="ส่งออกเอกสาร Word (.docx ตรงตามแม่แบบ 100%)"
                                     >
-                                      <span>✍️</span>
-                                      <span>อนุมัติ</span>
+                                      <Download className="w-3.5 h-3.5" />
+                                      <span>Word</span>
                                     </button>
-                                  )}
 
-                                  {/* 2. ปุ่มนัดส่งมอบ (ถ้า approved หรือ pending) */}
-                                  {(loan.status === 'approved' || loan.status === 'pending') && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenAppointmentModal(loan)}
-                                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                      title="บันทึกนัดหมายส่งมอบอุปกรณ์"
-                                    >
-                                      <Truck className="w-3.5 h-3.5" />
-                                      <span>ส่งมอบ</span>
-                                    </button>
-                                  )}
-
-                                  {/* 3. ปุ่มรับคืน (ถ้า borrowed) */}
-                                  {loan.status === 'borrowed' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setReturnModalLoan(loan)}
-                                      className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                      title="ตรวจรับคืนอุปกรณ์เข้าคลัง"
-                                    >
-                                      <RotateCcw className="w-3.5 h-3.5" />
-                                      <span>รับคืน</span>
-                                    </button>
-                                  )}
-
-                                  {/* ปุ่มเปิด Google Maps นำทาง */}
-                                   {loan.latitude && loan.longitude && (
-                                     <button
-                                       type="button"
-                                       onClick={() => {
-                                         window.open(
-                                           `https://www.google.com/maps/dir/?api=1&destination=${loan.latitude},${loan.longitude}`,
-                                           '_blank'
-                                         );
-                                       }}
-                                       className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                       title="เปิด Google Maps นำทางพนักงานขับรถส่งของไปยังบ้านผู้ป่วย"
-                                     >
-                                       <Navigation className="w-3.5 h-3.5 text-blue-600" />
-                                       <span>นำทาง</span>
-                                     </button>
-                                   )}
-
-                                   {/* ปุ่มใบงานภาคสนาม (รับงาน / จบงาน / ติดขัด) */}
-                                   <button
-                                     type="button"
-                                     onClick={() => {
-                                       window.location.href = `/?job=${encodeURIComponent(loan.loanCode || loan.contractNumber || loan.id)}`;
-                                     }}
-                                     className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                     title="เปิดหน้าใบงานภาคสนามสำหรับเจ้าหน้าที่ (กดรับงาน / ปิดจบงาน / รายงานปัญหาติดขัดเข้ากลุ่ม LINE)"
-                                   >
-                                     <span>👷 แจ้งผลหน้างาน</span>
-                                   </button>
-
-                                   {/* 4. พิมพ์สัญญา A4 */}
-                                  {/* 3.8 ปุ่มแก้ไขข้อมูลการยืม */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingLoan(loan)}
-                                    className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                    title="แก้ไขข้อมูลผู้ยืม, ผู้ป่วย, อุปกรณ์, หรือรายละเอียดการยืม"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5 text-amber-700" />
-                                    <span>แก้ไข</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => setPrintModalLoan(loan)}
-                                    className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                    title="พิมพ์สัญญาทางการ 2 หน้า A4"
-                                  >
-                                    <Printer className="w-3.5 h-3.5 text-teal-700" />
-                                    <span>สัญญา A4</span>
-                                  </button>
-
-                                  {/* 5. ส่งออก Word (.docx) */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      exportOfficialMedicalLoanDocx(loan, savedSignerSettings || DEFAULT_SIGNER_SETTINGS);
-                                    }}
-                                    className="px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-blue-700 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                    title="ส่งออกเอกสาร Word (.docx ตรงตามแม่แบบ 100%)"
-                                  >
-                                    <Download className="w-3.5 h-3.5" />
-                                    <span>Word</span>
-                                  </button>
-
-                                  {/* 6. ลบรายการ */}
-                                  {onDeleteLoan && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (confirm(`คุณต้องการลบคำขอยืมของ "${loan.patientName}" หรือไม่?`)) {
-                                          onDeleteLoan(loan.id);
-                                        }
-                                      }}
-                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
-                                      title="ลบคำขอนี้"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
+                                    {/* 6. ลบรายการ */}
+                                    {onDeleteLoan && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (confirm(`คุณต้องการลบคำขอยืมของ "${loan.patientName}" หรือไม่?`)) {
+                                            onDeleteLoan(loan.id);
+                                          }
+                                        }}
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                                        title="ลบคำขอนี้"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )
                     )}
                   </tbody>
                 </table>
