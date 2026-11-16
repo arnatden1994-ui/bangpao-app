@@ -49,8 +49,15 @@ export const PrintReportOptionsModal: React.FC<PrintReportOptionsModalProps> = (
     onClose();
   };
 
-  // 1. 📄 พิมพ์เป็น PDF (ส่งออกผ่าน Google Apps Script Template โดยตรง เหมือน GAS 100%)
+  // 1. 📄 พิมพ์เป็น PDF (ดึงข้อมูลผลตรวจ 25 ข้อล่าสุดจากระบบโดยตรง เพื่อไม่ให้ติดข้อมูลค้างจากแม่แบบเก่า)
   const handlePrintPdf = async () => {
+    if (license.inspectionData && Object.keys(license.inspectionData.criteriaAnswers || {}).length > 0) {
+      handleClose();
+      const html = generateInspectionReportHtml(license, signers);
+      printHtmlInNewWindow(html);
+      return;
+    }
+
     setLoadingStep('generating');
     setResultType('pdf');
     setLoadingMessage('กรุณารอสักครู่ ระบบกำลังนำข้อมูลไปใส่ในแบบฟอร์มรายงานตรวจ...');
@@ -62,22 +69,14 @@ export const PrintReportOptionsModal: React.FC<PrintReportOptionsModalProps> = (
         setLoadingStep('success');
         window.open(res.pdfUrl, '_blank');
       } else {
-        // Fallback: เปิดหน้าต่างพิมพ์เอกสารเบราว์เซอร์ทันที
-        setErrorMessage(res.error || 'ไม่สามารถสร้าง PDF ผ่านคลาวด์ได้ กำลังสลับไปใช้โหมดพิมพ์ในเครื่อง');
-        setTimeout(() => {
-          handleClose();
-          const html = generateInspectionReportHtml(license, signers);
-          printHtmlInNewWindow(html);
-        }, 1200);
-      }
-    } catch (e: unknown) {
-      const err = e instanceof Error ? e.message : String(e);
-      setErrorMessage(err);
-      setTimeout(() => {
         handleClose();
         const html = generateInspectionReportHtml(license, signers);
         printHtmlInNewWindow(html);
-      }, 1200);
+      }
+    } catch {
+      handleClose();
+      const html = generateInspectionReportHtml(license, signers);
+      printHtmlInNewWindow(html);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Printer,
@@ -46,6 +46,12 @@ export const PrintPetitionModal: React.FC<PrintPetitionModalProps> = ({
   const [signers, setSigners] = useState<SignerSettings>(
     savedSignerSettings || DEFAULT_SIGNER_SETTINGS
   );
+
+  useEffect(() => {
+    if (savedSignerSettings) {
+      setSigners(savedSignerSettings);
+    }
+  }, [savedSignerSettings]);
 
   const formType = petition ? resolveFormType(petition) : 'general';
   const isSewage = formType === 'sewage';

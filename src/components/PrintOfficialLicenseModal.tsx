@@ -48,6 +48,7 @@ import {
   exportOfficialLicenseXlsx,
   GOOGLE_SHEET_TEMPLATE_URL,
 } from '../services/xlsxTemplateExporter.ts';
+import { daysFromToday } from '../utils/dateUtils.ts';
 
 export interface DocLayoutState {
   fontFamily: string;
@@ -286,9 +287,7 @@ function populateFromLicense(license: LicenseRecord, signers: SignerSettings): L
 
   const isPendingDate = !approvalDate || approvalDate === '-' || license.status === 'pending';
   const today = new Date();
-  const nextYear = new Date();
-  nextYear.setFullYear(today.getFullYear() + 1);
-  nextYear.setDate(today.getDate() - 1);
+  const nextYear = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
   const thaiMonthsList = [
     'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
     'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
@@ -579,14 +578,19 @@ export const PrintOfficialLicenseModal: React.FC<PrintOfficialLicenseModalProps>
             : '01');
 
       const isPendingOrWaiting = license.status === 'pending' || !license.status;
+      const newApprovalDateStr = `${formData.issueDay ? formData.issueDay + ' ' : ''}${formData.issueMonth} ${formData.issueYear}`.trim();
+      const newExpireDateStr = `${formData.expireDay ? formData.expireDay + ' ' : ''}${formData.expireMonth} ${formData.expireYear}`.trim();
+      const liveDays = daysFromToday(newExpireDateStr) ?? 365;
+      const liveStatus: LicenseRecord['status'] = liveDays <= 0 ? 'expired' : liveDays <= 30 ? 'expiring' : 'normal';
       const updated: LicenseRecord = {
         ...license,
-        status: isPendingOrWaiting ? 'normal' : license.status,
-        remainingDays: isPendingOrWaiting ? 365 : (license.remainingDays || 365),
-        daysRemaining: isPendingOrWaiting ? 365 : (license.daysRemaining || 365),
+        status: isPendingOrWaiting ? 'normal' : liveStatus,
+        remainingDays: Math.max(0, liveDays),
+        daysRemaining: Math.max(0, liveDays),
         licenseBookNo: formData.bookNo,
         licenseNumber: `เลขที่ ${finalDocNo}/${formData.docYear}`,
         licenseYear: formData.docYear,
+        roundYear: `รอบปี ${formData.docYear}`,
         ownerName: formData.applicantName,
         nationality: formData.nationality,
         ownerAddressNo: formData.houseNo,
@@ -612,8 +616,8 @@ export const PrintOfficialLicenseModal: React.FC<PrintOfficialLicenseModalProps>
         receiptBookNo: formData.receiptBook,
         receiptNo: formData.receiptNo,
         receiptDate: `${formData.receiptDay ? formData.receiptDay + ' ' : ''}${formData.receiptMonth} ${formData.receiptYear}`.trim(),
-        approvalDate: `${formData.issueDay ? formData.issueDay + ' ' : ''}${formData.issueMonth} ${formData.issueYear}`.trim(),
-        expireDate: `${formData.expireDay ? formData.expireDay + ' ' : ''}${formData.expireMonth} ${formData.expireYear}`.trim(),
+        approvalDate: newApprovalDateStr,
+        expireDate: newExpireDateStr,
         condition31: formData.cond1,
         condition32: formData.cond2,
         execName: formData.signerName.startsWith('(') ? formData.signerName : `(${formData.signerName})`,

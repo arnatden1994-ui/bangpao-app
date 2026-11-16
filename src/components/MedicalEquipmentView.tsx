@@ -4780,7 +4780,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                             {loan.dueDate?.includes('ตามอาการ') || loan.dueDate?.includes('ไร้กำหนดคืน') ? (
                                               <span className="text-sky-700 font-medium">ยืมตามอาการ</span>
                                             ) : (
-                                              <span className="text-amber-800 font-medium">กำหนดคืน: {loan.dueDate}</span>
+                                              <span className="text-amber-800 font-medium">กำหนดคืน: {formatThaiDate(loan.dueDate, true) || loan.dueDate}</span>
                                             )}
                                           </span>
                                         </div>
@@ -5048,7 +5048,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                     {loan.dueDate?.includes('ตามอาการ') || loan.dueDate?.includes('ไร้กำหนดคืน') ? (
                                       <span className="text-sky-700 font-semibold">♾️ ยืมระยะยาว (ประเมินตามอาการ)</span>
                                     ) : (
-                                      <span className="text-amber-800 font-semibold">⏱️ กำหนดคืน: {loan.dueDate}</span>
+                                      <span className="text-amber-800 font-semibold">⏱️ กำหนดคืน: {formatThaiDate(loan.dueDate, true) || loan.dueDate}</span>
                                     )}
                                   </div>
                                 </div>

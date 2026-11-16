@@ -1,3 +1,5 @@
+import { LicenseRecord } from '../types/index.ts';
+
 /**
  * Date helpers that always work in the user's LOCAL timezone (Asia/Bangkok).
  *
@@ -30,40 +32,80 @@ export function toLocalDateStr(d: Date = new Date()): string {
 
 /**
  * Parse many date formats used across the system into a local Date (midnight):
- *  - "2026-10-30" / "2026-10-30T09:00:00Z"
- *  - "30/10/2026" or "30/10/2569" (Buddhist Era, auto -543)
+ *  - "2026-10-30" / "2569-10-30" / "2026-10-30T09:00:00Z"
+ *  - "30/10/2026" or "30/10/2569" or "30/10/69" (Buddhist Era, auto -543)
  *  - "30/10/2026 10:50"
+ *  - "11 พฤศจิกายน 2569" / "11 พฤศจิกายน 2570" / "11 พ.ย. 2569" / "11 พ.ย. 69"
  */
 export function parseFlexibleDate(input?: string | null): Date | null {
   if (!input) return null;
   const s = String(input).trim();
-  if (!s) return null;
+  if (!s || s === '-' || s.startsWith('...')) return null;
 
-  // ISO YYYY-MM-DD...
+  const normalizeYear = (rawY: number): number => {
+    let y = rawY;
+    if (y < 100) {
+      // 2-digit year: 40..99 => 2540..2599 BE; 0..39 => 2000..2039 CE
+      y = y >= 40 ? y + 2500 - 543 : y + 2000;
+    } else if (y > 2400) {
+      if (y > 2900) y -= 543;
+      y -= 543;
+    }
+    return y;
+  };
+
+  // 1. ISO YYYY-MM-DD...
   const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) {
-    let y = Number(iso[1]);
-    if (y > 2400) y -= 543;
-    // Full ISO timestamp → keep exact instant
-    if (s.length > 10 && s.includes('T')) {
+    const y = normalizeYear(Number(iso[1]));
+    // Full ISO timestamp → keep exact instant if CE year
+    if (s.length > 10 && s.includes('T') && Number(iso[1]) < 2400) {
       const dt = new Date(s);
       if (!isNaN(dt.getTime())) return dt;
     }
     return new Date(y, Number(iso[2]) - 1, Number(iso[3]));
   }
 
-  // DD/MM/YYYY [HH:mm]
-  const dmy = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  // 2. DD/MM/YYYY or DD/MM/YY [HH:mm]
+  const dmy = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
   if (dmy) {
-    let y = Number(dmy[3]);
-    if (y > 2400) y -= 543;
+    const y = normalizeYear(Number(dmy[3]));
     const hh = dmy[4] ? Number(dmy[4]) : 0;
     const mm = dmy[5] ? Number(dmy[5]) : 0;
     return new Date(y, Number(dmy[2]) - 1, Number(dmy[1]), hh, mm);
   }
 
+  // 3. Thai month names (full or short), e.g. "11 พฤศจิกายน 2570", "11 พ.ย. 69"
+  for (let mIdx = 0; mIdx < 12; mIdx++) {
+    const fullM = THAI_MONTHS[mIdx];
+    const shortM = THAI_MONTHS_SHORT[mIdx];
+    const shortMNoDot = shortM.replace(/\./g, '');
+    if (s.includes(fullM) || s.includes(shortM) || s.includes(shortMNoDot)) {
+      const nums = s.match(/\d+/g);
+      if (nums && nums.length >= 2) {
+        const day = Number(nums[0]);
+        const y = normalizeYear(Number(nums[nums.length - 1]));
+        if (day >= 1 && day <= 31 && y >= 1900 && y <= 2200) {
+          return new Date(y, mIdx, day);
+        }
+      } else if (nums && nums.length === 1) {
+        const y = normalizeYear(Number(nums[0]));
+        if (y >= 1900 && y <= 2200) {
+          return new Date(y, mIdx, 1);
+        }
+      }
+    }
+  }
+
   const fallback = new Date(s);
   return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/** Convert any flexible date string into YYYY-MM-DD (CE) for <input type="date"> */
+export function toIsoDateStr(input?: string | null): string {
+  const d = parseFlexibleDate(input);
+  if (!d) return '';
+  return toLocalDateStr(d);
 }
 
 /** Whole days from today (local) until the given date. Negative = in the past. */
@@ -128,4 +170,71 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Dynamically calculate remainingDays, daysRemaining, and status from expireDate vs today's date,
+ * and ensure roundYear & licenseYear are synchronized.
+ */
+export function computeLiveLicenseRecord(lic: LicenseRecord): LicenseRecord {
+  const isWaitingForNumber =
+    lic.status === 'pending' ||
+    !lic.licenseNumber ||
+    lic.licenseNumber.includes('รอออกเลข');
+
+  // Synchronize licenseYear and roundYear if one was updated
+  let syncedYear = (lic.licenseYear || '').trim();
+  const numYearMatch = (lic.licenseNumber || '').match(/\/\s*(25\d{2})/);
+  if (numYearMatch && numYearMatch[1]) {
+    syncedYear = numYearMatch[1];
+  } else if (!syncedYear && lic.roundYear) {
+    const rMatch = lic.roundYear.match(/25\d{2}/);
+    if (rMatch) syncedYear = rMatch[0];
+  }
+  const syncedRoundYear = syncedYear ? `รอบปี ${syncedYear}` : (lic.roundYear || 'รอบปี 2569');
+
+  if (isWaitingForNumber) {
+    return {
+      ...lic,
+      licenseYear: syncedYear || lic.licenseYear || '2569',
+      roundYear: syncedRoundYear,
+      status: 'pending',
+    };
+  }
+
+  const expDays = daysFromToday(lic.expireDate);
+  if (expDays === null) {
+    return {
+      ...lic,
+      licenseYear: syncedYear || lic.licenseYear || '2569',
+      roundYear: syncedRoundYear,
+    };
+  }
+
+  let computedStatus: LicenseRecord['status'] = lic.status;
+  let computedRemaining = Math.max(0, expDays);
+
+  if (expDays <= 0) {
+    computedStatus = 'expired';
+    computedRemaining = 0;
+  } else if (expDays <= 30) {
+    computedStatus = 'expiring';
+    computedRemaining = expDays;
+  } else {
+    computedStatus = 'normal';
+    computedRemaining = expDays;
+  }
+
+  return {
+    ...lic,
+    licenseYear: syncedYear || lic.licenseYear || '2569',
+    roundYear: syncedRoundYear,
+    status: computedStatus,
+    remainingDays: computedRemaining,
+    daysRemaining: computedRemaining,
+  };
+}
+
+export function computeLiveLicenseList(list: LicenseRecord[]): LicenseRecord[] {
+  return (list || []).map(computeLiveLicenseRecord);
 }

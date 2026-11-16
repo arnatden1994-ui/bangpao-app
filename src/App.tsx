@@ -151,6 +151,7 @@ import {
   loadNotificationSettingsFromFirestore,
   subscribeNotificationSettings,
 } from './services/firebaseService.ts';
+import { computeLiveLicenseList, computeLiveLicenseRecord } from './utils/dateUtils.ts';
 
 import { CheckCircle2, AlertTriangle, X, Menu } from 'lucide-react';
 
@@ -250,8 +251,8 @@ export default function App() {
   });
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  // Licenses matching Image 6 (36 items)
-  const [licenses, setLicenses] = useState<LicenseRecord[]>(() => getStoredLicenses());
+  // Licenses matching Image 6 (36 items) — dynamically computed with live remaining days & status
+  const [licenses, setLicenses] = useState<LicenseRecord[]>(() => computeLiveLicenseList(getStoredLicenses()));
 
   // Other Public Health datasets
   const [establishments, setEstablishments] = useState<Establishment[]>(() =>
@@ -550,7 +551,7 @@ export default function App() {
     const unsubLicenses = subscribeCollection<LicenseRecord>(COLLECTIONS.LICENSES, (items) => {
       if (items && items.length > 0) {
         const cleaned = items.filter((x) => x.businessName !== 'ร้าน ก.ไก่');
-        setLicenses(cleaned);
+        setLicenses(computeLiveLicenseList(cleaned));
       }
     });
     const unsubEstablishments = subscribeCollection<Establishment>(COLLECTIONS.ESTABLISHMENTS, (items) => {
@@ -892,8 +893,9 @@ unsubLicenses();
   };
 
   // Edit License Modal Handlers
-  const handleSaveLicenseOnly = async (updated: LicenseRecord) => {
-    setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
+  const handleSaveLicenseOnly = async (rawUpdated: LicenseRecord) => {
+    const updated = computeLiveLicenseRecord(rawUpdated);
+    setLicenses((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     saveToFirestore(COLLECTIONS.LICENSES, updated).catch(() => {});
     showToast('success', `บันทึกข้อมูลใบอนุญาต ${updated.businessName} สำเร็จ`);
     try {
@@ -903,8 +905,9 @@ unsubLicenses();
     }
   };
 
-  const handleSaveAndExportPdf = async (updated: LicenseRecord) => {
-    setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
+  const handleSaveAndExportPdf = async (rawUpdated: LicenseRecord) => {
+    const updated = computeLiveLicenseRecord(rawUpdated);
+    setLicenses((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     saveToFirestore(COLLECTIONS.LICENSES, updated).catch(() => {});
     showToast('info', `กำลังส่งข้อมูลและสร้าง PDF ใบอนุญาตแบบทางการของ ${updated.businessName}...`);
     try {
@@ -923,8 +926,9 @@ unsubLicenses();
     }
   };
 
-  const handleSaveAndOpenGoogleSheet = async (updated: LicenseRecord) => {
-    setLicenses(licenses.map((l) => (l.id === updated.id ? updated : l)));
+  const handleSaveAndOpenGoogleSheet = async (rawUpdated: LicenseRecord) => {
+    const updated = computeLiveLicenseRecord(rawUpdated);
+    setLicenses((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     saveToFirestore(COLLECTIONS.LICENSES, updated).catch(() => {});
     showToast('info', `กำลังสร้าง Google Sheet ใบอนุญาต (สร้างสำเนาเฉพาะร้านค้า) ของ ${updated.businessName}...`);
     try {

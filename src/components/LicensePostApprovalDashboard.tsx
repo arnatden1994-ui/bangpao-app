@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { LicenseRecord } from '../types/index.ts';
 import { seedLicensesToFirestore } from '../services/firebaseService.ts';
+import { computeLiveLicenseList, daysFromToday } from '../utils/dateUtils.ts';
 
 interface LicensePostApprovalDashboardProps {
   licenses: LicenseRecord[];
@@ -61,10 +62,13 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
   const [seedFeedback, setSeedFeedback] = useState<string | null>(null);
   const [showSeedConfirmModal, setShowSeedConfirmModal] = useState(false);
 
+  // Dynamically compute real-time remainingDays & status from expireDate vs today's date
+  const liveLicenses = useMemo(() => computeLiveLicenseList(licenses), [licenses]);
+
   // Extract distinct years dynamically, sorted descending
   const availableYears = useMemo(() => {
     const yearsSet = new Set<string>();
-    licenses.forEach((l) => {
+    liveLicenses.forEach((l) => {
       const yr = (l.licenseYear || '').trim();
       if (yr) {
         yearsSet.add(yr);
@@ -79,18 +83,18 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
       yearsSet.add('2567');
     }
     return Array.from(yearsSet).sort((a, b) => b.localeCompare(a));
-  }, [licenses]);
+  }, [liveLicenses]);
 
   // Year-scoped dataset: Primary dataset based on the selected year!
   const yearScopedLicenses = useMemo(() => {
-    if (selectedYear === 'all') return licenses;
-    return licenses.filter((l) => {
+    if (selectedYear === 'all') return liveLicenses;
+    return liveLicenses.filter((l) => {
       const yr = (l.licenseYear || '').trim();
       if (yr) return yr === selectedYear;
       if (l.roundYear) return l.roundYear.includes(selectedYear);
       return false;
     });
-  }, [licenses, selectedYear]);
+  }, [liveLicenses, selectedYear]);
 
   // Metrics calculated directly from the active year scope
   const totalCount = yearScopedLicenses.length;
@@ -189,17 +193,16 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
     if (!confirmApprove) return;
 
     const targetYear = item.licenseYear || '2569';
-    const nextNum = generateNextLicenseNumber(licenses, targetYear);
+    const nextNum = generateNextLicenseNumber(liveLicenses, targetYear);
     const today = new Date();
-    const nextYear = new Date();
-    nextYear.setFullYear(today.getFullYear() + 1);
-    nextYear.setDate(today.getDate() - 1);
+    const nextYear = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
 
     const pad = (n: number) => n.toString().padStart(2, '0');
     const thaiYear = today.getFullYear() + 543;
     const nextThaiYear = nextYear.getFullYear() + 543;
     const startStr = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${thaiYear}`;
     const endStr = `${pad(nextYear.getDate())}/${pad(nextYear.getMonth() + 1)}/${nextThaiYear}`;
+    const liveDays = daysFromToday(endStr) ?? 365;
 
     const updated: LicenseRecord = {
       ...item,
@@ -207,8 +210,8 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
       licenseNumber: item.licenseNumber.includes('รอออกเลข') || !item.licenseNumber ? nextNum : item.licenseNumber,
       approvalDate: startStr,
       expireDate: endStr,
-      remainingDays: 365,
-      daysRemaining: 365,
+      remainingDays: liveDays,
+      daysRemaining: liveDays,
       updatedAt: new Date().toISOString(),
     };
 
@@ -224,25 +227,25 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
     let newNumber = item.licenseNumber;
     let newApprovalDate = item.approvalDate;
     let newExpireDate = item.expireDate;
-    let newDays = item.remainingDays;
+    let newDays = daysFromToday(item.expireDate) ?? item.remainingDays ?? 365;
 
-    if (isNowNormal && (wasPending || item.licenseNumber.includes('รอออกเลข'))) {
+    if (isNowNormal && (wasPending || item.licenseNumber.includes('รอออกเลข') || newDays <= 0)) {
       const targetYear = item.licenseYear || '2569';
-      newNumber = generateNextLicenseNumber(licenses, targetYear);
+      if (wasPending || item.licenseNumber.includes('รอออกเลข')) {
+        newNumber = generateNextLicenseNumber(liveLicenses, targetYear);
+      }
       const today = new Date();
-      const nextYear = new Date();
-      nextYear.setFullYear(today.getFullYear() + 1);
-      nextYear.setDate(today.getDate() - 1);
+      const nextYear = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
       const pad = (n: number) => n.toString().padStart(2, '0');
       const thaiYear = today.getFullYear() + 543;
       const nextThaiYear = nextYear.getFullYear() + 543;
       newApprovalDate = `${pad(today.getDate())}/${pad(today.getMonth() + 1)}/${thaiYear}`;
       newExpireDate = `${pad(nextYear.getDate())}/${pad(nextYear.getMonth() + 1)}/${nextThaiYear}`;
-      newDays = 365;
+      newDays = daysFromToday(newExpireDate) ?? 365;
     } else if (newStatus === 'expired') {
       newDays = 0;
-    } else if (newStatus === 'normal' && (newDays === 0 || !newDays)) {
-      newDays = 365;
+    } else if (newStatus === 'expiring' && newDays > 30) {
+      newDays = 30;
     }
 
     const updated: LicenseRecord = {
@@ -251,8 +254,8 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
       licenseNumber: newNumber,
       approvalDate: newApprovalDate,
       expireDate: newExpireDate,
-      remainingDays: newDays,
-      daysRemaining: newDays,
+      remainingDays: Math.max(0, newDays),
+      daysRemaining: Math.max(0, newDays),
       updatedAt: new Date().toISOString(),
     };
 
@@ -482,12 +485,12 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
             >
               <span>ทุกปี</span>
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${selectedYear === 'all' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-800 text-slate-400'}`}>
-                {licenses.length}
+                {liveLicenses.length}
               </span>
             </button>
 
             {availableYears.map((yr) => {
-              const countInYear = licenses.filter((l) => (l.licenseYear || '').trim() === yr || (l.roundYear || '').includes(yr)).length;
+              const countInYear = liveLicenses.filter((l) => (l.licenseYear || '').trim() === yr || (l.roundYear || '').includes(yr)).length;
               const isSelected = selectedYear === yr;
               return (
                 <button
@@ -866,10 +869,12 @@ export const LicensePostApprovalDashboard: React.FC<LicensePostApprovalDashboard
                           title="คลิกเพื่อเปลี่ยนสถานะใบอนุญาตและบันทึกทันที"
                         >
                           <option value="normal">
-                            ✅ ปกติ {item.remainingDays ? `(เหลือ ${item.remainingDays} วัน)` : '(365 วัน)'}
+                            ✅ ปกติ {item.remainingDays !== undefined && item.remainingDays > 0 ? `(เหลือ ${item.remainingDays} วัน)` : '(365 วัน)'}
                           </option>
                           <option value="pending">⏳ รออนุมัติ</option>
-                          <option value="expiring">⚠️ ใกล้หมดอายุ</option>
+                          <option value="expiring">
+                            ⚠️ ใกล้หมดอายุ {item.remainingDays !== undefined && item.remainingDays > 0 ? `(เหลือ ${item.remainingDays} วัน)` : ''}
+                          </option>
                           <option value="expired">❌ หมดอายุคำขอ</option>
                         </select>
                         <ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 opacity-70" />

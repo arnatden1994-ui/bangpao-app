@@ -8,6 +8,7 @@ import {
   updateLicenseRecordInGas,
 } from '../services/gasExportService.ts';
 import { DEFAULT_GAS_URL } from '../services/sheetsSync.ts';
+import { toIsoDateStr, daysFromToday } from '../utils/dateUtils.ts';
 
 interface EditLicenseModalProps {
   license: LicenseRecord | null;
@@ -89,28 +90,7 @@ export function thaiBahtText(num: number | string): string {
 
 // แปลงรูปแบบวันที่ระหว่าง YYYY-MM-DD (สำหรับ date input) กับ วัน/เดือน/ปี พ.ศ. (สำหรับระบบไทย)
 function toIsoDate(dateStr?: string): string {
-  if (!dateStr || dateStr === '-' || dateStr === '.......') return '';
-  if (dateStr.includes('T')) {
-    dateStr = dateStr.split('T')[0];
-  }
-  if (dateStr.includes('-')) {
-    const parts = dateStr.split('-');
-    if (parts.length === 3) {
-      let y = parseInt(parts[0], 10);
-      if (y > 2400) y -= 543;
-      return `${y}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-    }
-  }
-  if (dateStr.includes('/')) {
-    const parts = dateStr.split('/');
-    if (parts.length === 3) {
-      let y = parseInt(parts[2], 10);
-      if (y < 100) y += 2000;
-      if (y > 2400) y -= 543;
-      return `${y}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
-  }
-  return '';
+  return toIsoDateStr(dateStr);
 }
 
 function toThaiDisplayDate(isoDateStr?: string): string {
@@ -290,12 +270,14 @@ export const EditLicenseModal: React.FC<EditLicenseModalProps> = ({
     const formattedStart = toThaiDisplayDate(startDateIso) || license.approvalDate;
     const formattedEnd = toThaiDisplayDate(endDateIso) || license.expireDate;
     const formattedReceipt = toThaiDisplayDate(receiptDateIso) || license.receiptDate || formattedStart;
+    const liveDays = daysFromToday(formattedEnd) ?? (licenseStatus === 'normal' ? 365 : licenseStatus === 'expiring' ? 20 : 0);
+    const computedDays = licenseStatus === 'expired' ? 0 : Math.max(0, liveDays);
 
     return {
       ...license,
       status: licenseStatus,
-      remainingDays: licenseStatus === 'normal' ? (license.remainingDays || 365) : licenseStatus === 'expiring' ? 20 : 0,
-      daysRemaining: licenseStatus === 'normal' ? (license.daysRemaining || 365) : licenseStatus === 'expiring' ? 20 : 0,
+      remainingDays: computedDays,
+      daysRemaining: computedDays,
       licenseBookNo: bookNo,
       licenseNumber: `${licenseNo}/${docYear}`,
       licenseYear: docYear,

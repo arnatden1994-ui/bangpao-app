@@ -16,6 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import { LtcPatient, LtcRoundItem } from '../types/index.ts';
+import { parseFlexibleDate } from '../utils/dateUtils.ts';
 
 export interface LtcRegistrationRow {
   id: string;
@@ -178,18 +179,16 @@ export function computeLtcEndDate(
   // สูตรคำนวณ: อัตรา 3 ชิ้นต่อวัน -> จำนวนวัน = จำนวนผ้าอ้อม / 3
   const days = Math.round(diaperQty / 3);
 
-  let start: Date;
-  if (typeof baseDateInput === 'string') {
-    start = new Date(baseDateInput.includes('T') ? baseDateInput : `${baseDateInput}T00:00:00`);
-  } else {
-    start = new Date(baseDateInput.getTime());
-  }
+  const parsedStart =
+    baseDateInput instanceof Date
+      ? new Date(baseDateInput.getTime())
+      : parseFlexibleDate(baseDateInput);
 
-  if (isNaN(start.getTime())) {
+  if (!parsedStart || isNaN(parsedStart.getTime())) {
     return { endDateText: '-', days };
   }
 
-  const target = new Date(start.getTime());
+  const target = new Date(parsedStart.getTime());
   target.setDate(target.getDate() + days);
 
   const day = target.getDate();
