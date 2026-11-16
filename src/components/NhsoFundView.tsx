@@ -79,6 +79,10 @@ import {
   isProjectTrackingExtended,
   isProjectTrackingRefunded,
 } from '../utils/nhsoThemeAndTracking.ts';
+import {
+  generateSmartNhsoProjectDraft,
+  auditNhsoProjectQuality,
+} from '../utils/nhsoAiAssistant.ts';
 import { NhsoProjectBuilderModal } from './NhsoProjectBuilderModal.tsx';
 import { NhsoFundSettingsModal } from './NhsoFundSettingsModal.tsx';
 import { PrintNhsoProjectModal } from './PrintNhsoProjectModal.tsx';
@@ -124,14 +128,95 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     const merged = mergeNhsoFundProjectsWithMaster(raw);
     return merged.map((p) => {
       const calcReq = getProjectCalculatedRequestedBudget(p);
+      // Auto-complete any missing narrative columns in activityGroups using our Smart AI Engine
+      const hasGroups = p.activityGroups && p.activityGroups.length > 0;
+      const firstG = hasGroups ? p.activityGroups![0] : null;
+      const isNarrativeIncomplete =
+        firstG &&
+        (!firstG.activities?.trim() ||
+          !firstG.objectives?.trim() ||
+          !firstG.kpi?.trim() ||
+          !firstG.activityName?.trim() ||
+          (!/\d+/.test(firstG.targetGroup || '') && calcReq > 0));
+
+      let enrichedGroups = p.activityGroups;
+      let enrichedActivities = p.activities;
+      let enrichedObjectives = p.objectives;
+      let enrichedTargetGroup = p.targetGroup;
+      let enrichedKpi = p.kpi;
+
+      if (isNarrativeIncomplete && p.projectName) {
+        const lines = firstG?.budgetLines || p.budgetLines || [];
+        const docOrMealLine = lines.find(
+          (l) =>
+            l.name?.includes('อาหารกลางวัน') ||
+            l.name?.includes('เอกสาร') ||
+            l.name?.includes('วัสดุ') ||
+            l.name?.includes('ประกาศนียบัตร')
+        );
+        const inferredPCount =
+          p.targetParticipants && p.targetParticipants > 0
+            ? p.targetParticipants
+            : firstG?.targetParticipants && firstG.targetParticipants > 0
+            ? firstG.targetParticipants
+            : docOrMealLine?.quantity && docOrMealLine.quantity <= 150
+            ? docOrMealLine.quantity
+            : 30;
+
+        const aiDraft = generateSmartNhsoProjectDraft({
+          projectName: p.projectName,
+          proposingOrg: p.proposingOrg,
+          participantsCount: inferredPCount,
+          observersCount: 6,
+          speakersCount: 1,
+          hoursCount: 5,
+          includeLunch: true,
+          snackMealsCount: 2,
+          includeVinyl: true,
+          includeMaterials: true,
+          activityCountMode: 'single',
+          fiscalYear: p.fiscalYear || '2570',
+          settings: fundSettings,
+        });
+        const aiG0 = aiDraft.activityGroups[0];
+        if (aiG0 && enrichedGroups) {
+          enrichedGroups = enrichedGroups.map((g, idx) => {
+            if (idx > 0) return g;
+            return {
+              ...g,
+              activityName: g.activityName?.trim() || aiG0.activityName,
+              activities: g.activities?.trim() || p.activities?.trim() || aiG0.activities,
+              objectives: g.objectives?.trim() || p.objectives?.trim() || aiG0.objectives,
+              targetGroup:
+                g.targetGroup?.trim() && /\d+/.test(g.targetGroup)
+                  ? g.targetGroup
+                  : aiG0.targetGroup,
+              targetParticipants: g.targetParticipants || inferredPCount,
+              kpi: g.kpi?.trim() || p.kpi?.trim() || aiG0.kpi,
+              location: g.location?.trim() || p.location?.trim() || aiG0.location,
+              duration: g.duration?.trim() || p.duration?.trim() || aiG0.duration,
+            };
+          });
+          enrichedActivities = enrichedGroups[0].activities;
+          enrichedObjectives = enrichedGroups[0].objectives;
+          enrichedTargetGroup = enrichedGroups[0].targetGroup;
+          enrichedKpi = enrichedGroups[0].kpi;
+        }
+      }
+
       return {
         ...p,
+        activityGroups: enrichedGroups,
+        activities: enrichedActivities,
+        objectives: enrichedObjectives,
+        targetGroup: enrichedTargetGroup,
+        kpi: enrichedKpi,
         budgetRequested: calcReq,
         budgetApproved: getProjectEffectiveApprovedBudget({ ...p, budgetRequested: calcReq }),
         disbursedAmount: getProjectEffectiveDisbursedAmount({ ...p, budgetRequested: calcReq }),
       };
     });
-  }, [externalProjects, internalProjects]);
+  }, [externalProjects, internalProjects, fundSettings]);
 
   // Filter & Search states (Always start at the current fiscal year cycle 2570 when entering the page)
   const [selectedYear, setSelectedYear] = useState<string>(() =>
@@ -3322,6 +3407,40 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* AI Committee Pre-Audit Banner */}
+              {(() => {
+                const audit = auditNhsoProjectQuality({
+                  projectName: approvalModalProject.projectName,
+                  categoryNumber: approvalModalProject.categoryNumber,
+                  proposingOrg: approvalModalProject.proposingOrg,
+                  activityGroups: approvalModalProject.activityGroups,
+                });
+                return (
+                  <div
+                    className={`p-2.5 rounded-xl border text-[11px] space-y-1 ${
+                      audit.isComplete
+                        ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200'
+                        : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 font-bold">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                        AI ช่วยตรวจความถูกต้องก่อนลงมติ: ความสมบูรณ์ {audit.score}%
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/70">
+                        {audit.isComplete ? 'ผ่านเกณฑ์ตาราง 13 ช่อง' : `พบข้อสังเกต ${audit.missingFields.length + audit.warnings.length} จุด`}
+                      </span>
+                    </div>
+                    {!audit.isComplete && (
+                      <div className="text-[10px] leading-relaxed opacity-90">
+                        {[...audit.missingFields, ...audit.warnings].slice(0, 2).join(' • ')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Meeting info inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

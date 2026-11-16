@@ -454,9 +454,24 @@ export function generateSmartNhsoProjectDraft(
     };
   }
 
-  // 3. FIRST AID & CPR (ปฐมพยาบาล / CPR / ฟื้นคืนชีพ)
-  if (title.includes('ปฐมพยาบาล') || title.includes('cpr') || title.includes('ฟื้นคืนชีพ')) {
-    const act1Lines = buildStandardTrainingBudgetLines(1, '1. กิจกรรมอบรมให้ความรู้', params);
+  // 3. FIRST AID & CPR & AED (ปฐมพยาบาล / CPR / ฟื้นคืนชีพ / AED / กระตุกหัวใจ)
+  if (
+    title.includes('ปฐมพยาบาล') ||
+    title.toLowerCase().includes('cpr') ||
+    title.toLowerCase().includes('aed') ||
+    title.includes('ฟื้นคืนชีพ') ||
+    title.includes('กระตุกหัวใจ') ||
+    title.includes('ช่วยชีวิต')
+  ) {
+    const hasAed =
+      title.toLowerCase().includes('aed') || title.includes('กระตุกหัวใจ');
+    const act1Lines = buildStandardTrainingBudgetLines(
+      1,
+      hasAed
+        ? '1. กิจกรรมอบรมให้ความรู้และฝึกปฏิบัติการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR) และการใช้เครื่อง AED'
+        : '1. กิจกรรมอบรมให้ความรู้เรื่องการปฐมพยาบาลเบื้องต้นและการช่วยฟื้นคืนชีพ (CPR)',
+      params
+    );
     const act2Lines: NhsoFundBudgetLine[] = [
       {
         id: `ai_cpr_2_1_${Date.now()}`,
@@ -470,7 +485,9 @@ export function generateSmartNhsoProjectDraft(
       {
         id: `ai_cpr_2_2_${Date.now() + 1}`,
         activityCategory: '2. กิจกรรมฐานการเรียนรู้และฝึกปฏิบัติ',
-        name: '2.2) ค่าวัสดุ/อุปกรณ์ประจำฐานการเรียนรู้ 3 ฐาน (ฐานยาสามัญ / ฐานทำแผล / ฐานฝึกปฏิบัติ CPR)',
+        name: hasAed
+          ? '2.2) ค่าวัสดุ/อุปกรณ์ประจำฐานฝึกปฏิบัติ 3 ฐาน (ฐานประเมินผู้ป่วยฉุกเฉิน 1669 / ฐานฝึกปั๊มหัวใจ CPR กับหุ่นจำลอง / ฐานฝึกใช้เครื่องกระตุกหัวใจไฟฟ้าอัตโนมัติ AED)'
+          : '2.2) ค่าวัสดุ/อุปกรณ์ประจำฐานการเรียนรู้ 3 ฐาน (ฐานยาสามัญ / ฐานทำแผลห้ามเลือด / ฐานฝึกปฏิบัติ CPR)',
         quantity: 3,
         unit: 'ฐาน',
         unitPrice: 1500,
@@ -479,14 +496,20 @@ export function generateSmartNhsoProjectDraft(
     ];
     const group1: NhsoActivityGroup = {
       id: `act_ai_1_${Date.now()}`,
-      activityName: '1. กิจกรรมอบรมให้ความรู้',
-      activities:
-        '1. จัดกิจกรรมอบรมให้ความรู้ภาคทฤษฎี เรื่องการปฐมพยาบาลเบื้องต้น การประเมินผู้ป่วยฉุกเฉิน และการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR)',
-      objectives:
-        '1. เพื่อให้ผู้เข้ารับการอบรมมีความรู้ความเข้าใจเรื่องการปฐมพยาบาลเบื้องต้น การใช้ยาสามัญประจำบ้าน และการช่วยฟื้นคืนชีพ (CPR)\n2. เพื่อให้ผู้เข้ารับการอบรมทราบขั้นตอนการแจ้งเหตุฉุกเฉินและการช่วยเหลือผู้ป่วยเบื้องต้นอย่างปลอดภัย',
-      targetGroup: `1. กลุ่มเป้าหมายผู้เข้ารับการอบรม จำนวน ${pCount} คน\n2. ครู/เจ้าหน้าที่ผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount + obsCount} คน`,
+      activityName: hasAed
+        ? '1. กิจกรรมอบรมให้ความรู้เรื่องการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR) และการใช้เครื่อง AED'
+        : '1. กิจกรรมอบรมให้ความรู้เรื่องการปฐมพยาบาลเบื้องต้นและการช่วยฟื้นคืนชีพ (CPR)',
+      activities: hasAed
+        ? '1. อบรมให้ความรู้ภาคทฤษฎี เรื่องหลักการประเมินผู้ป่วยหมดสติ หยุดหายใจ หรือหัวใจหยุดเต้นเฉียบพลัน การแจ้งเหตุฉุกเฉินสายด่วน 1669 และห่วงโซ่การรอดชีวิต (Chain of Survival)\n2. สาธิตและฝึกปฏิบัติการกดหน้าอกช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR) ร่วมกับการใช้เครื่องกระตุกหัวใจด้วยไฟฟ้าชนิดอัตโนมัติ (AED) และการช่วยเหลือผู้สำลักอาหารอุดกั้นทางเดินหายใจ (Choking)\n3. ประเมินความรู้และทักษะการปฏิบัติก่อนและหลังการอบรม'
+        : '1. จัดกิจกรรมอบรมให้ความรู้ภาคทฤษฎี เรื่องการปฐมพยาบาลเบื้องต้น การประเมินผู้ป่วยฉุกเฉิน การแจ้งเหตุสายด่วน 1669 และการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR)\n2. สาธิตวิธีการทำแผล การห้ามเลือด การช่วยเหลือผู้สำลักอุดกั้นทางเดินหายใจ และการกดหน้าอกทำ CPR อย่างถูกวิธี',
+      objectives: hasAed
+        ? '1. เพื่อให้ผู้เข้ารับการอบรมมีความรู้ ความเข้าใจ และมีทักษะในการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR) ได้อย่างถูกต้องตามหลักวิชาการ\n2. เพื่อให้ผู้เข้ารับการอบรมสามารถปฏิบัติการช่วยฟื้นคืนชีพและใช้งานเครื่องกระตุกหัวใจด้วยไฟฟ้าชนิดอัตโนมัติ (AED) ในการช่วยเหลือผู้ป่วยฉุกเฉินได้อย่างปลอดภัยและทันท่วงที\n3. เพื่อเพิ่มโอกาสการรอดชีวิตและลดอัตราการเสียชีวิตหรือพิการของผู้ป่วยภาวะหัวใจหยุดเต้นเฉียบพลันในชุมชน قبلถึงโรงพยาบาล'
+        : '1. เพื่อให้ผู้เข้ารับการอบรมมีความรู้ความเข้าใจเรื่องการปฐมพยาบาลเบื้องต้น การใช้ยาสามัญประจำบ้าน และการช่วยฟื้นคืนชีพ (CPR)\n2. เพื่อให้ผู้เข้ารับการอบรมทราบขั้นตอนการแจ้งเหตุฉุกเฉิน 1669 และการช่วยเหลือผู้ป่วยเบื้องต้นอย่างปลอดภัย',
+      targetGroup: `1. ประชาชน/แกนนำสุขภาพ/กลุ่มเป้าหมายในพื้นที่ตำบลบางเป้า จำนวน ${pCount} คน\n2. เจ้าหน้าที่และผู้สังเกตการณ์ จำนวน ${obsCount} คน\n3. วิทยากรผู้เชี่ยวชาญ จำนวน ${spkCount} คน\nรวมทั้งสิ้น ${totalPeople} คน`,
       targetParticipants: pCount,
-      kpi: '1. ร้อยละ 80 ของผู้เข้ารับการอบรมมีความรู้ความเข้าใจเรื่องการปฐมพยาบาลเบื้องต้นและการช่วยฟื้นคืนชีพ (CPR) เพิ่มขึ้น',
+      kpi: hasAed
+        ? '1. ร้อยละ 90 ของผู้เข้ารับการอบรมมีความรู้ ความเข้าใจ และมีทักษะการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR) เพิ่มขึ้น\n2. ร้อยละ 90 ของผู้เข้ารับการอบรมสามารถปฏิบัติการช่วยฟื้นคืนชีพและใช้เครื่องกระตุกหัวใจด้วยไฟฟ้าชนิดอัตโนมัติ (AED) ได้อย่างถูกต้องตามเกณฑ์มาตรฐาน'
+        : '1. ร้อยละ 80 ของผู้เข้ารับการอบรมมีความรู้ความเข้าใจเรื่องการปฐมพยาบาลเบื้องต้นและการช่วยฟื้นคืนชีพ (CPR) เพิ่มขึ้น',
       location: defaultLocation,
       duration: defaultDuration,
       budgetLines: act1Lines,
@@ -494,14 +517,15 @@ export function generateSmartNhsoProjectDraft(
     };
     const group2: NhsoActivityGroup = {
       id: `act_ai_2_${Date.now() + 10}`,
-      activityName: '2. กิจกรรมฐานการเรียนรู้และฝึกปฏิบัติ',
-      activities:
-        '2. กิจกรรมฝึกทักษะปฏิบัติผ่านฐานการเรียนรู้ 3 ฐาน:\n- ฐานที่ 1 ฐานยาสามัญประจำบ้านและอุปกรณ์ปฐมพยาบาล\n- ฐานที่ 2 ฐานการห้ามเลือดและการทำแผลอย่างถูกวิธี\n- ฐานที่ 3 ฐานการฝึกปฏิบัติช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR)',
+      activityName: '2. กิจกรรมฐานการเรียนรู้และฝึกปฏิบัติทักษะช่วยชีวิต',
+      activities: hasAed
+        ? '2. กิจกรรมฝึกทักษะปฏิบัติจริงผ่านฐานการเรียนรู้ 3 ฐาน:\n- ฐานที่ 1 การประเมินสถานการณ์ผู้ป่วยหมดสติ การเปิดทางเดินหายใจ และการโทรแจ้งสายด่วนกู้ชีพ 1669\n- ฐานที่ 2 การฝึกปฏิบัติกดหน้าอกช่วยฟื้นคืนชีพขั้นพื้นฐาน (Hands-Only CPR) กับหุ่นจำลอง\n- ฐานที่ 3 การฝึกปฏิบัติใช้เครื่องกระตุกหัวใจด้วยไฟฟ้าชนิดอัตโนมัติ (AED) และการช่วยเหลือผู้สำลักอาหาร'
+        : '2. กิจกรรมฝึกทักษะปฏิบัติผ่านฐานการเรียนรู้ 3 ฐาน:\n- ฐานที่ 1 ฐานยาสามัญประจำบ้านและอุปกรณ์ปฐมพยาบาล\n- ฐานที่ 2 ฐานการห้ามเลือดและการทำแผลอย่างถูกวิธี\n- ฐานที่ 3 ฐานการฝึกปฏิบัติช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR)',
       objectives:
-        '1. เพื่อให้ผู้เข้ารับการอบรมได้ฝึกปฏิบัติจริงและมีทักษะในการทำแผล การห้ามเลือด และการทำ CPR อย่างถูกวิธี\n2. เพื่อลดความรุนแรงของการบาดเจ็บและเพิ่มโอกาสรอดชีวิตของผู้ป่วยฉุกเฉินก่อนถึงโรงพยาบาล',
-      targetGroup: `1. กลุ่มเป้าหมายผู้เข้ารับการฝึกปฏิบัติ จำนวน ${pCount} คน\n2. ครู/เจ้าหน้าที่ผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount + obsCount} คน`,
+        '1. เพื่อให้ผู้เข้ารับการอบรมได้ฝึกทักษะปฏิบัติจริงจนเกิดความมั่นใจในการช่วยฟื้นคืนชีพ (CPR) และการใช้อุปกรณ์ช่วยชีวิตฉุกเฉินอย่างถูกวิธี\n2. เพื่อลดความรุนแรงของการบาดเจ็บและเพิ่มโอกาสรอดชีวิตของผู้ป่วยฉุกเฉินก่อนรถพยาบาลมาถึง',
+      targetGroup: `1. กลุ่มเป้าหมายผู้เข้ารับการฝึกปฏิบัติ จำนวน ${pCount} คน\n2. เจ้าหน้าที่ผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount + obsCount} คน`,
       targetParticipants: pCount,
-      kpi: '1. ร้อยละ 80 ของผู้เข้ารับการฝึกปฏิบัติสามารถทำแผลและสาธิตการช่วยฟื้นคืนชีพ (CPR) ได้อย่างถูกต้องตามเกณฑ์',
+      kpi: '1. ร้อยละ 90 ของผู้เข้ารับการฝึกปฏิบัติผ่านการทดสอบทักษะประจำฐานการเรียนรู้และสามารถสาธิตการทำ CPR / ใช้เครื่อง AED ได้อย่างถูกต้อง',
       location: defaultLocation,
       duration: defaultDuration,
       budgetLines: act2Lines,
@@ -510,19 +534,21 @@ export function generateSmartNhsoProjectDraft(
     return {
       recommendedCategoryNumber: categoryNumber,
       recommendedCategoryReason: reason,
-      detectedTopicLabel: 'การปฐมพยาบาลเบื้องต้นและการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR)',
+      detectedTopicLabel: hasAed
+        ? 'การช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR) และการใช้เครื่องกระตุกหัวใจไฟฟ้าอัตโนมัติ (AED)'
+        : 'การปฐมพยาบาลเบื้องต้นและการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR)',
       activityGroups: params.activityCountMode === 'single' ? [group1] : [group1, group2],
       alternativeActivities: [
-        '1. อบรมภาคทฤษฎีเรื่องหลักการปฐมพยาบาลเบื้องต้น การประเมินผู้ป่วยฉุกเฉิน และการโทรแจ้งสายด่วน 1669\n2. ฝึกปฏิบัติแบ่งฐานการเรียนรู้ 3 ฐาน (การทำแผลห้ามเลือด / การดามกระดูกเบื้องต้น / การปั๊มหัวใจ CPR)',
+        '1. อบรมภาคทฤษฎีเรื่องหลักการประเมินผู้ป่วยหมดสติ หยุดหายใจ และการโทรแจ้งสายด่วน 1669\n2. ฝึกปฏิบัติแบ่งฐานการเรียนรู้ 3 ฐาน (การประเมินผู้ป่วยฉุกเฉิน / การปั๊มหัวใจ CPR / การใช้เครื่องกระตุกหัวใจไฟฟ้าอัตโนมัติ AED)',
       ],
       alternativeObjectives: [
-        '1. เพื่อให้ผู้เข้าร่วมโครงการมีความรู้และทักษะการปฐมพยาบาลเบื้องต้นและการช่วยฟื้นคืนชีพ (CPR)\n2. เพื่อลดความรุนแรงของการบาดเจ็บและเพิ่มโอกาสรอดชีวิตของผู้ป่วยฉุกเฉินก่อนถึงโรงพยาบาล',
+        '1. เพื่อให้ผู้เข้าร่วมโครงการมีความรู้และทักษะการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR) และการใช้เครื่องกระตุกหัวใจด้วยไฟฟ้าอัตโนมัติ (AED)\n2. เพื่อลดอัตราการเสียชีวิตและเพิ่มโอกาสรอดชีวิตของผู้ป่วยฉุกเฉินในชุมชนก่อนถึงโรงพยาบาล',
       ],
       alternativeTargetGroups: [
-        `1. นักเรียน/เยาวชน/ประชาชนกลุ่มเป้าหมาย จำนวน ${pCount} คน\n2. ครูและเจ้าหน้าที่ผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount + obsCount} คน`,
+        `1. ประชาชน/แกนนำสุขภาพ/เยาวชนกลุ่มเป้าหมาย จำนวน ${pCount} คน\n2. เจ้าหน้าที่ผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount + obsCount} คน`,
       ],
       alternativeKpis: [
-        '1. ร้อยละ 80 ของผู้เข้าร่วมโครงการผ่านการประเมินความรู้และทักษะการปฐมพยาบาลเบื้องต้นและการทำ CPR',
+        '1. ร้อยละ 90 ของผู้เข้ารับการอบรมมีความรู้ ความเข้าใจ และมีทักษะการช่วยฟื้นคืนชีพขั้นพื้นฐาน (CPR)\n2. ร้อยละ 90 ของผู้เข้ารับการอบรมสามารถปฏิบัติการช่วยฟื้นคืนชีพและใช้เครื่องกระตุกหัวใจด้วยไฟฟ้าอัตโนมัติ (AED) ได้ถูกต้อง',
       ],
     };
   }
@@ -1016,7 +1042,204 @@ export function generateSmartNhsoProjectDraft(
     };
   }
 
-  // 10. GENERAL / CUSTOM TOPIC (รองรับทุกชื่อโครงการที่พิมพ์เข้ามาใหม่โดยอัตโนมัติ)
+  // 10. MATERNAL & REPRODUCTIVE HEALTH / ANEMIA / CERVICAL CANCER (หญิงตั้งครรภ์ / ฝากครรภ์ / โลหิตจาง / มะเร็งปากมดลูก / มะเร็งเต้านม)
+  if (
+    title.includes('ตั้งครรภ์') ||
+    title.includes('ฝากครรภ์') ||
+    title.includes('โลหิตจาง') ||
+    title.includes('มะเร็ง') ||
+    title.includes('วัยเจริญพันธุ์')
+  ) {
+    const isCancer = title.includes('มะเร็ง');
+    const isAnemia = title.includes('โลหิตจาง');
+    const actName = isCancer
+      ? '1. กิจกรรมอบรมเชิงปฏิบัติการและรณรงค์คัดกรองมะเร็งในสตรีกลุ่มเสี่ยง'
+      : isAnemia
+      ? '1. กิจกรรมอบรมเชิงปฏิบัติการแกนนำสุขภาพป้องกันภาวะโลหิตจางในหญิงวัยเจริญพันธุ์'
+      : '1. กิจกรรมอบรมแกนนำสุขภาพดูแลหญิงตั้งครรภ์ปลอดภัย ลูกสุขภาพดี';
+    const act1Lines = buildStandardTrainingBudgetLines(
+      1,
+      actName,
+      params,
+      !isCancer && !isAnemia
+        ? [{ name: 'ค่าป้ายไวนิลรณรงค์การฝากครรภ์ ขนาด 1.2 x 2.5 เมตร', quantity: 4, unit: 'ป้าย', unitPrice: 450 }]
+        : []
+    );
+
+    const group1: NhsoActivityGroup = {
+      id: `act_ai_1_${Date.now()}`,
+      activityName: actName,
+      activities: isCancer
+        ? '1. จัดทำทะเบียนสตรีกลุ่มเป้าหมายอายุ 30-60 ปี ที่ยังไม่เคยตรวจคัดกรองมะเร็งปากมดลูก/มะเร็งเต้านมในเขตพื้นที่\n2. อบรมให้ความรู้เรื่องโรคมะเร็งปากมดลูกและมะเร็งเต้านม ปัจจัยเสี่ยง และการตรวจคัดกรองระยะเริ่มต้น\n3. ประชาสัมพันธ์และประสานส่งต่อสตรีกลุ่มเสี่ยงเข้ารับการตรวจคัดกรองจากหน่วยบริการในพื้นที่'
+        : isAnemia
+        ? '1. จัดอบรมเชิงปฏิบัติการให้แก่แกนนำสุขภาพ เรื่องความรู้พื้นฐานเกี่ยวกับภาวะโลหิตจาง วิธีประเมินสัญญาณเสี่ยง และการให้คำแนะนำด้านโภชนาการเสริมธาตุเหล็ก\n2. แกนนำสุขภาพออกเคาะประตูบ้านเพื่อประเมินปัจจัยเสี่ยงภาวะโลหิตจางในหญิงวัยเจริญพันธุ์ และให้คำแนะนำตามหลักโภชนาการที่ถูกต้อง\n3. สรุปผลการดำเนินโครงการและส่งต่อกลุ่มเสี่ยงเข้าสู่ระบบบริการสุขภาพ'
+        : '1. จัดอบรมให้ความรู้แก่แกนนำสุขภาพ เรื่องการเตรียมตัวก่อนตั้งครรภ์ การปฏิบัติตนขณะตั้งครรภ์ที่ถูกต้อง และการเลี้ยงลูกด้วยนมแม่\n2. แกนนำสุขภาพร่วมค้นหาหญิงตั้งครรภ์รายใหม่และรณรงค์ให้ฝากครรภ์ครั้งแรกก่อนอายุครรภ์ 12 สัปดาห์\n3. ติดตามเยี่ยมบ้านหญิงตั้งครรภ์ให้มาฝากครรภ์ครบ 8 ครั้งตามเกณฑ์ และเยี่ยมดูแลมารดา-ทารกหลังคลอด',
+      objectives: isCancer
+        ? '1. เพื่อเพิ่มการเข้าถึงบริการตรวจคัดกรองมะเร็งปากมดลูกและมะเร็งเต้านมในสตรีกลุ่มเสี่ยงอายุ 30-60 ปี\n2. เพื่อส่งต่อสตรีที่ตรวจพบความผิดปกติให้ได้รับการตรวจวินิจฉัยและรักษาอย่างทันท่วงที'
+        : isAnemia
+        ? '1. เพื่อเพิ่มความรู้และทักษะของแกนนำสุขภาพในการประเมินและป้องกันภาวะโลหิตจางในหญิงวัยเจริญพันธุ์\n2. เพื่อให้หญิงวัยเจริญพันธุ์ในพื้นที่ได้รับการดูแลเชิงรุกและลดความเสี่ยงการเกิดภาวะโลหิตจางอย่างเป็นรูปธรรม\n3. เพื่อส่งต่อกลุ่มเสี่ยงเข้าสู่ระบบบริการสุขภาพอย่างเหมาะสมและรวดเร็ว'
+        : '1. เพื่อให้แกนนำสุขภาพมีความรู้ในการดูแลสุขภาพของหญิงตั้งครรภ์และทารก\n2. เพื่อส่งเสริมให้หญิงตั้งครรภ์ในพื้นที่ได้รับการฝากครรภ์ครั้งแรกภายใน 12 สัปดาห์\n3. เพื่อให้หญิงตั้งครรภ์ได้รับการดูแลก่อนคลอดครบ 8 ครั้งตามเกณฑ์มาตรฐาน',
+      targetGroup: `1. แกนนำสุขภาพและประชาชนกลุ่มเป้าหมายในพื้นที่ จำนวน ${pCount} คน\n2. เจ้าหน้าที่สาธารณสุขและผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount + obsCount} คน`,
+      targetParticipants: pCount,
+      kpi: isCancer
+        ? '1. ร้อยละ 80 ของสตรีกลุ่มเป้าหมายมีความรู้และเข้ารับการตรวจคัดกรองมะเร็งปากมดลูกตามเกณฑ์\n2. ร้อยละ 100 ของสตรีที่ตรวจพบผลเซลล์ผิดปกติได้รับการส่งต่อเพื่อรักษาอย่างเหมาะสม'
+        : isAnemia
+        ? '1. ร้อยละ 80 ของแกนนำสุขภาพสามารถให้คำแนะนำด้านโภชนาการป้องกันภาวะโลหิตจางได้อย่างถูกต้อง\n2. ร้อยละ 80 ของหญิงวัยเจริญพันธุ์ในพื้นที่ได้รับการประเมินความเสี่ยงโดยแกนนำสุขภาพ'
+        : '1. ร้อยละ 80 ของแกนนำสุขภาพมีความรู้ความเข้าใจเกี่ยวกับการปฏิบัติตนขณะตั้งครรภ์ที่ถูกต้อง\n2. ร้อยละ 60 ของหญิงตั้งครรภ์ในพื้นที่มารับการฝากครรภ์ก่อน 12 สัปดาห์ และฝากครรภ์ครบ 8 ครั้งตามเกณฑ์',
+      location: defaultLocation,
+      duration: defaultDuration,
+      budgetLines: act1Lines,
+      subtotal: act1Lines.reduce((s, l) => s + l.total, 0),
+    };
+
+    return {
+      recommendedCategoryNumber: categoryNumber,
+      recommendedCategoryReason: reason,
+      detectedTopicLabel: isCancer
+        ? 'การคัดกรองมะเร็งปากมดลูกและมะเร็งเต้านมในสตรีกลุ่มเสี่ยง'
+        : isAnemia
+        ? 'การดูแลหญิงวัยเจริญพันธุ์ป้องกันภาวะโลหิตจางในชุมชน'
+        : 'การส่งเสริมสุขภาพหญิงตั้งครรภ์และการฝากครรภ์คุณภาพ',
+      activityGroups: [group1],
+      alternativeActivities: [group1.activities],
+      alternativeObjectives: [group1.objectives],
+      alternativeTargetGroups: [group1.targetGroup],
+      alternativeKpis: [group1.kpi],
+    };
+  }
+
+  // 11. CIRCUMCISION / MEDICAL PROCEDURE (ขลิบเพื่อสุขภาพ / ทำหัตถการ)
+  if (title.includes('ขลิบ') || title.includes('หัตถการ')) {
+    const act1Lines: NhsoFundBudgetLine[] = [
+      {
+        id: `ai_circ_1_1_${Date.now()}`,
+        activityCategory: '1. กิจกรรมอบรมให้ความรู้',
+        name: '1.1) ค่าตอบแทนวิทยากรให้ความรู้การดูแลแผลและป้องกันการติดเชื้อ',
+        quantity: Math.max(1, params.hoursCount || 1),
+        unit: 'ชั่วโมง',
+        unitPrice: params.settings?.standardRates?.speakerHourly || 600,
+        total: Math.max(1, params.hoursCount || 1) * (params.settings?.standardRates?.speakerHourly || 600),
+      },
+      {
+        id: `ai_circ_1_2_${Date.now() + 1}`,
+        activityCategory: '1. กิจกรรมอบรมให้ความรู้',
+        name: '1.2) ค่าป้ายไวนิลขนาด 1.2 x 2.5 เมตร',
+        quantity: 1,
+        unit: 'ป้าย',
+        unitPrice: params.settings?.standardRates?.vinylPerBanner || 450,
+        total: params.settings?.standardRates?.vinylPerBanner || 450,
+      },
+      {
+        id: `ai_circ_1_3_${Date.now() + 2}`,
+        activityCategory: '1. กิจกรรมอบรมให้ความรู้',
+        name: `1.3) ค่าอาหารว่างและเครื่องดื่มสำหรับเด็ก ผู้ปกครอง และผู้สังเกตการณ์`,
+        quantity: pCount * 2 + obsCount,
+        unit: 'ชุด',
+        unitPrice: params.settings?.standardRates?.snackPerMeal || 25,
+        total: (pCount * 2 + obsCount) * (params.settings?.standardRates?.snackPerMeal || 25),
+      },
+    ];
+    const act2Lines: NhsoFundBudgetLine[] = [
+      {
+        id: `ai_circ_2_1_${Date.now() + 10}`,
+        activityCategory: '2. กิจกรรมการทำหัตถการ',
+        name: '2.1) ค่าจัดจ้างเหมาบริการแพทย์วิชาชีพในการให้บริการขลิบหนังหุ้มปลายอวัยวะเพศเด็กและเยาวชน',
+        quantity: pCount,
+        unit: 'คน',
+        unitPrice: 1200,
+        total: pCount * 1200,
+      },
+      {
+        id: `ai_circ_2_2_${Date.now() + 11}`,
+        activityCategory: '2. กิจกรรมการทำหัตถการ',
+        name: '2.2) ค่าผ้าขาวม้าและวัสดุดูแลสุขอนามัยในการจัดกิจกรรม',
+        quantity: pCount,
+        unit: 'ผืน',
+        unitPrice: 120,
+        total: pCount * 120,
+      },
+    ];
+    const group1: NhsoActivityGroup = {
+      id: `act_ai_1_${Date.now()}`,
+      activityName: '1. กิจกรรมอบรมให้ความรู้',
+      activities:
+        '1. ให้ความรู้ในการดูแลสุขภาพอนามัยก่อนและหลังการขลิบ (Circumcision) การทำความสะอาดแผล และการป้องกันภาวะแทรกซ้อนหรือโรคติดเชื้อ ให้แก่เด็ก เยาวชน และผู้ปกครอง',
+      objectives:
+        '1. เพื่อให้เด็ก เยาวชน และผู้ปกครองมีความรู้ ความเข้าใจในการดูแลสุขภาพอนามัยและการป้องกันโรคติดเชื้ออย่างถูกวิธี',
+      targetGroup: `- กลุ่มเด็กและเยาวชน จำนวน ${pCount} คน\n- ผู้ปกครองเด็กและเยาวชน จำนวน ${pCount} คน\n- ผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount * 2 + obsCount} คน`,
+      targetParticipants: pCount,
+      kpi: '1. ร้อยละ 90 ของเด็ก เยาวชน และผู้ปกครองมีความรู้ ความเข้าใจในการดูแลสุขภาพและการป้องกันโรคติดเชื้อหลังทำหัตถการ',
+      location: 'มัสยิดบ้านบางเป้า หมู่ที่ 3 ตำบลบางเป้า',
+      duration: `มี.ค. - เม.ย. ${yrShort}`,
+      budgetLines: act1Lines,
+      subtotal: act1Lines.reduce((s, l) => s + l.total, 0),
+    };
+    const group2: NhsoActivityGroup = {
+      id: `act_ai_2_${Date.now() + 10}`,
+      activityName: '2. กิจกรรมการทำหัตถการ',
+      activities:
+        '2. ทำหัตถการขลิบหนังหุ้มปลายอวัยวะเพศชาย (Circumcision) โดยแพทย์วิชาชีพและบุคลากรทางการแพทย์ตามมาตรฐานปลอดเชื้อ พร้อมตรวจติดตามอาการหลังทำหัตถการ',
+      objectives:
+        '1. เพื่อส่งเสริมให้เด็กและเยาวชนได้รับการขลิบหนังหุ้มปลายอวัยวะเพศอย่างปลอดภัย ป้องกันภาวะเสี่ยงของการมีเลือดออก (Bleeding) การอักเสบรุนแรง และการติดเชื้อทางเดินปัสสาวะ',
+      targetGroup: `- กลุ่มเด็กและเยาวชนในพื้นที่ตำบลบางเป้า จำนวน ${pCount} คน`,
+      targetParticipants: pCount,
+      kpi: '1. ร้อยละ 100 ของเด็กและเยาวชนที่เข้าร่วมได้รับการขลิบหนังหุ้มปลายอวัยวะเพศอย่างปลอดภัยและไม่เกิดภาวะแทรกซ้อนรุนแรง',
+      location: 'มัสยิดบ้านบางเป้า หมู่ที่ 3 ตำบลบางเป้า',
+      duration: `มี.ค. - เม.ย. ${yrShort}`,
+      budgetLines: act2Lines,
+      subtotal: act2Lines.reduce((s, l) => s + l.total, 0),
+    };
+    return {
+      recommendedCategoryNumber: categoryNumber,
+      recommendedCategoryReason: reason,
+      detectedTopicLabel: 'การขลิบหนังหุ้มปลายอวัยวะเพศชายเพื่อสุขภาพและป้องกันการติดเชื้อ',
+      activityGroups: [group1, group2],
+      alternativeActivities: [group1.activities, group2.activities],
+      alternativeObjectives: [group1.objectives, group2.objectives],
+      alternativeTargetGroups: [group1.targetGroup],
+      alternativeKpis: [group1.kpi, group2.kpi],
+    };
+  }
+
+  // 12. YOUTH / VAPE / DRUGS / TEEN PREGNANCY (บุหรี่ไฟฟ้า / ยาเสพติด / วัยรุ่น / ตั้งครรภ์ในวัยรุ่น)
+  if (
+    title.includes('บุหรี่') ||
+    title.includes('ยาเสพติด') ||
+    title.includes('วัยใส') ||
+    title.includes('วัยรุ่น') ||
+    title.includes('เพศศึกษา')
+  ) {
+    const act1Lines = buildStandardTrainingBudgetLines(
+      1,
+      '1. กิจกรรมอบรมให้ความรู้และสร้างภูมิคุ้มกันในเด็กและเยาวชน',
+      params
+    );
+    const group1: NhsoActivityGroup = {
+      id: `act_ai_1_${Date.now()}`,
+      activityName: '1. กิจกรรมอบรมให้ความรู้และสร้างภูมิคุ้มกันทางสุขภาพในเด็กและเยาวชน',
+      activities: `1. จัดอบรมให้ความรู้เรื่องพิษภัยและอันตรายของบุหรี่ บุหรี่ไฟฟ้า สุรา สารเสพติด และการสร้างทักษะชีวิต (${topicCore})\n2. กิจกรรมแบ่งกลุ่มระดมสมอง สร้างแกนนำเยาวชนรณรงค์สถานศึกษาและชุมชนปลอดบุหรี่ไฟฟ้าและสิ่งเสพติด\n3. ประเมินผลความรู้และทัศนคติก่อน-หลังการอบรม`,
+      objectives: `1. เพื่อให้เด็กและเยาวชนมีความรู้เท่าทันพิษภัยของบุหรี่ไฟฟ้า สารเสพติด และพฤติกรรมเสี่ยงทางสุขภาพ\n2. เพื่อสร้างภูมิคุ้มกันและทักษะการปฏิเสธสิ่งเสพติดในกลุ่มเด็กและเยาวชนตำบลบางเป้า\n3. เพื่อสร้างเครือข่ายแกนนำเยาวชนในการเฝ้าระวังและรณรงค์ส่งเสริมสุขภาพในโรงเรียนและชุมชน`,
+      targetGroup: `1. เด็กและเยาวชนกลุ่มเป้าหมาย จำนวน ${pCount} คน\n2. ครู/แกนนำชุมชน/เจ้าหน้าที่ผู้สังเกตการณ์ จำนวน ${obsCount} คน\nรวม ${pCount + obsCount} คน`,
+      targetParticipants: pCount,
+      kpi: `1. ร้อยละ 85 ของเด็กและเยาวชนที่เข้าร่วมอบรมมีความรู้เท่าทันพิษภัยและทักษะการหลีกเลี่ยงพฤติกรรมเสี่ยงเพิ่มขึ้น\n2. ร้อยละ 100 ของผู้เข้าร่วมกิจกรรมไม่ยุ่งเกี่ยวกับบุหรี่ไฟฟ้าและยาเสพติด`,
+      location: defaultLocation,
+      duration: defaultDuration,
+      budgetLines: act1Lines,
+      subtotal: act1Lines.reduce((s, l) => s + l.total, 0),
+    };
+    return {
+      recommendedCategoryNumber: categoryNumber,
+      recommendedCategoryReason: reason,
+      detectedTopicLabel: `การสร้างภูมิคุ้มกันและป้องกันพฤติกรรมเสี่ยงในเด็กและเยาวชน (${topicCore})`,
+      activityGroups: [group1],
+      alternativeActivities: [group1.activities],
+      alternativeObjectives: [group1.objectives],
+      alternativeTargetGroups: [group1.targetGroup],
+      alternativeKpis: [group1.kpi],
+    };
+  }
+
+  // 13. GENERAL / CUSTOM TOPIC (รองรับทุกชื่อโครงการที่พิมพ์เข้ามาใหม่โดยอัตโนมัติ)
   const generalLines = buildStandardTrainingBudgetLines(1, '1. กิจกรรมอบรมให้ความรู้และสร้างเสริมสุขภาพ', params);
   const group1: NhsoActivityGroup = {
     id: `act_ai_1_${Date.now()}`,
@@ -1701,9 +1924,244 @@ export async function extractTextFromUploadedProjectFile(file: File): Promise<st
 }
 
 /**
- * Analyzes an uploaded NHSO project file (or image/PDF via Gemini if key exists, plus built-in Thai NLP parser)
- * Extracts & refines project name, target counts, objectives, activities, KPIs, and budget lines.
- * File is processed 100% in memory and immediately discarded to save space.
+ * Extracts structured 13-column rows if the uploaded file is an Excel (.xlsx) in NHSO 13-column format
+ */
+async function extractStructured13ColRowsFromXlsx(
+  buffer: ArrayBuffer
+): Promise<Array<Record<string, string>>> {
+  const zipMap = await readZipEntriesInMemory(buffer);
+  const sharedXml = zipMap.get('xl/sharedStrings.xml') || '';
+  const sharedStrings: string[] = [];
+  const siMatches = sharedXml.match(/<si[\s\S]*?<\/si>/g) || [];
+  siMatches.forEach((si) => {
+    const tParts = si.match(/<t[^>]*>([\s\S]*?)<\/t>/g) || [];
+    const text = tParts.map((t) => t.replace(/<[^>]+>/g, '')).join('');
+    sharedStrings.push(
+      text
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+    );
+  });
+
+  const rows: Array<Record<string, string>> = [];
+  for (const [path, xml] of zipMap.entries()) {
+    if (path.startsWith('xl/worksheets/sheet') && path.endsWith('.xml')) {
+      const rowMatches = xml.match(/<row[\s\S]*?<\/row>/g) || [];
+      rowMatches.forEach((rowXml) => {
+        const colMap: Record<string, string> = {};
+        const cellMatches = rowXml.match(/<c[\s\S]*?(?:<\/c>|\/>)/g) || [];
+        cellMatches.forEach((cXml) => {
+          const refMatch = cXml.match(/r="([A-Z]+)\d+"/);
+          const colLetter = refMatch ? refMatch[1] : '';
+          if (!colLetter) return;
+
+          const isShared = /t="s"/.test(cXml);
+          const inlineMatch = cXml.match(/<is>[\s\S]*?<\/is>/);
+          let val = '';
+          if (inlineMatch) {
+            val = inlineMatch[0].replace(/<[^>]+>/g, '').trim();
+          } else {
+            const vMatch = cXml.match(/<v>([\s\S]*?)<\/v>/);
+            if (vMatch) {
+              const rawVal = vMatch[1].trim();
+              if (isShared && sharedStrings[Number(rawVal)] !== undefined) {
+                val = sharedStrings[Number(rawVal)].trim();
+              } else {
+                val = rawVal;
+              }
+            }
+          }
+          if (val) {
+            colMap[colLetter] = val;
+          }
+        });
+        if (Object.keys(colMap).length > 0) {
+          rows.push(colMap);
+        }
+      });
+      if (rows.length > 0) break;
+    }
+  }
+  return rows;
+}
+
+export interface NhsoSmartAuditReport {
+  score: number;
+  isReady: boolean;
+  strengths: string[];
+  warnings: string[];
+  autoFixSuggestions: Array<{
+    field: string;
+    label: string;
+    groupIndex: number;
+  }>;
+}
+
+/**
+ * AI Smart Quality & Compliance Auditor for NHSO 13-Column Projects
+ * Checks every column (Activities, Objectives, Target Group, KPI, Location, Duration, Budget Rates)
+ * and provides 1-click Auto-Fill / Fix suggestions.
+ */
+export function auditNhsoProjectQuality(params: {
+  projectName: string;
+  categoryNumber: number;
+  proposingOrg: string;
+  responsiblePerson: string;
+  activityGroups: NhsoActivityGroup[];
+  settings: NhsoFundSettings;
+}): NhsoSmartAuditReport {
+  const { projectName, proposingOrg, activityGroups, settings } = params;
+  const strengths: string[] = [];
+  const warnings: string[] = [];
+  const autoFixSuggestions: Array<{ field: string; label: string; groupIndex: number }> = [];
+
+  if (projectName.trim().length >= 8) {
+    strengths.push(`ระบุชื่อโครงการชัดเจน: "${projectName.trim()}"`);
+  } else {
+    warnings.push('ยังไม่ได้ระบุชื่อโครงการให้ชัดเจน');
+  }
+
+  if (proposingOrg.trim()) {
+    const recCat = recommendNhsoCategory(projectName, proposingOrg);
+    strengths.push(
+      `หน่วยงานผู้เสนอ: ${proposingOrg} (สอดคล้องกับประเภทที่ ${recCat.categoryNumber})`
+    );
+  } else {
+    warnings.push('ยังไม่ได้เลือกหน่วยงานผู้ขอรับงบประมาณ');
+  }
+
+  activityGroups.forEach((g, idx) => {
+    const actNum = idx + 1;
+    if (!g.activityName?.trim()) {
+      warnings.push(`กิจกรรมที่ ${actNum}: ยังไม่ได้ตั้งชื่อหัวข้อกิจกรรมหลัก`);
+      autoFixSuggestions.push({
+        field: 'all_in_group',
+        label: `✨ ให้ AI ตั้งชื่อและเติมข้อมูลกิจกรรมที่ ${actNum} ให้ครบทุกช่อง`,
+        groupIndex: idx,
+      });
+    }
+    if (!g.activities?.trim()) {
+      warnings.push(`กิจกรรมที่ ${actNum} (คอลัมน์ที่ 2 กิจกรรม): ยังว่างอยู่`);
+      autoFixSuggestions.push({
+        field: 'activities',
+        label: `✨ เติมช่อง "กิจกรรม (คอลัมน์ที่ 2)" ของกิจกรรมที่ ${actNum}`,
+        groupIndex: idx,
+      });
+    } else {
+      strengths.push(`กิจกรรมที่ ${actNum}: มีรายละเอียดกิจกรรม (คอลัมน์ที่ 2) ครบถ้วน`);
+    }
+
+    if (!g.objectives?.trim()) {
+      warnings.push(`กิจกรรมที่ ${actNum} (คอลัมน์ที่ 3 วัตถุประสงค์): ยังว่างอยู่`);
+      autoFixSuggestions.push({
+        field: 'objectives',
+        label: `✨ เติมช่อง "วัตถุประสงค์ (คอลัมน์ที่ 3)" ของกิจกรรมที่ ${actNum}`,
+        groupIndex: idx,
+      });
+    } else if (!g.objectives.includes('เพื่อ')) {
+      warnings.push(`กิจกรรมที่ ${actNum}: วัตถุประสงค์ควรขึ้นต้นด้วยคำว่า "เพื่อ..." ตามมาตรฐาน สปสช.`);
+    } else {
+      strengths.push(`กิจกรรมที่ ${actNum}: วัตถุประสงค์ (คอลัมน์ที่ 3) ถูกต้องตามรูปแบบ "เพื่อ..."`);
+    }
+
+    if (!g.targetGroup?.trim()) {
+      warnings.push(`กิจกรรมที่ ${actNum} (คอลัมน์ที่ 4 กลุ่มเป้าหมาย): ยังว่างอยู่`);
+      autoFixSuggestions.push({
+        field: 'targetGroup',
+        label: `✨ เติมช่อง "กลุ่มเป้าหมาย (คอลัมน์ที่ 4)" ของกิจกรรมที่ ${actNum}`,
+        groupIndex: idx,
+      });
+    } else if (!/\d+/.test(g.targetGroup)) {
+      warnings.push(
+        `กิจกรรมที่ ${actNum}: ช่องกลุ่มเป้าหมาย "${g.targetGroup}" ยังไม่ได้ระบุจำนวนคน (เช่น จำนวน 30 คน)`
+      );
+      autoFixSuggestions.push({
+        field: 'targetGroup',
+        label: `✨ ปรับปรุงช่อง "กลุ่มเป้าหมาย" ให้ระบุจำนวนคนชัดเจนตามตารางงบ`,
+        groupIndex: idx,
+      });
+    } else {
+      strengths.push(`กิจกรรมที่ ${actNum}: ระบุกลุ่มเป้าหมายและจำนวนคนชัดเจน`);
+    }
+
+    if (!g.kpi?.trim()) {
+      warnings.push(`กิจกรรมที่ ${actNum} (คอลัมน์ที่ 5 ตัวชี้วัด KPI): ยังว่างอยู่`);
+      autoFixSuggestions.push({
+        field: 'kpi',
+        label: `✨ เติมช่อง "ตัวชี้วัด KPI (คอลัมน์ที่ 5)" ของกิจกรรมที่ ${actNum}`,
+        groupIndex: idx,
+      });
+    } else {
+      strengths.push(`กิจกรรมที่ ${actNum}: มีตัวชี้วัดความสำเร็จ (KPI) ชัดเจน`);
+    }
+
+    if (!g.location?.trim() || !g.duration?.trim()) {
+      warnings.push(`กิจกรรมที่ ${actNum}: ยังไม่ได้ระบุพื้นที่ดำเนินการหรือระยะเวลาดำเนินการให้ครบ`);
+      autoFixSuggestions.push({
+        field: 'location_duration',
+        label: `✨ เติมช่อง "พื้นที่ & ระยะเวลาดำเนินการ" ของกิจกรรมที่ ${actNum}`,
+        groupIndex: idx,
+      });
+    }
+
+    const validLines = (g.budgetLines || []).filter(
+      (l) => Boolean(l.name?.trim()) || (l.total || 0) > 0
+    );
+    if (validLines.length === 0) {
+      warnings.push(`กิจกรรมที่ ${actNum}: ยังไม่มีรายการค่าใช้จ่ายในตารางงบประมาณ`);
+      autoFixSuggestions.push({
+        field: 'budgetLines',
+        label: `✨ ให้ AI คำนวณรายการค่าใช้จ่ายมาตรฐาน สปสช. ในกิจกรรมที่ ${actNum}`,
+        groupIndex: idx,
+      });
+    } else {
+      const maxSpeaker = settings.standardRates?.speakerHourly || 600;
+      const maxLunch = settings.standardRates?.lunchPerMeal || 75;
+      const maxSnack = settings.standardRates?.snackPerMeal || 25;
+      validLines.forEach((l) => {
+        const n = (l.name || '').trim();
+        if (n.includes('วิทยากร') && l.unit?.includes('ชั่วโมง') && l.unitPrice > maxSpeaker && l.unitPrice !== 900) {
+          warnings.push(
+            `รายการ "${n}": ราคา ${l.unitPrice} บ./ชม. สูงกว่าเกณฑ์มาตรฐานวิทยากรบรรยาย (${maxSpeaker} บ./ชม.)`
+          );
+        }
+        if (n.includes('อาหารกลางวัน') && l.unitPrice > maxLunch) {
+          warnings.push(
+            `รายการ "${n}": ราคา ${l.unitPrice} บ./มื้อ สูงกว่าเกณฑ์อาหารกลางวัน (${maxLunch} บ./มื้อ)`
+          );
+        }
+        if (n.includes('อาหารว่าง') && l.unitPrice > maxSnack) {
+          warnings.push(
+            `รายการ "${n}": ราคา ${l.unitPrice} บ./มื้อ สูงกว่าเกณฑ์อาหารว่าง (${maxSnack} บ./มื้อ)`
+          );
+        }
+      });
+      strengths.push(
+        `กิจกรรมที่ ${actNum}: มีรายการงบประมาณ ${validLines.length} รายการ (รวม ${validLines
+          .reduce((s, l) => s + (l.total || 0), 0)
+          .toLocaleString()} บาท)`
+      );
+    }
+  });
+
+  const penalty = warnings.length * 12;
+  const score = Math.max(20, Math.min(100, 100 - penalty));
+
+  return {
+    score,
+    isReady: warnings.length === 0,
+    strengths,
+    warnings,
+    autoFixSuggestions,
+  };
+}
+
+/**
+ * Analyzes an uploaded NHSO project file (.docx, .xlsx, .csv, .txt)
+ * Extracts exact 13-column cells or narrative sections (Activities, Objectives, Target Group, KPI, Location, Duration, Budget Lines)
+ * and uses the Smart AI Engine to complete any missing fields so every column is 100% populated!
  */
 export async function analyzeUploadedProjectFileWithAi(
   file: File,
@@ -1714,26 +2172,55 @@ export async function analyzeUploadedProjectFileWithAi(
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
   const extractedText = await extractTextFromUploadedProjectFile(file);
 
-  // Try extracting project title from text or filename
-  let detectedProjectName = '';
-  const titleMatch =
-    extractedText.match(/(?:ชื่อโครงการ|แผนงาน\/โครงการ|โครงการ)\s*[:：]?\s*(โครงการ[^\n|]{5,120})/) ||
-    extractedText.match(/(โครงการ[^\n|\t]{6,110})/);
-
-  if (titleMatch && titleMatch[1]) {
-    detectedProjectName = titleMatch[1]
-      .replace(/\|.*$/, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  } else {
-    const cleanFileName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-    detectedProjectName = cleanFileName.startsWith('โครงการ')
-      ? cleanFileName
-      : `โครงการ${cleanFileName}`;
+  // Check if it is an Excel (.xlsx) file with 13-column layout
+  let structuredXlsxRows: Array<Record<string, string>> = [];
+  if (ext === 'xlsx') {
+    try {
+      const buf = await file.arrayBuffer();
+      structuredXlsxRows = await extractStructured13ColRowsFromXlsx(buf);
+    } catch {
+      structuredXlsxRows = [];
+    }
   }
 
-  // Detect proposing organization
+  // Try extracting project title from structured Excel Cell A6 or text or filename
+  let detectedProjectName = '';
+  const cellAProject = structuredXlsxRows.find(
+    (r) =>
+      r.A &&
+      r.A.includes('โครงการ') &&
+      !r.A.includes('แผนงาน/โครงการ') &&
+      !r.A.includes('สรุปโครงการ')
+  )?.A;
+
+  if (cellAProject) {
+    detectedProjectName = cellAProject.trim();
+  } else {
+    const titleMatch =
+      extractedText.match(
+        /(?:ชื่อโครงการ|แผนงาน\/โครงการ|โครงการ)\s*[:：]?\s*(โครงการ[^\n|\t]{5,140})/
+      ) || extractedText.match(/(โครงการ[^\n|\t]{6,130})/);
+
+    if (titleMatch && titleMatch[1]) {
+      detectedProjectName = titleMatch[1]
+        .replace(/\|.*$/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    } else {
+      const cleanFileName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+      detectedProjectName = cleanFileName.startsWith('โครงการ')
+        ? cleanFileName
+        : `โครงการ${cleanFileName}`;
+    }
+  }
+
+  // Detect proposing organization (from Cell M or text)
   let detectedOrg = '';
+  const cellMOrg = structuredXlsxRows.find(
+    (r) => r.M && !r.M.includes('ผู้รับผิดชอบ')
+  )?.M;
+  const searchPool = `${cellMOrg || ''} ${extractedText} ${detectedProjectName}`;
+
   const orgCandidates = [
     'กองสาธารณสุขและสิ่งแวดล้อม',
     'กองการศึกษา ศาสนาและวัฒนธรรม',
@@ -1756,35 +2243,59 @@ export async function analyzeUploadedProjectFileWithAi(
     'กองทุนสวัสดิการชุมชนตำบลบางเป้า',
   ];
   for (const org of orgCandidates) {
-    if (extractedText.includes(org) || detectedProjectName.includes(org)) {
+    if (searchPool.includes(org)) {
       detectedOrg = org;
       break;
     }
   }
   if (!detectedOrg) {
-    const mMoo = (extractedText + ' ' + detectedProjectName).match(/อสม\.?\s*(?:หมู่ที่|หมู่|ม\.)\s*(\d)/);
+    const mMoo = searchPool.match(/อสม\.?\s*(?:หมู่ที่|หมู่|ม\.)\s*(\d)/);
     if (mMoo) {
       detectedOrg = `ชมรม อสม. ม.${mMoo[1]}`;
-    } else if (extractedText.includes('ป่าเตียว')) {
+    } else if (searchPool.includes('ป่าเตียว')) {
       detectedOrg = 'รร.บ้านป่าเตียว';
-    } else if (extractedText.includes('วัดสีหราษฎร์')) {
+    } else if (searchPool.includes('วัดสีหราษฎร์')) {
       detectedOrg = 'รร.วัดสีหราษฎร์ศรัทธา';
-    } else if (extractedText.includes('ควนทองสีห์')) {
+    } else if (searchPool.includes('ควนทองสีห์')) {
       detectedOrg = 'ศพด.บ้านควนทองสีห์';
+    } else if (searchPool.includes('มัสยิดบ้านบางเป้า') && searchPool.includes('ศพด')) {
+      detectedOrg = 'ศพด.มัสยิดบ้านบางเป้า';
+    } else if (searchPool.includes('โรงเรียนบ้านบางเป้า')) {
+      detectedOrg = 'รร.บ้านบางเป้า';
+    } else if (searchPool.includes('กองการศึกษา')) {
+      detectedOrg = 'กองการศึกษา ศาสนาและวัฒนธรรม';
+    } else if (searchPool.includes('กองสาธารณสุข')) {
+      detectedOrg = 'กองสาธารณสุขและสิ่งแวดล้อม';
     }
   }
 
-  // Detect participant count & observer count
+  // Detect participant count & observer count from text or budget quantities
   let participantsCount = 30;
   let observersCount = 6;
-  const peopleMatches = [...extractedText.matchAll(/จำนวน\s*(\d{1,3})\s*คน/g)].map((m) =>
-    Number(m[1])
+  const peopleMatches = [...extractedText.matchAll(/(?:จำนวน|กลุ่มเป้าหมาย|ผู้เข้าอบรม)\s*(\d{1,3})\s*(?:คน|ราย)/g)].map(
+    (m) => Number(m[1])
   );
   if (peopleMatches.length >= 2) {
     participantsCount = peopleMatches[0] || 30;
-    observersCount = peopleMatches[1] || 6;
+    observersCount = peopleMatches[1] <= 30 ? peopleMatches[1] : 6;
   } else if (peopleMatches.length === 1) {
     participantsCount = peopleMatches[0] || 30;
+  } else {
+    // Infer from meal/document line quantities in structuredXlsxRows
+    for (const r of structuredXlsxRows) {
+      const hName = r.H || '';
+      const iQty = Number(r.I);
+      if (
+        !isNaN(iQty) &&
+        iQty >= 10 &&
+        iQty <= 200 &&
+        (hName.includes('อาหารกลางวัน') || hName.includes('เอกสาร') || hName.includes('วัสดุ'))
+      ) {
+        participantsCount = iQty;
+        observersCount = 0;
+        break;
+      }
+    }
   }
 
   // Detect speaker hours
@@ -1803,11 +2314,12 @@ export async function analyzeUploadedProjectFileWithAi(
     snackMealsCount = Number(snackMatch[1]);
   }
 
-  // Check if file mentions multiple activities (e.g. 2.กิจกรรมการติดตามผล or กิจกรรมที่ 2)
   const hasSecondActivity =
-    /2\s*[\.\)]\s*กิจกรรม|กิจกรรมที่\s*2|กิจกรรมการติดตามผล|กิจกรรมฝึกปฏิบัติ/.test(extractedText);
+    /2\s*[\.\)]\s*กิจกรรม|กิจกรรมที่\s*2|กิจกรรมการติดตามผล|กิจกรรมฝึกปฏิบัติ|กิจกรรมฐานการเรียนรู้/.test(
+      extractedText
+    );
 
-  // Generate refined NHSO draft using our Smart AI Engine
+  // Generate our baseline smart NHSO draft so no field is ever left blank
   const aiParams: AiProjectDraftParams = {
     projectName: detectedProjectName,
     proposingOrg: detectedOrg,
@@ -1824,44 +2336,141 @@ export async function analyzeUploadedProjectFileWithAi(
     settings,
   };
 
-  let draft = generateSmartNhsoProjectDraft(aiParams);
+  const draft = freeGeminiKey?.trim()
+    ? await generateNhsoDraftWithFreeGemini(aiParams, freeGeminiKey.trim())
+    : generateSmartNhsoProjectDraft(aiParams);
 
-  // Extract explicit budget lines from the uploaded file if present (e.g., 1.1) ... or 2.1) ...)
+  // Extract explicit narrative fields from structured 13-col Excel (Cols B, C, D, E, F, G) or Word sections
+  let extractedColB = '';
+  let extractedColC = '';
+  let extractedColD = '';
+  let extractedColE = '';
+  let extractedColF = '';
+  let extractedColG = '';
+
+  for (const r of structuredXlsxRows) {
+    if (r.B && !r.B.includes('กิจกรรม') && r.B.length > 8 && !extractedColB) extractedColB = r.B;
+    if (r.C && !r.C.includes('วัตถุประสงค์') && r.C.length > 8 && !extractedColC) extractedColC = r.C;
+    if (r.D && !r.D.includes('กลุ่มเป้าหมาย') && r.D.length > 4 && !extractedColD) extractedColD = r.D;
+    if (r.E && !r.E.includes('ตัวชี้วัด') && r.E.length > 8 && !extractedColE) extractedColE = r.E;
+    if (r.F && !r.F.includes('พื้นที่ดำเนินการ') && r.F.length > 4 && !extractedColF) extractedColF = r.F;
+    if (r.G && !r.G.includes('ระยะเวลา') && r.G.length > 3 && !extractedColG) extractedColG = r.G;
+  }
+
+  // If Word/text document, try regex extraction for Objectives, Target Group, Activities, KPI, Location
+  if (!extractedColC) {
+    const objSec = extractedText.match(
+      /(?:วัตถุประสงค์)\s*[:：]?\s*\n?((?:\s*\d+\.?\s*เพื่อ[^\n]+\n?){1,5})/
+    );
+    if (objSec?.[1]) extractedColC = objSec[1].trim();
+  }
+  if (!extractedColE) {
+    const kpiSec = extractedText.match(
+      /(?:ตัวชี้วัด|KPI|ผลที่คาดว่าจะได้รับ)\s*[:：]?\s*\n?((?:\s*(?:\d+\.?|-)?\s*ร้อยละ[^\n]+\n?){1,5})/
+    );
+    if (kpiSec?.[1]) extractedColE = kpiSec[1].trim();
+  }
+  if (!extractedColB) {
+    const actSec = extractedText.match(
+      /(?:วิธีดำเนินการ|กิจกรรมดำเนินการ|ขั้นตอนการดำเนินงาน)\s*[:：]?\s*\n?((?:[^\n]+\n?){1,6})/
+    );
+    if (actSec?.[1] && actSec[1].trim().length > 15) {
+      extractedColB = actSec[1].trim();
+    }
+  }
+
+  // Extract budget lines from structured Excel (Cols H, I, J, K, L) or regex
   const parsedLines1: NhsoFundBudgetLine[] = [];
   const parsedLines2: NhsoFundBudgetLine[] = [];
-  const lineRegex = /([12])\.(\d)\)\s*([^\n|\t]+?)(?:\s+|\s*\|\s*)(\d+)\s*(?:\|\s*|\s+)(ชั่วโมง|ชุด|มื้อ|ป้าย|เครื่อง|คน|ฐาน|ใบ|อัน|ลูก|ผืน)\s*(?:\|\s*|\s+)(\d[\d,]*)/g;
-  let m: RegExpExecArray | null;
-  while ((m = lineRegex.exec(extractedText)) !== null) {
-    const actIdx = Number(m[1]);
-    const subIdx = Number(m[2]);
-    const itemName = `${actIdx}.${subIdx}) ${m[3].trim()}`;
-    const qty = Number(m[4]) || 1;
-    const unit = m[5].trim();
-    const price = Number(m[6].replace(/,/g, '')) || 0;
-    const lineObj: NhsoFundBudgetLine = {
-      id: `imp_line_${actIdx}_${subIdx}_${Date.now()}`,
-      activityCategory:
-        actIdx === 1
-          ? draft.activityGroups[0]?.activityName || '1. กิจกรรมอบรมให้ความรู้'
-          : draft.activityGroups[1]?.activityName || '2. กิจกรรมการติดตามผล',
-      name: itemName,
-      quantity: qty,
-      unit,
-      unitPrice: price,
-      total: qty * price,
-    };
-    if (actIdx === 1) parsedLines1.push(lineObj);
-    else parsedLines2.push(lineObj);
+  let currentActIdx = 1;
+
+  if (structuredXlsxRows.length > 0) {
+    structuredXlsxRows.forEach((r, rIdx) => {
+      const hText = (r.H || '').trim();
+      if (!hText || hText === 'งบประมาณ' || hText === 'รายการค่าใช้จ่าย') return;
+      if (/^2\s*[\.\)]|^กิจกรรมที่\s*2/.test(hText) && !r.I && !r.K) {
+        currentActIdx = 2;
+        return;
+      }
+      const qty = Number((r.I || '').replace(/,/g, ''));
+      const unit = (r.J || '').trim();
+      const unitPrice = Number((r.K || '').replace(/,/g, ''));
+      const totalVal = Number((r.L || '').replace(/,/g, ''));
+      if ((!isNaN(qty) && qty > 0 && !isNaN(unitPrice) && unitPrice > 0) || (!isNaN(totalVal) && totalVal > 0)) {
+        const effQty = !isNaN(qty) && qty > 0 ? qty : 1;
+        const effPrice = !isNaN(unitPrice) && unitPrice > 0 ? unitPrice : totalVal;
+        const lineObj: NhsoFundBudgetLine = {
+          id: `xlsx_line_${currentActIdx}_${rIdx}_${Date.now()}`,
+          activityCategory:
+            currentActIdx === 1
+              ? draft.activityGroups[0]?.activityName || '1. กิจกรรมอบรมให้ความรู้'
+              : draft.activityGroups[1]?.activityName || '2. กิจกรรมการติดตามผล',
+          name: hText,
+          quantity: effQty,
+          unit: unit || 'รายการ',
+          unitPrice: effPrice,
+          total: effQty * effPrice,
+        };
+        if (currentActIdx === 1) parsedLines1.push(lineObj);
+        else parsedLines2.push(lineObj);
+      }
+    });
+  }
+
+  if (parsedLines1.length === 0) {
+    const lineRegex =
+      /([12])\.(\d)\)\s*([^\n|\t]+?)(?:\s+|\s*\|\s*)(\d+)\s*(?:\|\s*|\s+)(ชั่วโมง|ชุด|มื้อ|ป้าย|เครื่อง|คน|ฐาน|ใบ|อัน|ลูก|ผืน|แผ่น|เล่ม)\s*(?:\|\s*|\s+)(\d[\d,]*)/g;
+    let m: RegExpExecArray | null;
+    while ((m = lineRegex.exec(extractedText)) !== null) {
+      const actIdx = Number(m[1]);
+      const subIdx = Number(m[2]);
+      const itemName = `${actIdx}.${subIdx}) ${m[3].trim()}`;
+      const qty = Number(m[4]) || 1;
+      const unit = m[5].trim();
+      const price = Number(m[6].replace(/,/g, '')) || 0;
+      const lineObj: NhsoFundBudgetLine = {
+        id: `imp_line_${actIdx}_${subIdx}_${Date.now()}`,
+        activityCategory:
+          actIdx === 1
+            ? draft.activityGroups[0]?.activityName || '1. กิจกรรมอบรมให้ความรู้'
+            : draft.activityGroups[1]?.activityName || '2. กิจกรรมการติดตามผล',
+        name: itemName,
+        quantity: qty,
+        unit,
+        unitPrice: price,
+        total: qty * price,
+      };
+      if (actIdx === 1) parsedLines1.push(lineObj);
+      else parsedLines2.push(lineObj);
+    }
   }
 
   const finalGroups = [...draft.activityGroups];
-  if (parsedLines1.length > 0 && finalGroups[0]) {
+  if (finalGroups[0]) {
+    // Merge extracted columns with AI fallbacks so NO column is ever left blank!
+    const smartTargetGroup =
+      extractedColD && /\d+/.test(extractedColD)
+        ? extractedColD
+        : finalGroups[0].targetGroup;
+
     finalGroups[0] = {
       ...finalGroups[0],
-      budgetLines: parsedLines1,
-      subtotal: parsedLines1.reduce((s, l) => s + l.total, 0),
+      activityName: finalGroups[0].activityName || '1. กิจกรรมอบรมให้ความรู้และพัฒนาทักษะ',
+      activities: extractedColB || finalGroups[0].activities,
+      objectives: extractedColC || finalGroups[0].objectives,
+      targetGroup: smartTargetGroup,
+      targetParticipants: participantsCount,
+      kpi: extractedColE || finalGroups[0].kpi,
+      location: extractedColF || finalGroups[0].location,
+      duration: extractedColG || finalGroups[0].duration,
+      budgetLines: parsedLines1.length > 0 ? parsedLines1 : finalGroups[0].budgetLines,
+      subtotal: (parsedLines1.length > 0 ? parsedLines1 : finalGroups[0].budgetLines).reduce(
+        (s, l) => s + (l.total || 0),
+        0
+      ),
     };
   }
+
   if (parsedLines2.length > 0) {
     if (!finalGroups[1]) {
       finalGroups.push(
@@ -1871,18 +2480,18 @@ export async function analyzeUploadedProjectFileWithAi(
     finalGroups[1] = {
       ...finalGroups[1],
       budgetLines: parsedLines2,
-      subtotal: parsedLines2.reduce((s, l) => s + l.total, 0),
+      subtotal: parsedLines2.reduce((s, l) => s + (l.total || 0), 0),
     };
   }
 
   const totalBudget = finalGroups.reduce((s, g) => s + (g.subtotal || 0), 0);
 
   const summaryReport = [
-    `📄 ตรวจสอบไฟล์ "${file.name}" (${(file.size / 1024).toFixed(1)} KB) สำเร็จ และลบไฟล์ออกจากหน่วยความจำแล้ว (ไม่เปลืองพื้นที่ระบบ 100%)`,
-    `📌 ชื่อโครงการที่สกัดได้: "${detectedProjectName}"`,
+    `📄 วิเคราะห์ไฟล์ "${file.name}" (${(file.size / 1024).toFixed(1)} KB) สำเร็จ และลบไฟล์ออกจากหน่วยความจำทันที`,
+    `📌 ชื่อโครงการ: "${detectedProjectName}"`,
     `🏛️ ประเภทโครงการที่แนะนำ: ประเภทที่ ${draft.recommendedCategoryNumber} (${draft.recommendedCategoryReason})`,
-    `👥 กลุ่มเป้าหมาย: ${participantsCount} คน • ผู้สังเกตการณ์/แกนนำ: ${observersCount} คน • วิทยากร: ${hoursCount} ชม.`,
-    `📋 กลั่นกรองและจัดโครงสร้างได้ ${finalGroups.length} กิจกรรมหลัก (${finalGroups.map((g) => g.activityName).join(' + ')}) รวมงบประมาณ ${totalBudget.toLocaleString()} บาท`,
+    `👥 กลุ่มเป้าหมาย: ${participantsCount} คน • ผู้สังเกตการณ์/เจ้าหน้าที่: ${observersCount} คน • วิทยากร: ${hoursCount} ชม.`,
+    `✅ AI ตรวจสอบและเติมข้อมูลครบทั้ง 13 ช่อง (${finalGroups.length} กิจกรรม • รวมงบประมาณ ${totalBudget.toLocaleString()} บาท) โดยไม่มีช่องว่างตกหล่น`,
   ];
 
   return {

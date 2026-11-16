@@ -32,6 +32,8 @@ import {
   generateSmartContextActivityGroup,
   generateNhsoDraftWithFreeGemini,
   analyzeUploadedProjectFileWithAi,
+  auditNhsoProjectQuality,
+  recommendNhsoCategory,
   getStoredFreeGeminiKey,
   saveStoredFreeGeminiKey,
 } from '../utils/nhsoAiAssistant.ts';
@@ -261,24 +263,43 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       const speakerLine = lines.find((l) => l.name?.includes('วิทยากร'));
       const snackLine = lines.find((l) => l.name?.includes('อาหารว่าง'));
       const lunchLine = lines.find((l) => l.name?.includes('อาหารกลางวัน'));
-      const pCount =
+      const docLine = lines.find(
+        (l) => l.name?.includes('เอกสาร') || l.name?.includes('วัสดุ') || l.name?.includes('ประกาศนียบัตร')
+      );
+      const totalMealCount =
+        lunchLine?.quantity || (snackLine ? Math.round(snackLine.quantity / 2) : 0);
+
+      // Extract participant count from targetParticipants, targetGroup text, or budget lines
+      const tgText = firstGroup?.targetGroup || initialProject.targetGroup || '';
+      const tgNumMatches = [...tgText.matchAll(/(\d{1,3})\s*คน/g)].map((m) => Number(m[1]));
+      const inferredParticipants =
         initialProject.targetParticipants && initialProject.targetParticipants > 0
           ? initialProject.targetParticipants
-          : 0;
-      const totalMealCount = lunchLine?.quantity || (snackLine ? Math.round(snackLine.quantity / 2) : 0);
-      const inferredObs = pCount > 0 && totalMealCount >= pCount ? totalMealCount - pCount : 0;
-      const inferredHours = speakerLine ? speakerLine.quantity : 0;
+          : firstGroup?.targetParticipants && firstGroup.targetParticipants > 0
+          ? firstGroup.targetParticipants
+          : tgNumMatches[0] ||
+            docLine?.quantity ||
+            (totalMealCount > 6 ? totalMealCount - 6 : totalMealCount) ||
+            0;
+
+      const inferredObs =
+        tgNumMatches.length >= 2 && tgNumMatches[1] <= 30
+          ? tgNumMatches[1]
+          : inferredParticipants > 0 && totalMealCount >= inferredParticipants
+          ? totalMealCount - inferredParticipants
+          : 6;
+      const inferredHours = speakerLine ? speakerLine.quantity : 5;
       const inferredSnacks =
         snackLine && totalMealCount > 0
           ? Math.max(1, Math.round(snackLine.quantity / totalMealCount))
           : snackLine
           ? 2
-          : 0;
+          : 2;
 
-      setAiParticipants(pCount > 0 ? String(pCount) : '');
-      setAiObservers(pCount > 0 ? String(inferredObs) : '');
-      setAiHours(pCount > 0 ? String(inferredHours) : '');
-      setAiSnackMeals(pCount > 0 ? String(inferredSnacks) : '');
+      setAiParticipants(inferredParticipants > 0 ? String(inferredParticipants) : '30');
+      setAiObservers(String(inferredObs));
+      setAiHours(String(inferredHours));
+      setAiSnackMeals(String(inferredSnacks));
       setAiStatusBanner(null);
       setAiValidationError(null);
       setFileImportSummary(null);
@@ -551,6 +572,78 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
       `✨ AI วิเคราะห์และเติมข้อมูลให้สอดคล้องกับ "${updatedActTitle || 'กิจกรรมที่เลือก'}" และโครงการ "${projectName.trim()}" เรียบร้อยแล้ว`
     );
   };
+
+  // Smart Auto-Fill ONLY missing/incomplete fields while preserving existing user text and budget lines!
+  const handleAiFillMissingFieldsOnly = () => {
+    const errMsg = validateRequiredProjectInputs();
+    if (errMsg) {
+      setAiValidationError(errMsg);
+      return;
+    }
+    setAiValidationError(null);
+    const params = getAiParams();
+    let filledCount = 0;
+
+    setActivityGroups((prev) =>
+      prev.map((g, idx) => {
+        const smartGroup = generateSmartContextActivityGroup(params, idx, g.activityName);
+        const validExistingLines = (g.budgetLines || []).filter(
+          (l) => Boolean(l.name?.trim()) || (l.total || 0) > 0
+        );
+        const nextActName = g.activityName?.trim() ? g.activityName : smartGroup.activityName;
+        const nextActivities = g.activities?.trim() ? g.activities : smartGroup.activities;
+        const nextObjectives = g.objectives?.trim() ? g.objectives : smartGroup.objectives;
+        // Also upgrade targetGroup if it is blank OR if it has no numbers (e.g. just "ประชาชนในพื้นที่ตำบลบางเป้า")
+        const nextTargetGroup =
+          g.targetGroup?.trim() && /\d+/.test(g.targetGroup)
+            ? g.targetGroup
+            : smartGroup.targetGroup;
+        const nextKpi = g.kpi?.trim() ? g.kpi : smartGroup.kpi;
+        const nextLocation = g.location?.trim() ? g.location : smartGroup.location;
+        const nextDuration = g.duration?.trim() ? g.duration : smartGroup.duration;
+        const nextLines =
+          validExistingLines.length > 0 ? g.budgetLines : smartGroup.budgetLines;
+
+        if (!g.activityName?.trim()) filledCount++;
+        if (!g.activities?.trim()) filledCount++;
+        if (!g.objectives?.trim()) filledCount++;
+        if (!g.targetGroup?.trim() || !/\d+/.test(g.targetGroup)) filledCount++;
+        if (!g.kpi?.trim()) filledCount++;
+        if (!g.location?.trim() || !g.duration?.trim()) filledCount++;
+        if (validExistingLines.length === 0) filledCount++;
+
+        return {
+          ...g,
+          activityName: nextActName,
+          activities: nextActivities,
+          objectives: nextObjectives,
+          targetGroup: nextTargetGroup,
+          targetParticipants: g.targetParticipants || smartGroup.targetParticipants,
+          kpi: nextKpi,
+          location: nextLocation,
+          duration: nextDuration,
+          budgetLines: nextLines,
+          subtotal: nextLines.reduce((s, l) => s + (l.total || 0), 0),
+        };
+      })
+    );
+
+    setAiStatusBanner(
+      filledCount > 0
+        ? `✨ AI ตรวจสอบและเติมข้อมูลช่องที่ยังว่าง/ไม่สมบูรณ์ จำนวน ${filledCount} จุด ให้ครบถ้วนโดยคงข้อมูลและงบประมาณเดิมของคุณไว้ 100%!`
+        : `✅ ตรวจสอบแล้ว: ข้อมูลทุกช่องในตาราง 13 คอลัมน์มีความครบถ้วนสมบูรณ์แล้ว!`
+    );
+  };
+
+  // Live AI Quality & Compliance Audit Report
+  const aiAuditReport = auditNhsoProjectQuality({
+    projectName,
+    categoryNumber,
+    proposingOrg: effectiveOrg,
+    responsiblePerson: responsiblePerson || proposerName,
+    activityGroups,
+    settings,
+  });
 
   // Upload external project file -> AI parses & distills into form -> Immediately discards file to save space
   const handleUploadExternalProjectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1083,9 +1176,34 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5">
-                  📌 {NHSO_FUND_CATEGORIES.find((c) => c.number === categoryNumber)?.description}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-1.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    📌 {NHSO_FUND_CATEGORIES.find((c) => c.number === categoryNumber)?.description}
+                  </p>
+                  {(projectName.trim().length > 4 || effectiveOrg.trim().length > 0) &&
+                    (() => {
+                      const rec = recommendNhsoCategory(projectName, effectiveOrg);
+                      if (rec.categoryNumber !== categoryNumber) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setCategoryNumber(rec.categoryNumber)}
+                            className="px-2.5 py-1 rounded-lg bg-violet-100 hover:bg-violet-200 dark:bg-violet-950/80 text-violet-800 dark:text-violet-200 border border-violet-300 dark:border-violet-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Sparkles className="w-3 h-3 text-violet-600" />
+                            <span>
+                              AI แนะนำประเภทที่ {rec.categoryNumber} ({rec.reason.split(' ')[0]}...) — คลิกเพื่อเปลี่ยน
+                            </span>
+                          </button>
+                        );
+                      }
+                      return (
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                          ✓ ตรงตามเกณฑ์ที่ AI วิเคราะห์ ({rec.reason})
+                        </span>
+                      );
+                    })()}
+                </div>
               </div>
 
               {/* 2. Project Name + Fiscal Year / Code / Target Count */}
@@ -1504,24 +1622,52 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      onClick={handleAiFillMissingFieldsOnly}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.01] whitespace-nowrap cursor-pointer"
+                      title="ให้ AI ตรวจสอบและเติมเฉพาะช่องที่ยังว่างหรือยังไม่สมบูรณ์ (เช่น กิจกรรม, วัตถุประสงค์, กลุ่มเป้าหมาย) โดยไม่ลบข้อมูลและตารางงบเดิมของคุณ"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>✨ เติมเฉพาะช่องที่ยังว่าง (คงงบเดิมไว้)</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleRunFullAiDraft(false)}
                       disabled={isAiGenerating}
-                      className="px-4 py-2 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-indigo-600 hover:from-violet-700 hover:via-fuchsia-700 hover:to-indigo-700 disabled:opacity-60 text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-md transition-all hover:scale-[1.01] whitespace-nowrap"
+                      className="px-4 py-2 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-indigo-600 hover:from-violet-700 hover:via-fuchsia-700 hover:to-indigo-700 disabled:opacity-60 text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-md transition-all hover:scale-[1.01] whitespace-nowrap cursor-pointer"
                     >
                       <Sparkles className="w-4 h-4" />
                       {isAiGenerating
                         ? 'กำลังวิเคราะห์และร่างโครงการ...'
-                        : '✨ ให้ AI ร่างครบทั้งโครงการ (กิจกรรม + วัตถุประสงค์ 2-3 ข้อ + เป้าหมาย + KPI + งบประมาณ)'}
+                        : '✨ ร่างใหม่ครบทั้งโครงการ + คำนวณงบ'}
                     </button>
                     <button
                       type="button"
                       onClick={handleAddActivityGroup}
-                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap"
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" /> เพิ่มกิจกรรมที่ {activityGroups.length + 1}
                     </button>
                   </div>
                 </div>
+
+                {/* Live AI Quality & Completeness Checker Bar inside Step 2 */}
+                {aiAuditReport.warnings.length > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-50/95 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 text-xs flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-amber-900 dark:text-amber-200">
+                      <span className="font-extrabold">
+                        🔍 AI ตรวจพบช่องที่ยังว่างหรือควรปรับปรุง ({aiAuditReport.warnings.length} จุด):
+                      </span>{' '}
+                      <span>{aiAuditReport.warnings.slice(0, 2).join(' • ')}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAiFillMissingFieldsOnly}
+                      className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-2xs cursor-pointer whitespace-nowrap"
+                    >
+                      ✨ ให้ AI เติมช่องที่ขาดให้ครบทันที
+                    </button>
+                  </div>
+                )}
 
                 {aiValidationError && (
                   <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-300 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300 whitespace-pre-line">
@@ -2071,6 +2217,55 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
           {/* STEP 3: REVIEW SUMMARY & SIGNERS */}
           {activeStep === 3 && (
             <div className="space-y-5 animate-in fade-in-50 duration-150">
+              {/* AI Quality & Compliance Verification Card on Step 3 */}
+              <div
+                className={`rounded-2xl p-4 border-2 space-y-2.5 text-xs ${
+                  aiAuditReport.isReady
+                    ? 'bg-emerald-50/90 dark:bg-emerald-950/30 border-emerald-400 dark:border-emerald-700'
+                    : 'bg-amber-50/90 dark:bg-amber-950/30 border-amber-400 dark:border-amber-700'
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles
+                      className={`w-4 h-4 ${
+                        aiAuditReport.isReady ? 'text-emerald-600' : 'text-amber-600'
+                      }`}
+                    />
+                    <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                      ผลการตรวจสอบความสมบูรณ์ของโครงการโดย AI (ความพร้อม {aiAuditReport.score}%)
+                    </span>
+                  </div>
+                  {!aiAuditReport.isReady && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleAiFillMissingFieldsOnly();
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-xs cursor-pointer flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>✨ ให้ AI เติมช่องที่ขาดให้สมบูรณ์ทันที</span>
+                    </button>
+                  )}
+                </div>
+
+                {aiAuditReport.warnings.length > 0 ? (
+                  <div className="space-y-1 text-amber-900 dark:text-amber-200">
+                    {aiAuditReport.warnings.map((w, i) => (
+                      <div key={i} className="flex items-center gap-1.5 font-medium">
+                        <span>⚠️</span>
+                        <span>{w}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-emerald-800 dark:text-emerald-300 font-semibold">
+                    ✅ ข้อมูลครบถ้วนสมบูรณ์ทั้ง 13 ช่อง (ชื่อโครงการ, กิจกรรม, วัตถุประสงค์, กลุ่มเป้าหมายพร้อมจำนวนคน, ตัวชี้วัด KPI, พื้นที่, ระยะเวลา และตารางงบประมาณตามเกณฑ์ สปสช.)
+                  </div>
+                )}
+              </div>
+
               {/* Project Overview & Budget Summary Card before final Save */}
               <div className="bg-gradient-to-br from-emerald-50 via-teal-50/70 to-cyan-50/50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 border-2 border-emerald-300 dark:border-emerald-800/80 rounded-2xl p-5 space-y-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-emerald-200/80 dark:border-emerald-800/60 pb-3.5">
