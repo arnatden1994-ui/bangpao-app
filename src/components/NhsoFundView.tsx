@@ -270,7 +270,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   // Enhanced Committee Meeting Resolution Modal
   const [approvalModalProject, setApprovalModalProject] = useState<NhsoProject | null>(null);
   const [approvalDecision, setApprovalDecision] = useState<
-    'approve' | 'approve_reduced' | 'revision' | 'reject' | 'verified'
+    'approve' | 'approve_reduced' | 'revision' | 'reject' | 'verified' | 'pending_reset'
   >('approve');
   const [reducedBudgetAmount, setReducedBudgetAmount] = useState<number>(0);
   const [meetingRound, setMeetingRound] = useState<string>('ครั้งที่ 1/2570');
@@ -433,10 +433,28 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       }
     }
 
+    const nextTrackingCompleted =
+      field === 'trackingCompleted' ? nextVal : isProjectTrackingCompleted(target);
+    const hasExplicitRecords =
+      Boolean(target.disbursementRecords && target.disbursementRecords.length > 0);
+    const nextDisbursedAmount =
+      field === 'trackingCompleted' && !nextVal && !hasExplicitRecords && target.fiscalYear !== '2569'
+        ? 0
+        : target.disbursedAmount;
+    const nextStatus =
+      field === 'trackingCompleted' && !nextVal && target.status === 'completed'
+        ? target.committeeDecision === 'approve'
+          ? 'approved'
+          : 'submitted'
+        : target.status;
+
     const updated: NhsoProject = {
       ...target,
-      trackingCompleted:
-        field === 'trackingCompleted' ? nextVal : isProjectTrackingCompleted(target),
+      status: nextStatus,
+      disbursedAmount: nextDisbursedAmount,
+      implementationStatus:
+        field === 'trackingCompleted' && !nextVal ? 'not_started' : target.implementationStatus,
+      trackingCompleted: nextTrackingCompleted,
       trackingExtended:
         field === 'trackingExtended' ? nextVal : isProjectTrackingExtended(target),
       trackingRefunded:
@@ -862,17 +880,48 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
         ? 'approve_reduced'
         : p.status === 'rejected'
         ? 'reject'
+        : p.status === 'under_review' && p.committeeDecision === 'revision'
+        ? 'revision'
         : 'approve'
     );
     setReducedBudgetAmount(p.budgetApproved || p.budgetRequested);
-    setMeetingRound(p.meetingRound || 'ครั้งที่ 1/2570');
+    setMeetingRound(p.meetingRound || `ครั้งที่ 1/${p.fiscalYear || '2570'}`);
     setMeetingDate(p.meetingDate || new Date().toISOString().split('T')[0]);
     setCommitteeComment(p.committeeComment || 'เห็นชอบอนุมัติตามที่เสนอ');
     setOfficerNotes(p.officerNotes || 'เจ้าหน้าที่กองสาธารณสุขฯ ตรวจสอบเอกสารความถูกต้องเรียบร้อยแล้ว');
   };
 
+  // ย้อนกลับสถานะโครงการเป็น "รอมติ กก. / ก่อนบันทึกการเบิกจ่าย" (0 บาท) ได้ทันทีในคลิกเดียว
+  const handleQuickRevertToPending = (targetProj: NhsoProject) => {
+    const reverted: NhsoProject = {
+      ...targetProj,
+      status: 'submitted',
+      committeeDecision: 'pending',
+      budgetApproved: 0,
+      disbursedAmount: 0,
+      disbursementRecords: [],
+      implementationStatus: 'not_started',
+      trackingCompleted: false,
+      trackingExtended: false,
+      trackingRefunded: false,
+      refundAmount: 0,
+      committeeComment: 'รอคณะกรรมการบริหารกองทุนฯ พิจารณาอนุมัติ',
+      updatedAt: new Date().toISOString(),
+    };
+    handleSaveProject(reverted);
+    setApprovalModalProject(null);
+    showToast(
+      `ย้อนกลับสถานะโครงการ "${targetProj.projectName}" เป็น "รอมติ กก. (ยังไม่เบิกจ่าย 0 บาท)" เรียบร้อยแล้ว`
+    );
+  };
+
   const handleSaveApproval = () => {
     if (!approvalModalProject) return;
+
+    if (approvalDecision === 'pending_reset') {
+      handleQuickRevertToPending(approvalModalProject);
+      return;
+    }
 
     let finalBudget = 0;
     let newStatus = approvalModalProject.status;
@@ -900,9 +949,28 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       decision = 'pending';
     }
 
+    const hasExplicitRecords = Boolean(
+      approvalModalProject.disbursementRecords &&
+        approvalModalProject.disbursementRecords.length > 0
+    );
+    const safeDisbursedAmount =
+      decision !== 'approve'
+        ? 0
+        : hasExplicitRecords
+        ? approvalModalProject.disbursementRecords!.reduce(
+            (s, r) => s + (Number(r.amount) || 0),
+            0
+          )
+        : approvalModalProject.trackingCompleted
+        ? finalBudget
+        : approvalModalProject.fiscalYear === '2569'
+        ? approvalModalProject.disbursedAmount || 0
+        : 0;
+
     const updated: NhsoProject = {
       ...approvalModalProject,
       budgetApproved: finalBudget,
+      disbursedAmount: safeDisbursedAmount,
       status: newStatus as any,
       committeeDecision: decision,
       committeeComment: committeeComment.trim(),
@@ -911,15 +979,18 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
       verifiedByOfficer: officerRecorder.trim(),
       verifiedDate: new Date().toISOString(),
       officerNotes: officerNotes.trim(),
-      approvedDate: decision === 'approve' ? new Date().toISOString() : approvalModalProject.approvedDate,
+      approvedDate:
+        decision === 'approve' ? new Date().toISOString() : approvalModalProject.approvedDate,
       updatedAt: new Date().toISOString(),
     };
 
     handleSaveProject(updated);
-    if (externalApprove) {
-      externalApprove(updated.id, finalBudget);
-    }
     setApprovalModalProject(null);
+    showToast(
+      decision === 'approve'
+        ? `บันทึกมติอนุมัติโครงการ "${updated.projectName}" (วงเงิน ${finalBudget.toLocaleString()} บาท) เรียบร้อยแล้ว`
+        : `อัปเดตสถานะมติกรรมการของโครงการ "${updated.projectName}" เรียบร้อยแล้ว`
+    );
   };
 
   // Reusable KPI Cards Grid
@@ -3252,55 +3323,74 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
 
                         {/* Committee Resolution / Status */}
                         <td className="py-3 px-3 text-center">
-                          {p.status === 'completed' && (
-                            <button
-                              onClick={() => openApprovalModal(p)}
-                              className="px-2.5 py-1 bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 hover:bg-purple-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            >
-                              <CheckCircle2 className="w-3 h-3 text-purple-600" />
-                              <span>อนุมัติ & เสร็จสิ้น</span>
-                            </button>
-                          )}
-                          {p.status === 'approved' && (
-                            <button
-                              onClick={() => openApprovalModal(p)}
-                              className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            >
-                              <Check className="w-3 h-3" /> อนุมัติเต็ม
-                            </button>
-                          )}
-                          {p.status === 'approved_reduced' && (
-                            <button
-                              onClick={() => openApprovalModal(p)}
-                              className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            >
-                              <Check className="w-3 h-3" /> อนุมัติปรับลด
-                            </button>
-                          )}
-                          {p.status === 'rejected' && (
-                            <button
-                              onClick={() => openApprovalModal(p)}
-                              className="px-2.5 py-1 bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 hover:bg-red-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            >
-                              <X className="w-3 h-3" /> ไม่อนุมัติ
-                            </button>
-                          )}
-                          {(p.status === 'submitted' || p.status === 'under_review') && (
-                            <button
-                              onClick={() => openApprovalModal(p)}
-                              className="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors"
-                            >
-                              <Clock className="w-3 h-3" /> บันทึกมติ กก.
-                            </button>
-                          )}
-                          {p.status === 'draft' && (
-                            <button
-                              onClick={() => openApprovalModal(p)}
-                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-medium text-[10px]"
-                            >
-                              ร่างโครงการ
-                            </button>
-                          )}
+                          <div className="flex flex-col items-center gap-1">
+                            {p.status === 'completed' && (
+                              <button
+                                onClick={() => openApprovalModal(p)}
+                                className="px-2.5 py-1 bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 hover:bg-purple-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                                <span>อนุมัติ & เสร็จสิ้น</span>
+                              </button>
+                            )}
+                            {p.status === 'approved' && (
+                              <button
+                                onClick={() => openApprovalModal(p)}
+                                className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Check className="w-3 h-3" /> อนุมัติเต็ม
+                              </button>
+                            )}
+                            {p.status === 'approved_reduced' && (
+                              <button
+                                onClick={() => openApprovalModal(p)}
+                                className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Check className="w-3 h-3" /> อนุมัติปรับลด
+                              </button>
+                            )}
+                            {p.status === 'rejected' && (
+                              <button
+                                onClick={() => openApprovalModal(p)}
+                                className="px-2.5 py-1 bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 hover:bg-red-200 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <X className="w-3 h-3" /> ไม่อนุมัติ
+                              </button>
+                            )}
+                            {(p.status === 'submitted' || p.status === 'under_review') && (
+                              <button
+                                onClick={() => openApprovalModal(p)}
+                                className="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 rounded-full font-bold text-[10px] inline-flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Clock className="w-3 h-3" /> บันทึกมติ กก.
+                              </button>
+                            )}
+                            {p.status === 'draft' && (
+                              <button
+                                onClick={() => openApprovalModal(p)}
+                                className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-medium text-[10px] cursor-pointer"
+                              >
+                                ร่างโครงการ
+                              </button>
+                            )}
+
+                            {/* ปุ่มลัดย้อนกลับสถานะเดิม (ก่อนอนุมัติ / ก่อนบันทึกเบิกจ่าย) */}
+                            {(p.status === 'approved' ||
+                              p.status === 'approved_reduced' ||
+                              p.status === 'completed' ||
+                              p.status === 'rejected' ||
+                              disbursed > 0) && (
+                              <button
+                                type="button"
+                                onClick={() => handleQuickRevertToPending(p)}
+                                className="px-2 py-0.5 rounded text-[9.5px] font-semibold text-slate-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                title="คลิกเพื่อย้อนกลับเป็นสถานะ รอมติ กก. (ก่อนขึ้นบันทึกการเบิกจ่าย)"
+                              >
+                                <RotateCcw className="w-2.5 h-2.5" />
+                                <span>ย้อนกลับรอมติ</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
 
                         {/* Action Menu */}
@@ -3414,12 +3504,15 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   projectName: approvalModalProject.projectName,
                   categoryNumber: approvalModalProject.categoryNumber,
                   proposingOrg: approvalModalProject.proposingOrg,
-                  activityGroups: approvalModalProject.activityGroups,
+                  responsiblePerson: approvalModalProject.responsiblePerson,
+                  activityGroups: approvalModalProject.activityGroups || [],
+                  settings: fundSettings,
                 });
+                const warnList = audit.warnings || [];
                 return (
                   <div
                     className={`p-2.5 rounded-xl border text-[11px] space-y-1 ${
-                      audit.isComplete
+                      audit.isReady
                         ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200'
                         : 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200'
                     }`}
@@ -3430,12 +3523,12 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                         AI ช่วยตรวจความถูกต้องก่อนลงมติ: ความสมบูรณ์ {audit.score}%
                       </span>
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/70">
-                        {audit.isComplete ? 'ผ่านเกณฑ์ตาราง 13 ช่อง' : `พบข้อสังเกต ${audit.missingFields.length + audit.warnings.length} จุด`}
+                        {audit.isReady ? 'ผ่านเกณฑ์ตาราง 13 ช่อง' : `พบข้อสังเกต ${warnList.length} จุด`}
                       </span>
                     </div>
-                    {!audit.isComplete && (
+                    {!audit.isReady && warnList.length > 0 && (
                       <div className="text-[10px] leading-relaxed opacity-90">
-                        {[...audit.missingFields, ...audit.warnings].slice(0, 2).join(' • ')}
+                        {warnList.slice(0, 2).join(' • ')}
                       </div>
                     )}
                   </div>
@@ -3474,11 +3567,11 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                 <label className="font-semibold text-slate-800 dark:text-slate-200 block">
                   มติที่ประชุมคณะกรรมการฯ:
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   <button
                     type="button"
                     onClick={() => setApprovalDecision('approve')}
-                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center text-xs cursor-pointer ${
                       approvalDecision === 'approve'
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -3492,7 +3585,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                       setApprovalDecision('approve_reduced');
                       setReducedBudgetAmount(approvalModalProject.budgetRequested);
                     }}
-                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center text-xs cursor-pointer ${
                       approvalDecision === 'approve_reduced'
                         ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -3503,7 +3596,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setApprovalDecision('revision')}
-                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center text-xs cursor-pointer ${
                       approvalDecision === 'revision'
                         ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -3514,7 +3607,7 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setApprovalDecision('reject')}
-                    className={`py-2 px-2.5 rounded-xl font-bold border transition-all text-center text-xs ${
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center text-xs cursor-pointer ${
                       approvalDecision === 'reject'
                         ? 'bg-red-600 text-white border-red-600 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -3522,8 +3615,28 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
                   >
                     🔴 ไม่อนุมัติ
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setApprovalDecision('pending_reset')}
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center text-xs cursor-pointer ${
+                      approvalDecision === 'pending_reset'
+                        ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                    }`}
+                    title="ย้อนกลับเป็นสถานะ รอมติ กก. (ก่อนอนุมัติ & ก่อนขึ้นบันทึกการเบิกจ่าย)"
+                  >
+                    🔄 รอมติเดิม
+                  </button>
                 </div>
               </div>
+
+              {approvalDecision === 'pending_reset' && (
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2">
+                  <span>
+                    🔄 โครงการนี้จะถูกย้อนกลับเป็นสถานะ <strong>"บันทึกมติ กก. (รอมติ)"</strong> และล้างยอดเบิกจ่ายเป็น <strong>0 บาท (บันทึกเบิก)</strong>
+                  </span>
+                </div>
+              )}
 
               {/* Reduced Amount input */}
               {approvalDecision === 'approve_reduced' && (
@@ -3606,22 +3719,28 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500 truncate max-w-[280px]">
-                ผู้บันทึก: <strong className="text-slate-700 dark:text-slate-300">{officerRecorder || 'ยังไม่ระบุ'}</strong>
-              </span>
-              <div className="flex items-center gap-2">
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => handleQuickRevertToPending(approvalModalProject)}
+                className="px-3 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="ย้อนกลับเป็นสถานะเริ่มต้น (รอมติ กก. & ล้างยอดเบิกเป็น 0 บาท)"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                ย้อนกลับเป็นรอมติ กก. (เบิก 0 บ.)
+              </button>
+              <div className="flex items-center gap-2 ml-auto">
                 <button
                   type="button"
                   onClick={() => setApprovalModalProject(null)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                  className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveApproval}
-                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition-colors"
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition-colors cursor-pointer"
                 >
                   บันทึกมติที่ประชุม
                 </button>

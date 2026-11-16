@@ -2005,14 +2005,17 @@ export interface NhsoSmartAuditReport {
  * and provides 1-click Auto-Fill / Fix suggestions.
  */
 export function auditNhsoProjectQuality(params: {
-  projectName: string;
-  categoryNumber: number;
-  proposingOrg: string;
-  responsiblePerson: string;
-  activityGroups: NhsoActivityGroup[];
-  settings: NhsoFundSettings;
+  projectName?: string;
+  categoryNumber?: number;
+  proposingOrg?: string;
+  responsiblePerson?: string;
+  activityGroups?: NhsoActivityGroup[];
+  settings?: NhsoFundSettings;
 }): NhsoSmartAuditReport {
-  const { projectName, proposingOrg, activityGroups, settings } = params;
+  const projectName = params.projectName || '';
+  const proposingOrg = params.proposingOrg || '';
+  const activityGroups = params.activityGroups || [];
+  const settings = params.settings;
   const strengths: string[] = [];
   const warnings: string[] = [];
   const autoFixSuggestions: Array<{ field: string; label: string; groupIndex: number }> = [];
@@ -2117,9 +2120,9 @@ export function auditNhsoProjectQuality(params: {
         groupIndex: idx,
       });
     } else {
-      const maxSpeaker = settings.standardRates?.speakerHourly || 600;
-      const maxLunch = settings.standardRates?.lunchPerMeal || 75;
-      const maxSnack = settings.standardRates?.snackPerMeal || 25;
+      const maxSpeaker = settings?.standardRates?.speakerHourly || 600;
+      const maxLunch = settings?.standardRates?.lunchPerMeal || 75;
+      const maxSnack = settings?.standardRates?.snackPerMeal || 25;
       validLines.forEach((l) => {
         const n = (l.name || '').trim();
         if (n.includes('วิทยากร') && l.unit?.includes('ชั่วโมง') && l.unitPrice > maxSpeaker && l.unitPrice !== 900) {

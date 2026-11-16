@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Receipt,
   FileCheck2,
+  RotateCcw,
 } from 'lucide-react';
 import {
   NhsoProject,
@@ -114,7 +115,9 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
       ? 0
       : trackingCompleted
       ? Math.max(0, approvedBudget - effectiveRefund)
-      : project.disbursedAmount || 0;
+      : project.fiscalYear === '2569'
+      ? project.disbursedAmount || 0
+      : 0;
   const remainingBudget = Math.max(0, approvedBudget - totalDisbursed - effectiveRefund);
   const percentDisbursed =
     approvedBudget > 0 ? Math.min(100, Math.round((totalDisbursed / approvedBudget) * 100)) : 0;
@@ -153,11 +156,59 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
     setRecords(records.filter((r) => r.id !== id));
   };
 
-  const handleSaveAll = () => {
-    const finalRefundAmount = trackingRefunded ? Math.max(0, Number(refundAmount) || 0) : 0;
+  // ล้างเฉพาะยอดเบิกจ่ายให้กลับเป็น 0 บาท (คงสถานะมติเดิมไว้)
+  const handleClearDisbursementOnly = () => {
+    setRecords([]);
+    setTrackingCompleted(false);
+    setImplStatus('not_started');
     const updatedProject: NhsoProject = {
       ...project,
-      budgetApproved: project.budgetApproved || project.budgetRequested,
+      disbursedAmount: 0,
+      disbursementRecords: [],
+      implementationStatus: 'not_started',
+      trackingCompleted: false,
+      status: project.status === 'completed' ? 'approved' : project.status,
+      updatedAt: new Date().toISOString(),
+    };
+    onSave(updatedProject);
+    onClose();
+  };
+
+  // ย้อนกลับเป็นสถานะเริ่มต้นก่อนอนุมัติ & ก่อนขึ้นบันทึกการเบิกจ่าย (รอมติ กก. • เบิก 0 บ.)
+  const handleRevertToPreApprovalAndZeroDisbursement = () => {
+    setRecords([]);
+    setTrackingCompleted(false);
+    setTrackingExtended(false);
+    setTrackingRefunded(false);
+    setRefundAmount(0);
+    setImplStatus('not_started');
+    const updatedProject: NhsoProject = {
+      ...project,
+      status: 'submitted',
+      committeeDecision: 'pending',
+      budgetApproved: 0,
+      disbursedAmount: 0,
+      disbursementRecords: [],
+      implementationStatus: 'not_started',
+      trackingCompleted: false,
+      trackingExtended: false,
+      trackingRefunded: false,
+      refundAmount: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    onSave(updatedProject);
+    onClose();
+  };
+
+  const handleSaveAll = () => {
+    const finalRefundAmount = trackingRefunded ? Math.max(0, Number(refundAmount) || 0) : 0;
+    const hasDisbursedOrCompleted =
+      totalDisbursed > 0 || trackingCompleted || implStatus === 'completed_reported';
+    const updatedProject: NhsoProject = {
+      ...project,
+      budgetApproved: hasDisbursedOrCompleted
+        ? project.budgetApproved || project.budgetRequested
+        : project.budgetApproved || 0,
       disbursedAmount: totalDisbursed,
       disbursementRecords: records,
       implementationStatus: implStatus,
@@ -167,15 +218,20 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
       trackingRefunded,
       refundAmount: finalRefundAmount,
       refundNote: refundNote.trim(),
-      // Automatically update main status to completed if reported, or ensure approved if disbursed
       status:
         implStatus === 'completed_reported' || trackingCompleted
           ? 'completed'
-          : project.status === 'submitted' || project.status === 'under_review' || project.status === 'draft'
+          : totalDisbursed > 0 &&
+            (project.status === 'submitted' ||
+              project.status === 'under_review' ||
+              project.status === 'draft')
+          ? 'approved'
+          : project.status === 'completed' && !trackingCompleted
           ? 'approved'
           : project.status,
       committeeDecision:
-        project.committeeDecision === 'pending' || !project.committeeDecision
+        hasDisbursedOrCompleted &&
+        (project.committeeDecision === 'pending' || !project.committeeDecision)
           ? 'approve'
           : project.committeeDecision,
       updatedAt: new Date().toISOString(),
@@ -365,12 +421,27 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
 
           {/* 3. Disbursement History Table */}
           <div className="space-y-2">
-            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center justify-between">
-              <span>ประวัติการเบิกจ่ายเงิน ({records.length} รายการ)</span>
-              <span className="text-xs text-slate-500 font-normal">
-                เบิกสะสม: <strong className="text-emerald-600">{totalDisbursed.toLocaleString()}</strong> บาท
-              </span>
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                ประวัติการเบิกจ่ายเงิน ({records.length} รายการ)
+              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-500 font-normal">
+                  เบิกสะสม: <strong className="text-emerald-600">{totalDisbursed.toLocaleString()}</strong> บาท
+                </span>
+                {(totalDisbursed > 0 || records.length > 0 || trackingCompleted) && (
+                  <button
+                    type="button"
+                    onClick={handleClearDisbursementOnly}
+                    className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    title="ล้างยอดเบิกจ่ายสะสมเป็น 0 บาท (กลับเป็นปุ่ม บันทึกเบิก)"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    ล้างยอดเบิกเป็น 0 บ.
+                  </button>
+                )}
+              </div>
+            </div>
 
             {records.length === 0 ? (
               <div className="p-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 text-xs">
@@ -597,7 +668,7 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <span>บันทึกโดย:</span>
             <input
               type="text"
@@ -606,6 +677,17 @@ export const NhsoDisbursementModal: React.FC<NhsoDisbursementModalProps> = ({
               className="px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               title="คลิกเพื่อพิมพ์แก้ไขชื่อ-นามสกุล / ตำแหน่งผู้บันทึกข้อมูล"
             />
+            {(project.status !== 'submitted' || totalDisbursed > 0 || trackingCompleted) && (
+              <button
+                type="button"
+                onClick={handleRevertToPreApprovalAndZeroDisbursement}
+                className="px-3 py-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="ย้อนกลับเป็นสถานะเริ่มต้น (รอมติ กก. & ล้างยอดเบิกเป็น 0 บาท)"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                ย้อนกลับสถานะเดิม (รอมติ กก. / ยังไม่เบิก)
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2.5">
             <button

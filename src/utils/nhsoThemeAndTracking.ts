@@ -213,13 +213,20 @@ export function getProjectCalculatedRequestedBudget(p: NhsoProject): number {
  * ตรวจสอบว่าโครงการได้รับการอนุมัติหรือมีผลผูกพันงบประมาณแล้วหรือไม่
  */
 export function isProjectApprovedStatus(p: NhsoProject): boolean {
-  if (p.status === 'rejected' || p.committeeDecision === 'reject') return false;
+  if (
+    p.status === 'rejected' ||
+    p.committeeDecision === 'reject' ||
+    p.status === 'submitted' ||
+    p.status === 'under_review' ||
+    p.status === 'draft'
+  ) {
+    return false;
+  }
   return (
     p.status === 'approved' ||
     p.status === 'approved_reduced' ||
     p.status === 'completed' ||
     p.committeeDecision === 'approve' ||
-    (p.disbursedAmount || 0) > 0 ||
     isProjectTrackingCompleted(p)
   );
 }
@@ -247,6 +254,10 @@ export function getProjectEffectiveDisbursedAmount(p: NhsoProject): number {
   const approved = getProjectEffectiveApprovedBudget(p) || getProjectCalculatedRequestedBudget(p);
   const refund = isProjectTrackingRefunded(p) ? getProjectRefundAmount(p) : 0;
   if (isProjectTrackingRefunded(p) && refund >= approved && !isProjectTrackingCompleted(p)) {
+    return 0;
+  }
+  // สำหรับโครงการปี 2570 เป็นต้นไป หากยังไม่มีประวัติการเบิกจ่ายรายงวด และยังไม่ได้ติ๊ก "ดำเนินการแล้ว" ยอดเบิกต้องเป็น 0 เสมอ
+  if (p.fiscalYear !== '2569' && !isProjectTrackingCompleted(p)) {
     return 0;
   }
   if (typeof p.disbursedAmount === 'number' && p.disbursedAmount > 0) {
