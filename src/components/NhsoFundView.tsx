@@ -70,6 +70,11 @@ import {
   getCategoryColorTheme,
   getOrgColorTheme,
   getProjectRefundAmount,
+  getProjectCalculatedRequestedBudget,
+  isProjectApprovedStatus,
+  getProjectEffectiveApprovedBudget,
+  getProjectEffectiveDisbursedAmount,
+  getProjectNetUsedBudget,
   isProjectTrackingCompleted,
   isProjectTrackingExtended,
   isProjectTrackingRefunded,
@@ -116,7 +121,16 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
   const projects = useMemo(() => {
     const raw =
       externalProjects && externalProjects.length > 0 ? externalProjects : internalProjects;
-    return mergeNhsoFundProjectsWithMaster(raw);
+    const merged = mergeNhsoFundProjectsWithMaster(raw);
+    return merged.map((p) => {
+      const calcReq = getProjectCalculatedRequestedBudget(p);
+      return {
+        ...p,
+        budgetRequested: calcReq,
+        budgetApproved: getProjectEffectiveApprovedBudget({ ...p, budgetRequested: calcReq }),
+        disbursedAmount: getProjectEffectiveDisbursedAmount({ ...p, budgetRequested: calcReq }),
+      };
+    });
   }, [externalProjects, internalProjects]);
 
   // Filter & Search states (Always start at the current fiscal year cycle 2570 when entering the page)
@@ -217,6 +231,13 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     setInternalProjects(nextList);
     saveStoredNhsoFundProjects(nextList);
     saveNhsoFundProjectToFirestore(projectToSave);
+
+    if (
+      projectToSave.trackingRefunded !== undefined ||
+      typeof projectToSave.refundAmount === 'number'
+    ) {
+      syncRefundsIntoSettings(nextList, false);
+    }
 
     if (externalUpdate) externalUpdate(projectToSave);
   };
@@ -607,35 +628,21 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
     0;
   const totalBudgetRequested = yearProjects.reduce((acc, p) => acc + (p.budgetRequested || 0), 0);
   const totalBudgetApproved = yearProjects.reduce(
-    (acc, p) =>
-      acc +
-      (p.status === 'approved' ||
-      p.status === 'approved_reduced' ||
-      p.status === 'completed' ||
-      p.committeeDecision === 'approve' ||
-      (p.disbursedAmount || 0) > 0
-        ? (p.budgetApproved && p.budgetApproved > 0 ? p.budgetApproved : p.budgetRequested)
-        : 0),
+    (acc, p) => acc + getProjectEffectiveApprovedBudget(p),
     0
   );
-  const totalDisbursedActual = yearProjects.reduce((acc, p) => acc + (p.disbursedAmount || 0), 0);
-  const remainingBudget = totalFundBudget > 0 ? totalFundBudget - totalBudgetApproved : 0;
-  const approvedCount = yearProjects.filter(
-    (p) =>
-      p.status === 'approved' ||
-      p.status === 'approved_reduced' ||
-      p.status === 'completed' ||
-      p.committeeDecision === 'approve' ||
-      (p.disbursedAmount || 0) > 0
-  ).length;
-  const pendingCount = yearProjects.filter(
-    (p) =>
-      p.status !== 'approved' &&
-      p.status !== 'approved_reduced' &&
-      p.status !== 'completed' &&
-      p.committeeDecision !== 'approve' &&
-      !(p.disbursedAmount && p.disbursedAmount > 0)
-  ).length;
+  const totalNetBudgetUsed = yearProjects.reduce(
+    (acc, p) => acc + getProjectNetUsedBudget(p),
+    0
+  );
+  const totalDisbursedActual = yearProjects.reduce(
+    (acc, p) => acc + getProjectEffectiveDisbursedAmount(p),
+    0
+  );
+  // งบประมาณคงเหลือในกรอบ = กรอบงบกองทุน - ยอดตัดงบสุทธิ (งบอนุมัติหักเงินที่โครงการส่งคืนเข้ากองทุน)
+  const remainingBudget = totalFundBudget > 0 ? totalFundBudget - totalNetBudgetUsed : 0;
+  const approvedCount = yearProjects.filter((p) => isProjectApprovedStatus(p)).length;
+  const pendingCount = yearProjects.filter((p) => !isProjectApprovedStatus(p)).length;
 
   // Distinct Orgs for filter
   const distinctOrgs = useMemo(() => {
@@ -985,7 +992,9 @@ export const NhsoFundView: React.FC<NhsoFundViewProps> = ({
           {totalFundBudget === 0
             ? 'รอตั้งงบประมาณ'
             : remainingBudget >= 0
-            ? 'คงเหลือในกรอบ'
+            ? totalYearRefundAmount > 0
+              ? `ตัดงบสุทธิ ${totalNetBudgetUsed.toLocaleString()} บ. (รวมคืนงบ)`
+              : 'คงเหลือในกรอบ'
             : '⚠️ เกินกรอบงบประมาณ'}
         </p>
       </div>

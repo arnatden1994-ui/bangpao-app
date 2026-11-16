@@ -18,6 +18,7 @@ import {
 import {
   getCategoryColorTheme,
   getOrgColorTheme,
+  getProjectCalculatedRequestedBudget,
   isProjectTrackingCompleted,
   isProjectTrackingExtended,
   isProjectTrackingRefunded,
@@ -115,7 +116,13 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
     window.print();
   };
 
-  const currentProject = project || allProjects[0];
+  const rawCurrentProject = project || allProjects[0];
+  const currentProject = rawCurrentProject
+    ? {
+        ...rawCurrentProject,
+        budgetRequested: getProjectCalculatedRequestedBudget(rawCurrentProject),
+      }
+    : undefined;
   const targetYear =
     targetFiscalYear && targetFiscalYear !== 'all'
       ? targetFiscalYear
@@ -123,6 +130,10 @@ export const PrintNhsoProjectModal: React.FC<PrintNhsoProjectModalProps> = ({
 
   const yearMatchedProjects = allProjects
     .filter((p) => (targetFiscalYear === 'all' ? true : p.fiscalYear === targetYear))
+    .map((p) => ({
+      ...p,
+      budgetRequested: getProjectCalculatedRequestedBudget(p),
+    }))
     .sort((a, b) => (a.orderNumber || 999) - (b.orderNumber || 999));
 
   const summaryProjects =

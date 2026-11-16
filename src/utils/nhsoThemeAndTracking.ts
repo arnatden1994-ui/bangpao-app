@@ -189,6 +189,88 @@ export function getOrgColorTheme(orgName?: string): OrgColorTheme {
   };
 }
 
+/**
+ * คำนวณยอดเงินขอรับการสนับสนุนของโครงการแบบไดนามิก
+ * หากโครงการมีรายการค่าใช้จ่ายใน activityGroups หรือ budgetLines ให้รวมยอดจากรายการจริงเสมอ
+ * เพื่อป้องกันปัญหายอดรวมไม่ตรงกับตาราง 13 ช่อง
+ */
+export function getProjectCalculatedRequestedBudget(p: NhsoProject): number {
+  if (p.activityGroups && p.activityGroups.length > 0) {
+    const lineSum = p.activityGroups.reduce((sum, g) => {
+      const gSum = (g.budgetLines || []).reduce((s, l) => s + (Number(l.total) || 0), 0);
+      return sum + gSum;
+    }, 0);
+    if (lineSum > 0) return lineSum;
+  }
+  if (p.budgetLines && p.budgetLines.length > 0) {
+    const lineSum = p.budgetLines.reduce((s, l) => s + (Number(l.total) || 0), 0);
+    if (lineSum > 0) return lineSum;
+  }
+  return Number(p.budgetRequested) || 0;
+}
+
+/**
+ * ตรวจสอบว่าโครงการได้รับการอนุมัติหรือมีผลผูกพันงบประมาณแล้วหรือไม่
+ */
+export function isProjectApprovedStatus(p: NhsoProject): boolean {
+  if (p.status === 'rejected' || p.committeeDecision === 'reject') return false;
+  return (
+    p.status === 'approved' ||
+    p.status === 'approved_reduced' ||
+    p.status === 'completed' ||
+    p.committeeDecision === 'approve' ||
+    (p.disbursedAmount || 0) > 0 ||
+    isProjectTrackingCompleted(p)
+  );
+}
+
+/**
+ * คืนค่ายอดงบประมาณที่ได้รับอนุมัติของโครงการ (บาท)
+ */
+export function getProjectEffectiveApprovedBudget(p: NhsoProject): number {
+  if (!isProjectApprovedStatus(p)) return 0;
+  const req = getProjectCalculatedRequestedBudget(p);
+  if (p.status === 'approved_reduced' && typeof p.budgetApproved === 'number' && p.budgetApproved > 0) {
+    return p.budgetApproved;
+  }
+  return p.budgetApproved && p.budgetApproved > 0 ? p.budgetApproved : req;
+}
+
+/**
+ * คืนค่ายอดเบิกจ่ายจริงสะสมของโครงการ (บาท)
+ * คำนวณจากประวัติการเบิกจ่าย (disbursementRecords) หรือสถานะดำเนินการแล้วหักเงินคืน
+ */
+export function getProjectEffectiveDisbursedAmount(p: NhsoProject): number {
+  if (p.disbursementRecords && p.disbursementRecords.length > 0) {
+    return p.disbursementRecords.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  }
+  const approved = getProjectEffectiveApprovedBudget(p) || getProjectCalculatedRequestedBudget(p);
+  const refund = isProjectTrackingRefunded(p) ? getProjectRefundAmount(p) : 0;
+  if (isProjectTrackingRefunded(p) && refund >= approved && !isProjectTrackingCompleted(p)) {
+    return 0;
+  }
+  if (typeof p.disbursedAmount === 'number' && p.disbursedAmount > 0) {
+    if (isProjectTrackingRefunded(p) && p.disbursedAmount + refund > approved) {
+      return Math.max(0, approved - refund);
+    }
+    return p.disbursedAmount;
+  }
+  if (isProjectTrackingCompleted(p)) {
+    return Math.max(0, approved - refund);
+  }
+  return 0;
+}
+
+/**
+ * คืนค่ายอดตัดงบประมาณสุทธิของโครงการ (Net Budget Used = งบอนุมัติ - เงินส่งคืนกองทุน)
+ */
+export function getProjectNetUsedBudget(p: NhsoProject): number {
+  const approved = getProjectEffectiveApprovedBudget(p);
+  if (approved <= 0) return 0;
+  const refund = isProjectTrackingRefunded(p) ? getProjectRefundAmount(p) : 0;
+  return Math.max(0, approved - Math.min(approved, refund));
+}
+
 export function isProjectTrackingCompleted(p: NhsoProject): boolean {
   if (typeof p.trackingCompleted === 'boolean') return p.trackingCompleted;
   return p.status === 'completed' || p.implementationStatus === 'completed_reported';

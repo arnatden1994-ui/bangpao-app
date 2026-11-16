@@ -376,51 +376,65 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
     setActivityGroups([...activityGroups, newGroup]);
   };
 
-  // Validate mandatory inputs before running AI or proceeding
-  const validateRequiredProjectInputs = (): string | null => {
+  // Validate Step 1 core inputs before moving to Step 2
+  const validateStep1Inputs = (): string | null => {
     const missing: string[] = [];
     if (!projectName.trim()) {
       missing.push('ชื่อโครงการ (แผนงาน/โครงการ)');
     }
-    const pNum = Number(aiParticipants);
-    if (aiParticipants.trim() === '' || isNaN(pNum) || pNum <= 0) {
-      missing.push('กลุ่มเป้าหมาย (คน) — ต้องมากกว่า 0');
+    if (!effectiveOrg.trim()) {
+      missing.push('หน่วยงานผู้ขอรับการสนับสนุนงบประมาณ');
     }
-    const obsNum = Number(aiObservers);
-    if (aiObservers.trim() === '' || isNaN(obsNum) || obsNum < 0) {
-      missing.push('ผู้สังเกตการณ์/จนท. (คน) — กรอก 0 หากไม่มี');
-    }
-    const hrsNum = Number(aiHours);
-    if (aiHours.trim() === '' || isNaN(hrsNum) || hrsNum < 0) {
-      missing.push('ชั่วโมงวิทยากร (ชม.) — กรอก 0 หากไม่มีวิทยากร');
-    }
-    const snkNum = Number(aiSnackMeals);
-    if (aiSnackMeals.trim() === '' || isNaN(snkNum) || snkNum < 0) {
-      missing.push('อาหารว่าง (มื้อ) — กรอก 0, 1 หรือ 2 มื้อ');
-    }
-
     if (missing.length > 0) {
-      return `กรุณากรอกข้อมูลบังคับให้ครบก่อนให้ AI ช่วยคิด:\n• ${missing.join('\n• ')}`;
+      return `กรุณาระบุข้อมูลหลักในขั้นตอนที่ 1 ให้ครบถ้วน:\n• ${missing.join('\n• ')}`;
     }
     return null;
   };
 
-  // Build AI parameters helper
-  const getAiParams = () => ({
-    projectName: projectName.trim(),
-    proposingOrg: effectiveOrg,
-    participantsCount: Math.max(1, Number(aiParticipants) || 1),
-    observersCount: Math.max(0, Number(aiObservers) || 0),
-    speakersCount: Number(aiHours) > 0 ? Math.max(1, aiSpeakers) : 0,
-    hoursCount: Math.max(0, Number(aiHours) || 0),
-    includeLunch: aiIncludeLunch,
-    snackMealsCount: Math.max(0, Number(aiSnackMeals) || 0),
-    includeVinyl: aiIncludeVinyl,
-    includeMaterials: aiIncludeMaterials,
-    activityCountMode: aiActivityCountMode,
-    fiscalYear: fiscalYear || '2570',
-    settings,
-  });
+  // Validate Step 2 inputs before moving to Step 3
+  const validateStep2Inputs = (): string | null => {
+    const hasAnyActivityText = activityGroups.some(
+      (g) => Boolean(g.activities?.trim()) || Boolean(g.activityName?.trim())
+    );
+    const hasAnyBudgetLine = activityGroups.some((g) =>
+      (g.budgetLines || []).some((l) => Boolean(l.name?.trim()) || (l.total || 0) > 0)
+    );
+    if (!hasAnyActivityText && !hasAnyBudgetLine) {
+      return 'กรุณาระบุรายละเอียดกิจกรรม หรือกดปุ่ม "✨ ให้ AI ร่างครบทั้งโครงการ" ก่อนไปขั้นตอนถัดไป';
+    }
+    return null;
+  };
+
+  // Validate inputs before running AI (only requires Project Name; numbers use sensible defaults if left blank)
+  const validateRequiredProjectInputs = (): string | null => {
+    if (!projectName.trim()) {
+      return 'กรุณาระบุ "ชื่อโครงการ" ในขั้นตอนที่ 1 ก่อนใช้ผู้ช่วย AI';
+    }
+    return null;
+  };
+
+  // Build AI parameters helper (uses smart defaults if training numbers are left blank)
+  const getAiParams = () => {
+    const pNum = Number(aiParticipants);
+    const obsNum = Number(aiObservers);
+    const hrsNum = Number(aiHours);
+    const snkNum = Number(aiSnackMeals);
+    return {
+      projectName: projectName.trim(),
+      proposingOrg: effectiveOrg.trim() || 'กองสาธารณสุขและสิ่งแวดล้อม',
+      participantsCount: !isNaN(pNum) && pNum > 0 ? pNum : 30,
+      observersCount: aiObservers.trim() !== '' && !isNaN(obsNum) && obsNum >= 0 ? obsNum : 6,
+      speakersCount: (aiHours.trim() === '' || Number(aiHours) > 0) ? Math.max(1, aiSpeakers) : 0,
+      hoursCount: aiHours.trim() !== '' && !isNaN(hrsNum) && hrsNum >= 0 ? hrsNum : 5,
+      includeLunch: aiIncludeLunch,
+      snackMealsCount: aiSnackMeals.trim() !== '' && !isNaN(snkNum) && snkNum >= 0 ? snkNum : 2,
+      includeVinyl: aiIncludeVinyl,
+      includeMaterials: aiIncludeMaterials,
+      activityCountMode: aiActivityCountMode,
+      fiscalYear: fiscalYear || '2570',
+      settings,
+    };
+  };
 
   // 1-Click AI Full Project Draft Generator (100% Free)
   const handleRunFullAiDraft = async (goToStep2 = true) => {
@@ -770,53 +784,87 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectName.trim()) {
-      alert('กรุณากรอกชื่อโครงการ');
+    const err1 = validateStep1Inputs();
+    if (err1) {
+      setAiValidationError(err1);
       setActiveStep(1);
       return;
     }
 
     const categoryInfo = NHSO_FUND_CATEGORIES.find((c) => c.number === categoryNumber);
+    const cleanedGroups = activityGroups.map((g) => {
+      const validLines = (g.budgetLines || []).filter(
+        (l) => Boolean(l.name?.trim()) || (l.total || 0) > 0
+      );
+      const sub = validLines.reduce((s, l) => s + (l.total || 0), 0);
+      return {
+        ...g,
+        budgetLines: validLines,
+        subtotal: sub,
+      };
+    });
 
-    // Flatten all budget lines
+    // Flatten all valid budget lines
     const allLines: NhsoFundBudgetLine[] = [];
-    activityGroups.forEach((g) => {
+    cleanedGroups.forEach((g) => {
       (g.budgetLines || []).forEach((l) => allLines.push(l));
     });
 
+    const isAlreadyApproved =
+      initialProject &&
+      (initialProject.status === 'approved' ||
+        initialProject.status === 'approved_reduced' ||
+        initialProject.status === 'completed' ||
+        initialProject.committeeDecision === 'approve');
+
+    const nextOrderNum =
+      initialProject?.orderNumber ||
+      existingProjects
+        .filter((p) => p.fiscalYear === fiscalYear)
+        .reduce((max, p) => Math.max(max, p.orderNumber || 0), 0) + 1;
+
     const projectToSave: NhsoProject = {
+      ...(initialProject || {}),
       id: initialProject?.id || `NHSO-${fiscalYear.slice(-2)}-${Date.now().toString().slice(-4)}`,
       fiscalYear,
+      orderNumber: nextOrderNum,
       projectCode,
       projectName: projectName.trim(),
       categoryNumber,
       categoryName: categoryInfo?.title || `ประเภทที่ ${categoryNumber}`,
       proposingOrg: effectiveOrg.trim() || 'หน่วยงานในตำบลบางเป้า',
-      responsiblePerson: responsiblePerson.trim() || effectiveOrg,
+      responsiblePerson: responsiblePerson.trim() || proposerName.trim() || effectiveOrg,
       phone: phone.trim(),
 
       // Activity Groups
-      activityGroups,
+      activityGroups: cleanedGroups,
 
       // Top-level fallbacks
-      activities: activityGroups.map((g) => g.activities).filter(Boolean).join('\n\n'),
-      objectives: activityGroups.map((g) => g.objectives).filter(Boolean).join('\n\n'),
-      targetGroup: activityGroups.map((g) => g.targetGroup).filter(Boolean).join('\n\n'),
-      targetParticipants: activityGroups.reduce((s, g) => s + (g.targetParticipants || 0), 0),
-      kpi: activityGroups.map((g) => g.kpi).filter(Boolean).join('\n\n'),
-      location: activityGroups.map((g) => g.location).filter(Boolean).join(' / '),
-      duration: activityGroups.map((g) => g.duration).filter(Boolean).join(' / '),
+      activities: cleanedGroups.map((g) => g.activities).filter(Boolean).join('\n\n'),
+      objectives: cleanedGroups.map((g) => g.objectives).filter(Boolean).join('\n\n'),
+      targetGroup: cleanedGroups.map((g) => g.targetGroup).filter(Boolean).join('\n\n'),
+      targetParticipants:
+        cleanedGroups.reduce((s, g) => s + (g.targetParticipants || 0), 0) ||
+        Number(aiParticipants) ||
+        0,
+      kpi: cleanedGroups.map((g) => g.kpi).filter(Boolean).join('\n\n'),
+      location: cleanedGroups.map((g) => g.location).filter(Boolean).join(' / '),
+      duration: cleanedGroups.map((g) => g.duration).filter(Boolean).join(' / '),
 
       budgetLines: allLines,
       budgetRequested: grandTotal,
-      budgetApproved: initialProject?.budgetApproved || grandTotal,
+      budgetApproved: isAlreadyApproved
+        ? initialProject?.status === 'approved_reduced' && initialProject.budgetApproved > 0
+          ? initialProject.budgetApproved
+          : grandTotal
+        : 0,
       status: initialProject?.status || 'submitted',
       committeeDecision: initialProject?.committeeDecision || 'pending',
       committeeComment: initialProject?.committeeComment || '',
 
       signers: {
-        proposerName: proposerName.trim(),
-        proposerTitle: proposerTitle.trim(),
+        proposerName: proposerName.trim() || responsiblePerson.trim(),
+        proposerTitle: proposerTitle.trim() || 'ผู้เสนอโครงการ',
         endorserName: endorserName.trim() || settings.defaultEndorserName,
         endorserTitle: endorserTitle.trim() || settings.defaultEndorserTitle,
         approverName: approverName.trim() || settings.defaultApproverName,
@@ -898,37 +946,48 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
           <button
             type="button"
             onClick={() => setActiveStep(1)}
-            className={`py-3 px-4 font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
+            className={`py-3 px-4 font-semibold flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
               activeStep === 1
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900'
+                : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400'
             }`}
           >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-700 text-xs font-bold">
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                activeStep === 1
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+              }`}
+            >
               1
             </span>
-            <span>ข้อมูลทั่วไป & ประเภท</span>
+            <span>ข้อมูลทั่วไป & หน่วยงาน</span>
           </button>
 
           <button
             type="button"
             onClick={() => {
-              const errMsg = validateRequiredProjectInputs();
+              const errMsg = validateStep1Inputs();
               if (errMsg) {
                 setAiValidationError(errMsg);
-                alert(errMsg);
                 return;
               }
               setAiValidationError(null);
               setActiveStep(2);
             }}
-            className={`py-3 px-4 font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
+            className={`py-3 px-4 font-semibold flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
               activeStep === 2
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900'
+                : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400'
             }`}
           >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-700 text-xs font-bold">
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                activeStep === 2
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+              }`}
+            >
               2
             </span>
             <span>
@@ -938,83 +997,85 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
 
           <button
             type="button"
-            onClick={() => setActiveStep(3)}
-            className={`py-3 px-4 font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
+            onClick={() => {
+              const err1 = validateStep1Inputs();
+              if (err1) {
+                setAiValidationError(err1);
+                setActiveStep(1);
+                return;
+              }
+              const err2 = validateStep2Inputs();
+              if (err2) {
+                setAiValidationError(err2);
+                setActiveStep(2);
+                return;
+              }
+              setAiValidationError(null);
+              setActiveStep(3);
+            }}
+            className={`py-3 px-4 font-semibold flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
               activeStep === 3
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900'
+                : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400'
             }`}
           >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-700 text-xs font-bold">
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                activeStep === 3
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+              }`}
+            >
               3
             </span>
-            <span>ผู้ลงนาม 3 ระดับ</span>
+            <span>ตรวจสอบสรุป & ผู้ลงนาม</span>
           </button>
         </div>
 
         {/* Modal Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          {/* STEP 1: GENERAL INFO */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          {/* STEP 1: GENERAL INFO (SIMPLIFIED & CLEAN) */}
           {activeStep === 1 && (
-            <div className="space-y-5 animate-in fade-in-50 duration-150">
-              {/* Zero-Storage External Project File Upload & AI Analyzer Box */}
-              <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-yellow-950/30 border-2 border-amber-300 dark:border-amber-700/80 rounded-xl p-4 shadow-sm space-y-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-start gap-2.5">
-                    <span className="p-2 rounded-xl bg-amber-500 text-white shadow-sm mt-0.5">
-                      <FileSpreadsheet className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-xs font-extrabold text-amber-950 dark:text-amber-200">
-                          📂 อัปโหลดไฟล์โครงการที่ส่งมาจากหน่วยงานอื่น ให้ AI ตรวจสอบและกลั่นกรองข้อมูลอัตโนมัติ
-                        </h4>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
-                          ประหยัดพื้นที่ 100% (ไม่เก็บไฟล์)
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
-                        รองรับไฟล์ Word (<code>.docx</code>), Excel (<code>.xlsx</code>), <code>.csv</code>, <code>.txt</code> • AI จะช่วยเช็คข้อมูลในไฟล์ กลั่นกรองเป็นชื่อโครงการ ประเภท กลุ่มเป้าหมาย กิจกรรม วัตถุประสงค์ KPI และงบประมาณเติมลงฟอร์มทันที แล้วลบทิ้งจากหน่วยความจำอัตโนมัติ
-                      </p>
-                    </div>
+            <div className="space-y-4 animate-in fade-in-50 duration-150">
+              {fileImportSummary && (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-line flex items-start justify-between gap-2 shadow-sm">
+                  <div>
+                    <div className="font-bold mb-1">✅ AI สกัดข้อมูลจากไฟล์โครงการเรียบร้อยแล้ว:</div>
+                    <span>{fileImportSummary.join('\n')}</span>
                   </div>
                   <button
                     type="button"
-                    disabled={isAnalyzingFile}
-                    onClick={() => fileUploadInputRef.current?.click()}
-                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.01] disabled:opacity-60 whitespace-nowrap"
+                    onClick={() => setFileImportSummary(null)}
+                    className="text-slate-400 hover:text-slate-600 font-bold px-1"
                   >
-                    <Upload className="w-4 h-4" />
-                    {isAnalyzingFile
-                      ? 'AI กำลังอ่านและกลั่นกรองไฟล์...'
-                      : 'เลือกไฟล์โครงการเพื่อสกัดข้อมูล'}
+                    ✕
                   </button>
                 </div>
+              )}
 
-                {fileImportSummary && (
-                  <div className="p-3 rounded-xl bg-white/95 dark:bg-slate-900/95 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-line flex items-start justify-between gap-2 shadow-sm">
-                    <span>{fileImportSummary}</span>
-                    <button
-                      type="button"
-                      onClick={() => setFileImportSummary(null)}
-                      className="text-slate-400 hover:text-slate-600 font-bold px-1"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
+              {aiValidationError && (
+                <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-300 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300 whitespace-pre-line flex items-start justify-between gap-2">
+                  <span>⚠️ {aiValidationError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAiValidationError(null)}
+                    className="text-red-500 hover:text-red-700 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
-              {/* 1. Category Dropdown (All 8 categories) - FIRST ITEM */}
-              <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border-2 border-emerald-200 dark:border-emerald-800/70 rounded-xl p-4 shadow-sm">
+              {/* 1. Category Dropdown (All 8 categories) */}
+              <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 rounded-xl p-4 shadow-2xs">
                 <label className="block text-xs font-bold text-emerald-900 dark:text-emerald-300 mb-1.5 flex items-center gap-1.5">
                   <Layers className="w-4 h-4 text-emerald-600" />
-                  1. ประเภทโครงการ สปสช. (ตามข้อ 10 ทั้ง 8 ประเภท) <span className="text-red-500">*</span>
+                  1. ประเภทโครงการ สปสช. (ตามประกาศข้อ 10 ทั้ง 8 ประเภท) <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={categoryNumber}
                   onChange={(e) => setCategoryNumber(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-sm font-semibold focus:ring-2 focus:ring-emerald-500"
                 >
                   {NHSO_FUND_CATEGORIES.map((cat) => (
                     <option key={cat.number} value={cat.number}>
@@ -1022,211 +1083,107 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5">
                   📌 {NHSO_FUND_CATEGORIES.find((c) => c.number === categoryNumber)?.description}
                 </p>
               </div>
 
-              {/* 2. Fiscal Year, Project Code, Phone */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 2. Project Name + Fiscal Year / Code / Target Count */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-4 shadow-2xs">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    ปีงบประมาณ <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                    2. ชื่อโครงการ (แผนงาน/โครงการ) <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={fiscalYear}
-                    onChange={(e) => setFiscalYear(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold"
-                    placeholder="2570"
+                  <textarea
+                    rows={2}
+                    value={projectName}
+                    onChange={(e) => {
+                      setProjectName(e.target.value);
+                      if (aiValidationError) setAiValidationError(null);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="ตัวอย่าง: โครงการบางเป้าเฝ้าระวัง ป้องกันเด็กจมน้ำ ประจำปี 2570 หรือ โครงการใส่ใจดูแลกลุ่มเสี่ยงเบาหวาน-ความดันโลหิตสูง"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    รหัสโครงการ / ลำดับ
-                  </label>
-                  <input
-                    type="text"
-                    value={projectCode}
-                    onChange={(e) => setProjectCode(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="เช่น กองทุน-70-001"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    เบอร์โทรศัพท์ติดต่อ
-                  </label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="ตัวอย่าง: 075-207038 หรือ 089-xxx-xxxx"
-                  />
-                </div>
-              </div>
 
-              {/* 3. Project Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  ชื่อโครงการ (แผนงาน/โครงการ) <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={projectName}
-                  onChange={(e) => {
-                    setProjectName(e.target.value);
-                    if (aiValidationError) setAiValidationError(null);
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="ตัวอย่าง: โครงการบางเป้าเฝ้าระวัง ป้องกันเด็กจมน้ำ ประจำปี 2570 หรือ โครงการใส่ใจดูแลกลุ่มเสี่ยงเบาหวาน-ความดันโลหิตสูง"
-                  required
-                />
-              </div>
-
-              {/* 4. Mandatory Target & Framework Inputs (Always Starts Blank, No AI Button in Step 1) */}
-              <div className="bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/70 rounded-xl p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
-                    <h4 className="text-xs font-bold text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-blue-600" />
-                      ข้อมูลจำนวนกลุ่มเป้าหมายและกรอบการจัดกิจกรรม (บังคับกรอกทุกช่อง) <span className="text-red-500">*</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                      กรุณาระบุจำนวนจริงเพื่อใช้คำนวณตารางงบประมาณและให้ผู้ช่วย AI ในส่วนที่ 2 วิเคราะห์กิจกรรม วัตถุประสงค์ และตัวชี้วัดให้ตรงกัน (หากรายการใดไม่มีให้ใส่ 0)
-                    </p>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      ปีงบประมาณ <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={fiscalYear}
+                      onChange={(e) => setFiscalYear(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold"
+                      placeholder="2570"
+                      required
+                    />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-blue-200 dark:border-slate-700 shadow-sm">
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      กลุ่มเป้าหมาย (คน) <span className="text-red-500">*</span>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      รหัสโครงการ / ลำดับ
+                    </label>
+                    <input
+                      type="text"
+                      value={projectCode}
+                      onChange={(e) => setProjectCode(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+                      placeholder="เช่น กองทุน-70-001"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      กลุ่มเป้าหมายโดยประมาณ (คน)
                     </label>
                     <input
                       type="number"
                       min={1}
                       value={aiParticipants}
-                      onChange={(e) => {
-                        setAiParticipants(e.target.value);
-                        if (aiValidationError) setAiValidationError(null);
-                      }}
-                      placeholder="กรอกจำนวนคน (เช่น 30)"
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 font-bold text-blue-700 dark:text-blue-300 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      required
+                      onChange={(e) => setAiParticipants(e.target.value)}
+                      placeholder="เช่น 30 หรือ 50 คน (ไม่บังคับ)"
+                      className="w-full px-3 py-2 rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50/40 dark:bg-slate-900 text-sm font-bold text-blue-700 dark:text-blue-300"
                     />
                   </div>
-
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-blue-200 dark:border-slate-700 shadow-sm">
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      ผู้สังเกตการณ์/จนท. (คน) <span className="text-red-500">*</span>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      เบอร์โทรศัพท์ติดต่อ
                     </label>
                     <input
-                      type="number"
-                      min={0}
-                      value={aiObservers}
-                      onChange={(e) => {
-                        setAiObservers(e.target.value);
-                        if (aiValidationError) setAiValidationError(null);
-                      }}
-                      placeholder="เช่น 6 (ใส่ 0 หากไม่มี)"
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 font-bold text-blue-700 dark:text-blue-300 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-blue-200 dark:border-slate-700 shadow-sm">
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      ชั่วโมงวิทยากร (ชม.) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={aiHours}
-                      onChange={(e) => {
-                        setAiHours(e.target.value);
-                        if (aiValidationError) setAiValidationError(null);
-                      }}
-                      placeholder="เช่น 5 (ใส่ 0 หากไม่มี)"
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 font-bold text-blue-700 dark:text-blue-300 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-blue-200 dark:border-slate-700 shadow-sm">
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      อาหารว่าง (มื้อ) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={4}
-                      value={aiSnackMeals}
-                      onChange={(e) => {
-                        setAiSnackMeals(e.target.value);
-                        if (aiValidationError) setAiValidationError(null);
-                      }}
-                      placeholder="เช่น 2 (ใส่ 0 หากไม่มี)"
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 font-bold text-blue-700 dark:text-blue-300 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      required
+                      type="text"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+                      placeholder="เช่น 075-207038"
                     />
                   </div>
                 </div>
-
-                {aiValidationError && (
-                  <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-300 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300 whitespace-pre-line">
-                    ⚠️ {aiValidationError}
-                  </div>
-                )}
               </div>
 
-              {/* 5. Organization Selection (Quick Proposer Selector Moved to TOP!) */}
+              {/* 3. Unified Proposing Organization & Responsible Person Card */}
               <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3.5">
-                {/* Quick Proposer Selector AT THE TOP */}
-                <div className="p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-700/80">
-                  <span className="block text-xs font-bold text-emerald-900 dark:text-emerald-300 mb-1.5 flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-emerald-600" />
-                    เลือกผู้เสนอโครงการ / ผู้รับผิดชอบ จากรายชื่อมาตรฐาน (แนะนำ - กรอกให้อัตโนมัติทุกช่อง):
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-emerald-600" />
+                    3. หน่วยงานผู้ขอรับงบประมาณ & ผู้รับผิดชอบโครงการ <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                    ✨ เลือกหน่วยงานแล้วระบบจะเติมชื่อผู้รับผิดชอบและผู้ลงนามให้อัตโนมัติ
                   </span>
-                  <select
-                    onChange={(e) => {
-                      const idx = Number(e.target.value);
-                      if (!isNaN(idx) && KNOWN_PROPOSERS[idx]) {
-                        const chosen = KNOWN_PROPOSERS[idx];
-                        setSelectedOrgPreset(chosen.org);
-                        setCustomOrgText('');
-                        setResponsiblePerson(chosen.name);
-                        setProposerName(chosen.name);
-                        setProposerTitle(chosen.title);
-                      }
-                    }}
-                    defaultValue=""
-                    className="w-full px-3 py-2 rounded-lg border border-emerald-400 dark:border-emerald-600 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-200 shadow-sm focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="" disabled>-- คลิกเพื่อเลือกผู้เสนอโครงการ / หน่วยงาน (กรอกให้อัตโนมัติทุกช่อง) --</option>
-                    {KNOWN_PROPOSERS.map((kp, idx) => (
-                      <option key={idx} value={idx}>
-                        {kp.org} — {kp.name} ({kp.title})
-                      </option>
-                    ))}
-                  </select>
                 </div>
-
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 pt-1">
-                  <Building2 className="w-4 h-4 text-blue-600" />
-                  หน่วยงานผู้ขอรับการสนับสนุนงบประมาณ <span className="text-red-500">*</span>
-                </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <span className="block text-xs text-slate-500 mb-1">เลือกจากรายการมาตรฐาน:</span>
+                    <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      เลือกหน่วยงาน / ชมรมในตำบลบางเป้า:
+                    </span>
                     <select
                       value={selectedOrgPreset}
                       onChange={(e) => {
                         const val = e.target.value;
                         setSelectedOrgPreset(val);
+                        if (aiValidationError) setAiValidationError(null);
                         if (!val) {
                           setCustomOrgText('');
                           setResponsiblePerson('');
@@ -1246,53 +1203,118 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                           }
                         }
                       }}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+                      className="w-full px-3 py-2.5 rounded-lg border border-emerald-400 dark:border-emerald-700 bg-white dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 shadow-2xs focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">-- คลิกเพื่อเลือกหน่วยงานผู้ขอรับงบประมาณ --</option>
-                      {PRESET_ORGS.map((org) => (
-                        <option key={org} value={org}>
-                          {org}
-                        </option>
-                      ))}
-                      <option value="custom">✏️ พิมพ์ระบุหน่วยงานเอง (อิสระ)</option>
+                      {PRESET_ORGS.map((org) => {
+                        const kp =
+                          settings.orgProposerDefaults?.[org] ||
+                          KNOWN_PROPOSERS.find((item) => item.org === org);
+                        return (
+                          <option key={org} value={org}>
+                            {org} {kp ? `(${kp.name})` : ''}
+                          </option>
+                        );
+                      })}
+                      <option value="custom">✏️ พิมพ์ระบุหน่วยงาน/กลุ่มประชาชนใหม่เอง</option>
                     </select>
                   </div>
 
-                  <div>
-                    <span className="block text-xs text-slate-500 mb-1">
-                      หรือพิมพ์ชื่อหน่วยงานโดยอิสระ:
-                    </span>
-                    <input
-                      type="text"
-                      value={customOrgText}
-                      onChange={(e) => {
-                        setCustomOrgText(e.target.value);
-                        if (selectedOrgPreset !== 'custom') {
-                          setSelectedOrgPreset('custom');
-                        }
-                      }}
-                      placeholder="พิมพ์ชื่อหน่วยงาน/กลุ่มประชาชนใหม่..."
-                      className={`w-full px-3 py-2 rounded-lg border text-sm ${
-                        selectedOrgPreset === 'custom'
-                          ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-white dark:bg-slate-900'
-                          : 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60'
-                      }`}
-                    />
-                  </div>
+                  {selectedOrgPreset === 'custom' ? (
+                    <div>
+                      <span className="block text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-1">
+                        ระบุชื่อหน่วยงาน / กลุ่มประชาชน: <span className="text-red-500">*</span>
+                      </span>
+                      <input
+                        type="text"
+                        value={customOrgText}
+                        onChange={(e) => {
+                          setCustomOrgText(e.target.value);
+                          if (aiValidationError) setAiValidationError(null);
+                        }}
+                        placeholder="พิมพ์ชื่อหน่วยงาน/กลุ่มประชาชน..."
+                        className="w-full px-3 py-2.5 rounded-lg border-2 border-emerald-500 bg-white dark:bg-slate-900 text-sm font-semibold"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                        ผู้รับผิดชอบโครงการ / ผู้เสนอ (แก้ไขได้):
+                      </span>
+                      <input
+                        type="text"
+                        value={responsiblePerson}
+                        onChange={(e) => {
+                          setResponsiblePerson(e.target.value);
+                          if (!proposerName) setProposerName(e.target.value);
+                        }}
+                        className="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-medium"
+                        placeholder="เช่น นางสาวปฐมาภรณ์  จันทร์แจ่ม"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
-                    ผู้รับผิดชอบโครงการ (ระบุชื่อ-สกุล)
-                  </label>
-                  <input
-                    type="text"
-                    value={responsiblePerson}
-                    onChange={(e) => setResponsiblePerson(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
-                    placeholder="เช่น นางสาวปฐมาภรณ์  จันทร์แจ่ม หรือ ชื่อผู้รับผิดชอบโครงการ"
-                  />
+                {selectedOrgPreset === 'custom' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                        ชื่อ-สกุล ผู้รับผิดชอบ / ผู้เสนอโครงการ
+                      </label>
+                      <input
+                        type="text"
+                        value={responsiblePerson}
+                        onChange={(e) => {
+                          setResponsiblePerson(e.target.value);
+                          setProposerName(e.target.value);
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+                        placeholder="ระบุชื่อ-นามสกุลผู้รับผิดชอบ"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                        ตำแหน่งผู้เสนอโครงการ
+                      </label>
+                      <input
+                        type="text"
+                        value={proposerTitle}
+                        onChange={(e) => setProposerTitle(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm"
+                        placeholder="เช่น ประธานกลุ่ม / หัวหน้าหน่วยงาน"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick AI Draft Shortcut Banner at bottom of Step 1 */}
+              <div className="bg-gradient-to-r from-violet-50 via-fuchsia-50 to-indigo-50 dark:from-violet-950/30 dark:via-fuchsia-950/20 dark:to-indigo-950/30 border border-violet-200 dark:border-violet-800/70 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-extrabold text-violet-950 dark:text-violet-200 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-violet-600" />
+                    <span>ทางลัดอัจฉริยะ: ให้ AI ช่วยร่างกิจกรรม วัตถุประสงค์ KPI และคำนวณงบประมาณให้ทันที</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    เพียงกรอกชื่อโครงการและเลือกหน่วยงานด้านบน แล้วกดปุ่มขวาเพื่อสร้างร่างตาราง 13 ช่องในขั้นตอนที่ 2 อัตโนมัติ (แก้ไขปรับลดได้ทุกช่อง)
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  disabled={isAiGenerating}
+                  onClick={() => {
+                    const err1 = validateStep1Inputs();
+                    if (err1) {
+                      setAiValidationError(err1);
+                      return;
+                    }
+                    handleRunFullAiDraft(true);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md transition-all hover:scale-[1.01] whitespace-nowrap cursor-pointer shrink-0"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>✨ ให้ AI ร่างกิจกรรม & ไปขั้นตอนที่ 2 ➔</span>
+                </button>
               </div>
             </div>
           )}
@@ -1363,11 +1385,11 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                   </div>
                 )}
 
-                {/* Live synced parameters + activity count selector */}
+                {/* Live synced parameters + activity count selector (Smart defaults, non-blocking) */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
                   <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-violet-200 dark:border-slate-700">
-                    <label className="block text-[11px] text-slate-500 font-semibold">
-                      กลุ่มเป้าหมาย (คน) <span className="text-red-500">*</span>
+                    <label className="block text-[11px] text-slate-600 dark:text-slate-400 font-semibold">
+                      กลุ่มเป้าหมาย (คน)
                     </label>
                     <input
                       type="number"
@@ -1377,13 +1399,13 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                         setAiParticipants(e.target.value);
                         if (aiValidationError) setAiValidationError(null);
                       }}
-                      placeholder="เช่น 30"
+                      placeholder="เช่น 30 (ค่าเริ่มต้น 30)"
                       className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-violet-700 dark:text-violet-300 text-xs"
                     />
                   </div>
                   <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-violet-200 dark:border-slate-700">
-                    <label className="block text-[11px] text-slate-500 font-semibold">
-                      ผู้สังเกตการณ์/จนท. (คน) <span className="text-red-500">*</span>
+                    <label className="block text-[11px] text-slate-600 dark:text-slate-400 font-semibold">
+                      ผู้สังเกตการณ์/จนท. (คน)
                     </label>
                     <input
                       type="number"
@@ -1393,13 +1415,13 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                         setAiObservers(e.target.value);
                         if (aiValidationError) setAiValidationError(null);
                       }}
-                      placeholder="เช่น 6"
+                      placeholder="เช่น 6 (หรือใส่ 0)"
                       className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-violet-700 dark:text-violet-300 text-xs"
                     />
                   </div>
                   <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-violet-200 dark:border-slate-700">
-                    <label className="block text-[11px] text-slate-500 font-semibold">
-                      ชั่วโมงวิทยากร (ชม.) <span className="text-red-500">*</span>
+                    <label className="block text-[11px] text-slate-600 dark:text-slate-400 font-semibold">
+                      ชั่วโมงวิทยากร (ชม.)
                     </label>
                     <input
                       type="number"
@@ -1409,13 +1431,13 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                         setAiHours(e.target.value);
                         if (aiValidationError) setAiValidationError(null);
                       }}
-                      placeholder="เช่น 5"
+                      placeholder="เช่น 5 (หรือใส่ 0)"
                       className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-violet-700 dark:text-violet-300 text-xs"
                     />
                   </div>
                   <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-violet-200 dark:border-slate-700">
-                    <label className="block text-[11px] text-slate-500 font-semibold">
-                      อาหารว่าง (มื้อ) <span className="text-red-500">*</span>
+                    <label className="block text-[11px] text-slate-600 dark:text-slate-400 font-semibold">
+                      อาหารว่าง (มื้อ)
                     </label>
                     <input
                       type="number"
@@ -1426,12 +1448,12 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
                         setAiSnackMeals(e.target.value);
                         if (aiValidationError) setAiValidationError(null);
                       }}
-                      placeholder="เช่น 2"
+                      placeholder="เช่น 2 (หรือใส่ 0)"
                       className="w-full mt-0.5 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 font-bold text-violet-700 dark:text-violet-300 text-xs"
                     />
                   </div>
                   <div className="bg-white/90 dark:bg-slate-900/80 p-2 rounded-xl border border-violet-200 dark:border-slate-700 col-span-2 sm:col-span-1">
-                    <label className="block text-[11px] text-slate-500 font-semibold">
+                    <label className="block text-[11px] text-slate-600 dark:text-slate-400 font-semibold">
                       จำนวนกิจกรรมที่ให้ AI ออกแบบ
                     </label>
                     <select
@@ -2046,12 +2068,90 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
             </div>
           )}
 
-          {/* STEP 3: SIGNERS */}
+          {/* STEP 3: REVIEW SUMMARY & SIGNERS */}
           {activeStep === 3 && (
             <div className="space-y-5 animate-in fade-in-50 duration-150">
+              {/* Project Overview & Budget Summary Card before final Save */}
+              <div className="bg-gradient-to-br from-emerald-50 via-teal-50/70 to-cyan-50/50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 border-2 border-emerald-300 dark:border-emerald-800/80 rounded-2xl p-5 space-y-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-emerald-200/80 dark:border-emerald-800/60 pb-3.5">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[11px] font-bold">
+                        ประเภทที่ {categoryNumber}
+                      </span>
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                        รหัส: {projectCode || '-'} • ปีงบประมาณ {fiscalYear}
+                      </span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+                      {projectName.trim() || 'ยังไม่ได้ระบุชื่อโครงการ'}
+                    </h3>
+                    <div className="text-xs text-slate-600 dark:text-slate-300 flex flex-wrap items-center gap-3">
+                      <span>
+                        หน่วยงานผู้ขอ: <strong className="text-slate-900 dark:text-white">{effectiveOrg || '-'}</strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        ผู้รับผิดชอบ: <strong className="text-slate-900 dark:text-white">{responsiblePerson || proposerName || '-'}</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-900 px-4 py-3 rounded-xl border border-emerald-300 dark:border-emerald-700 text-right shadow-2xs shrink-0">
+                    <div className="text-[11px] text-slate-500 font-semibold">
+                      งบประมาณที่ขอรับสนับสนุนทั้งสิ้น
+                    </div>
+                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                      {grandTotal.toLocaleString()}{' '}
+                      <span className="text-xs font-semibold text-slate-500">บาท</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Activity Breakdown Table */}
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                    <span>สรุปรายการกิจกรรมและงบประมาณ ({activityGroups.length} กิจกรรม):</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveStep(2)}
+                      className="text-[11px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold cursor-pointer"
+                    >
+                      ✏️ กลับไปแก้ไขกิจกรรม/ตารางงบประมาณ
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {activityGroups.map((g, idx) => {
+                      const sub = (g.budgetLines || []).reduce((s, l) => s + (l.total || 0), 0);
+                      const validLineCount = (g.budgetLines || []).filter(
+                        (l) => Boolean(l.name?.trim()) || (l.total || 0) > 0
+                      ).length;
+                      return (
+                        <div
+                          key={g.id || idx}
+                          className="p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                              {g.activityName || `กิจกรรมที่ ${idx + 1}`}
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                              {validLineCount} รายการค่าใช้จ่าย
+                            </div>
+                          </div>
+                          <div className="font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                            {sub.toLocaleString()} บ.
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl p-4 text-xs text-blue-800 dark:text-blue-300">
-                ✍️ <strong>ผู้ลงนาม 3 ระดับ:</strong> ข้อมูลนี้จะปรากฏในส่วนท้ายของแบบฟอร์ม 13
-                คอลัมน์ (สามารถปรับเปลี่ยนเฉพาะโครงการนี้ได้)
+                ✍️ <strong>ตรวจสอบรายชื่อผู้ลงนาม 3 ระดับ:</strong> ข้อมูลนี้จะปรากฏในส่วนท้ายของแบบฟอร์ม 13
+                คอลัมน์เมื่อสั่งพิมพ์ A4 แนวนอน และส่งออก Word / Excel (สามารถปรับเปลี่ยนเฉพาะโครงการนี้ได้)
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2184,37 +2284,24 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
           )}
         </form>
 
-        {/* Modal Footer */}
+        {/* Modal Footer (Sequential Step Flow: Save Button only appears on final Step 3) */}
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {activeStep > 1 && (
-              <button
-                type="button"
-                onClick={() => setActiveStep((prev) => (prev - 1) as any)}
-                className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
-              >
-                ย้อนกลับ
-              </button>
-            )}
-            {activeStep < 3 && (
+            {activeStep > 1 ? (
               <button
                 type="button"
                 onClick={() => {
-                  if (activeStep === 1) {
-                    const errMsg = validateRequiredProjectInputs();
-                    if (errMsg) {
-                      setAiValidationError(errMsg);
-                      alert(errMsg);
-                      return;
-                    }
-                    setAiValidationError(null);
-                  }
-                  setActiveStep((prev) => (prev + 1) as any);
+                  setAiValidationError(null);
+                  setActiveStep((prev) => (prev - 1) as any);
                 }}
-                className="px-4 py-2 text-xs font-medium text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 rounded-xl transition-colors"
+                className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
               >
-                ถัดไป: {activeStep === 1 ? 'กิจกรรม & ตารางงบประมาณ' : 'ผู้ลงนาม 3 ระดับ'}
+                ⬅ ย้อนกลับขั้นตอนที่ {activeStep - 1}
               </button>
+            ) : (
+              <span className="text-xs text-slate-500">
+                ขั้นตอนที่ 1 จาก 3: กรอกชื่อโครงการและเลือกหน่วยงานผู้เสนอ
+              </span>
             )}
           </div>
 
@@ -2222,18 +2309,51 @@ export const NhsoProjectBuilderModal: React.FC<NhsoProjectBuilderModalProps> = (
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
+              className="px-4 py-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
             >
               ยกเลิก
             </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              className="px-6 py-2.5 text-xs font-medium text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-md flex items-center gap-2 transition-all hover:scale-[1.02]"
-            >
-              <Save className="w-4 h-4" />
-              บันทึกแบบเสนอโครงการ ({grandTotal.toLocaleString()} บ.)
-            </button>
+
+            {activeStep < 3 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeStep === 1) {
+                    const errMsg = validateStep1Inputs();
+                    if (errMsg) {
+                      setAiValidationError(errMsg);
+                      return;
+                    }
+                    setAiValidationError(null);
+                    setActiveStep(2);
+                  } else if (activeStep === 2) {
+                    const err2 = validateStep2Inputs();
+                    if (err2) {
+                      setAiValidationError(err2);
+                      return;
+                    }
+                    setAiValidationError(null);
+                    setActiveStep(3);
+                  }
+                }}
+                className="px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-md flex items-center gap-2 transition-all hover:scale-[1.01] cursor-pointer"
+              >
+                <span>
+                  {activeStep === 1
+                    ? 'ถัดไป: กิจกรรม & ตารางงบประมาณ ➔'
+                    : `ถัดไป: ตรวจสอบสรุป & ผู้ลงนาม (${grandTotal.toLocaleString()} บ.) ➔`}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-md flex items-center gap-2 transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>ยืนยันบันทึกแบบเสนอโครงการ ({grandTotal.toLocaleString()} บาท)</span>
+              </button>
+            )}
           </div>
         </div>
 
