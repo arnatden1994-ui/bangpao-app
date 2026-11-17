@@ -237,6 +237,30 @@ const createStatusPinIcon = (
   });
 };
 
+// ป้องกันการรวมกลุ่มผิดคนกรณีใช้เลขบัตรประชาชนจำลอง เช่น 1-1111-11111-11-1 หรือ 0-0000-00000-00-0
+const isPlaceholderNationalId = (digits: string): boolean => {
+  if (!digits || digits.length !== 13) return true;
+  if (/^(\d)\1{12}$/.test(digits)) return true;
+  if (digits === '1234567890123' || digits === '0123456789012') return true;
+  return false;
+};
+
+const normalizePatientNameForGroup = (name?: string): string =>
+  (name || '')
+    .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+
+const getPatientHouseholdGroupKey = (loan: EquipmentLoan): string => {
+  const cleanPt = normalizePatientNameForGroup(loan.patientName);
+  const idDigits = (loan.patientIdCard || loan.patientNationalId || '').replace(/\D/g, '');
+  const mooNum = String(loan.moo || '1').trim();
+  if (!isPlaceholderNationalId(idDigits)) {
+    return `id_${idDigits}_${cleanPt || 'noname'}`;
+  }
+  return `name_${cleanPt || loan.id}_m${mooNum}`;
+};
+
 interface MedicalEquipmentViewProps {
   equipmentList: MedicalEquipment[];
   equipmentUnits?: MedicalEquipmentUnit[];
@@ -670,9 +694,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     const map = new Map<string, HouseholdLoanGroup>();
 
     normalizedLoans.forEach((loan) => {
-      const cleanPt = (loan.patientName || '').replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/, '').replace(/\s+/g, '').trim();
-      const idKey = loan.patientIdCard ? loan.patientIdCard.replace(/\D/g, '') : '';
-      const key = idKey && idKey.length === 13 ? idKey : (cleanPt || loan.id);
+      const key = getPatientHouseholdGroupKey(loan);
 
       if (!map.has(key)) {
         map.set(key, {
@@ -804,14 +826,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     const map = new Map<string, RegPatientGroup>();
 
     filteredRegLoans.forEach((loan) => {
-      const cleanPt = (loan.patientName || '')
-        .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/, '')
-        .replace(/\s+/g, '')
-        .trim();
-      const idKey = (loan.patientIdCard || loan.patientNationalId || '').replace(/\D/g, '');
       const mooNum = loan.moo ? String(loan.moo).trim() : '1';
-      // Group key: if 13-digit ID exists, use it; otherwise normalize name + moo
-      const key = idKey && idKey.length === 13 ? `id_${idKey}` : `name_${cleanPt || loan.id}_m${mooNum}`;
+      const key = getPatientHouseholdGroupKey(loan);
 
       const villageName = BANGPAO_VILLAGES[mooNum]
         ? `หมู่ที่ ${mooNum} ${BANGPAO_VILLAGES[mooNum]}`
@@ -865,7 +881,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
       const found = householdGroups.find(
         (h) => h.id === id || h.householdKey === id || h.loans.some((l) => l.id === id)
       );
-      if (found && !seen.has(found.householdKey)) {
+      if (found && found.primaryStatus === 'pending' && !seen.has(found.householdKey)) {
         seen.add(found.householdKey);
         list.push(found);
       }
@@ -874,7 +890,9 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   }, [selectedStopIds, householdGroups]);
 
   const orderedSelectedLoans = useMemo(() => {
-    return orderedSelectedHouseholds.flatMap((h) => h.loans);
+    return orderedSelectedHouseholds.flatMap((h) =>
+      h.loans.filter((l) => l.status === 'pending' || l.status === 'approved')
+    );
   }, [orderedSelectedHouseholds]);
 
   // KPI Statistics (Both Households & Total Equipment Units)
@@ -899,7 +917,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
       : tableTabMode === 'returned'
       ? filteredLoans.filter((l) => l.status === 'returned')
       : tableTabMode === 'online'
-      ? filteredLoans.filter((l) => l.isPublicCitizenRequest || l.status === 'pending')
+      ? filteredLoans.filter((l) => l.status === 'pending' || l.status === 'approved')
       : filteredLoans;
   }, [tableTabMode, orderedSelectedLoans, filteredLoans]);
 
@@ -908,13 +926,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     const map = new Map<string, RegPatientGroup>();
 
     dashboardDisplayLoans.forEach((loan) => {
-      const cleanPt = (loan.patientName || '')
-        .replace(/^(นาย|นางสาว|นาง|ด\.ช\.|เด็กชาย|ด\.ญ\.|เด็กหญิง)\s*/, '')
-        .replace(/\s+/g, '')
-        .trim();
-      const idKey = (loan.patientIdCard || loan.patientNationalId || '').replace(/\D/g, '');
       const mooNum = loan.moo ? String(loan.moo).trim() : '1';
-      const key = idKey && idKey.length === 13 ? `id_${idKey}` : `name_${cleanPt || loan.id}_m${mooNum}`;
+      const key = getPatientHouseholdGroupKey(loan);
 
       const villageName = BANGPAO_VILLAGES[mooNum]
         ? `หมู่ที่ ${mooNum} ${BANGPAO_VILLAGES[mooNum]}`
@@ -1863,7 +1876,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         moo: borrowerForm.moo,
         latitude: borrowerForm.lat,
         longitude: borrowerForm.lng,
-        isPublicCitizenRequest: true,
+        isPublicCitizenRequest: false,
       };
 
       if (!firstCreatedLoan) firstCreatedLoan = newLoan;
@@ -2084,6 +2097,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
         notes: `${loan.notes || ''} [ส่งมอบแล้ว: ${deliveryDate}${staffInfo}]${notesInfo}`.trim(),
       });
     }
+    setSelectedStopIds((prev) => prev.filter((id) => id !== loan.id));
     setAppointmentLoan(null);
   };
 
@@ -2255,6 +2269,88 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
               <span>📦 คลังอุปกรณ์การแพทย์</span>
             </button>
           </div>
+        </div>
+
+        {/* 4-Step Clear Workflow Guide Bar (คลิกข้ามไปจัดการแต่ละขั้นตอนได้ทันที) */}
+        <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => setSubTab('register')}
+            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
+              subTab === 'register'
+                ? 'bg-teal-50 border-teal-400 text-teal-900 shadow-2xs'
+                : 'bg-slate-50/80 hover:bg-teal-50/60 border-slate-200 text-slate-700'
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="font-extrabold text-[11px] text-teal-800 truncate">1. ลงทะเบียนขอยืม</div>
+              <div className="text-[10px] text-slate-500 truncate">กรอกผู้ยืม/ผู้ป่วย + เลือกอุปกรณ์</div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-teal-600 text-white font-bold text-[10px] shrink-0">+ เพิ่ม</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSubTab('route');
+              setTableTabMode('online');
+            }}
+            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
+              subTab === 'route' && tableTabMode === 'online'
+                ? 'bg-indigo-50 border-indigo-400 text-indigo-900 shadow-2xs'
+                : 'bg-slate-50/80 hover:bg-indigo-50/60 border-slate-200 text-slate-700'
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="font-extrabold text-[11px] text-indigo-800 truncate">2. อนุมัติ & พิมพ์สัญญา</div>
+              <div className="text-[10px] text-slate-500 truncate">ตรวจคำขอ + ลงนามสัญญา A4</div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 font-extrabold text-[10px] shrink-0">
+              {pendingDispatchCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSubTab('route');
+              setTableTabMode('queue');
+            }}
+            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
+              subTab === 'route' && tableTabMode === 'queue'
+                ? 'bg-amber-50 border-amber-400 text-amber-900 shadow-2xs'
+                : 'bg-slate-50/80 hover:bg-amber-50/60 border-slate-200 text-slate-700'
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="font-extrabold text-[11px] text-amber-800 truncate">3. จัดคิว & ส่งมอบถึงบ้าน</div>
+              <div className="text-[10px] text-slate-500 truncate">เรียงเส้นทาง + กดปุ่มส่งมอบ</div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-extrabold text-[10px] shrink-0">
+              {orderedSelectedLoans.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSubTab('route');
+              setTableTabMode('borrowed');
+            }}
+            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
+              subTab === 'route' && tableTabMode === 'borrowed'
+                ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-2xs'
+                : 'bg-slate-50/80 hover:bg-emerald-50/60 border-slate-200 text-slate-700'
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="font-extrabold text-[11px] text-emerald-800 truncate">4. ยืมใช้งาน & รับคืน</div>
+              <div className="text-[10px] text-slate-500 truncate">ติดตามใช้งาน + ตรวจรับคืนคลัง</div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[10px] shrink-0">
+              {activeBorrowedCount}
+            </span>
+          </button>
         </div>
 
         {/* Global Toast if register success */}
@@ -3134,7 +3230,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   <span>🔄 ส่งคืนแล้ว ({returnedHouseholdsCount} ครัวเรือน / {returnedCount} รายการ)</span>
                 </button>
 
-                {/* Tab: Online Requests */}
+                {/* Tab: Pending / Online Requests */}
                 <button
                   type="button"
                   onClick={() => setTableTabMode('online')}
@@ -3145,7 +3241,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                  <span>🌐 คำขอออนไลน์ ({onlineRequestsCount} ราย)</span>
+                  <span>⏳ รอตรวจสอบ/รอนำส่ง ({pendingDispatchCount} ราย)</span>
                 </button>
 
                 {/* Tab 3: Delivery Queue */}
@@ -3218,7 +3314,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     className="text-xs font-bold px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-800 cursor-pointer focus:ring-2 focus:ring-teal-500"
                   >
                     <option value="borrowed">🟢 เฉพาะที่ยืมใช้งานอยู่ ({activeBorrowedCount} ราย)</option>
-                    <option value="online">🌐 คำขอออนไลน์รอตรวจสอบ ({onlineRequestsCount} ราย)</option>
+                    <option value="online">⏳ รอตรวจสอบ/รอนำส่ง ({pendingDispatchCount} ราย)</option>
                     <option value="returned">🔄 เฉพาะที่ส่งคืนแล้ว ({returnedCount} ราย)</option>
                     <option value="queue">🚗 เฉพาะในคิวจัดส่ง ({orderedSelectedLoans.length} ราย)</option>
                     <option value="all">📋 แสดงทั้งหมด ({filteredLoans.length} ราย)</option>
@@ -3379,13 +3475,17 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                         <span>ยืมใช้งานอยู่</span>
                                       </span>
+                                    ) : loan.status === 'approved' ? (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-50 text-sky-700 border border-sky-200 inline-flex items-center gap-1 shadow-2xs">
+                                        <span>✍️ อนุมัติแล้ว (รอนำส่ง)</span>
+                                      </span>
                                     ) : loan.status === 'returned' ? (
                                       <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 inline-flex items-center gap-1 shadow-2xs">
                                         <span>ส่งคืนแล้ว</span>
                                       </span>
                                     ) : (
                                       <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1 shadow-2xs">
-                                        <span>รอนำส่ง</span>
+                                        <span>⏳ รอลงนาม/อนุมัติ</span>
                                       </span>
                                     )}
                                   </div>
@@ -3397,7 +3497,18 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                             <td className="py-3 px-3 align-top text-center">
                               <div className="divide-y divide-slate-100">
                                 {group.loans.map((loan) => (
-                                  <div key={loan.id} className="py-1.5 first:pt-0 last:pb-0 flex items-center justify-center gap-1">
+                                  <div key={loan.id} className="py-1.5 first:pt-0 last:pb-0 flex items-center justify-center gap-1 flex-wrap">
+                                    {loan.status === 'pending' && onUpdateLoanStatus && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onUpdateLoanStatus(loan.id, 'approved')}
+                                        className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
+                                        title="อนุมัติคำขอยืมชิ้นนี้"
+                                      >
+                                        อนุมัติ
+                                      </button>
+                                    )}
+
                                     {loan.status === 'borrowed' ? (
                                       <button
                                         type="button"
@@ -3412,7 +3523,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                         type="button"
                                         onClick={() => handleOpenAppointmentModal(loan)}
                                         className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
-                                        title="บันทึกนัดส่งมอบ"
+                                        title="บันทึกนัดส่งมอบถึงบ้าน"
                                       >
                                         ส่งมอบ
                                       </button>
@@ -3445,6 +3556,21 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                     >
                                       <Edit3 className="w-3.5 h-3.5" />
                                     </button>
+
+                                    {onDeleteLoan && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (confirm(`คุณต้องการลบคำขอยืม "${loan.equipmentName}" (${loan.patientName}) หรือไม่?`)) {
+                                            onDeleteLoan(loan.id);
+                                          }
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer transition-colors"
+                                        title="ลบรายการยืมนี้"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
