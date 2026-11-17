@@ -389,6 +389,23 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
   const [returnCondition, setReturnCondition] = useState<'complete' | 'damaged'>('complete');
   const [damageNotes, setDamageNotes] = useState('');
 
+  // Add Equipment to Existing Contract Modal (เพิ่มอุปกรณ์เข้าสัญญาเดิม เช่น เพิ่มที่นอนลมเข้าสัญญาเตียงของนางละม้าย)
+  const [addToContractGroup, setAddToContractGroup] = useState<RegPatientGroup | null>(null);
+  const [selectedContractNo, setSelectedContractNo] = useState<string>('');
+  const [addEquipIds, setAddEquipIds] = useState<string[]>([]);
+  const [addEquipStatus, setAddEquipStatus] = useState<'borrowed' | 'approved' | 'pending'>('borrowed');
+  const [addEquipCustomCode, setAddEquipCustomCode] = useState<string>('');
+
+  const handleOpenAddToContractModal = (group: RegPatientGroup) => {
+    const primary = group.loans[0];
+    const contractNo = primary?.contractNumber || primary?.loanCode || primary?.docNo || `TR_${Date.now()}`;
+    setAddToContractGroup(group);
+    setSelectedContractNo(contractNo);
+    setAddEquipIds([]);
+    setAddEquipStatus(primary?.status === 'borrowed' ? 'borrowed' : 'approved');
+    setAddEquipCustomCode('');
+  };
+
   // Add Equipment Modal
   const [isAddEquipModalOpen, setIsAddEquipModalOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<MedicalEquipment | null>(null);
@@ -2106,6 +2123,105 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
     setReturnModalLoan(null);
   };
 
+  // รวมรายการอุปกรณ์ทั้งหมดที่อยู่ภายใต้เลขสัญญาเดียวกันของบุคคลเดียวกัน เพื่อพิมพ์ลงใบสัญญา A4 / Word แผ่นเดียวกัน
+  const buildMergedContractLoanForPrint = (loan: EquipmentLoan): EquipmentLoan => {
+    const targetContract = (loan.contractNumber || loan.loanCode || loan.docNo || '').trim();
+    const targetPersonKey = getPatientHouseholdGroupKey(loan);
+    const siblings = targetContract
+      ? normalizedLoans.filter((l) => {
+          const c = (l.contractNumber || l.loanCode || l.docNo || '').trim();
+          return c === targetContract && getPatientHouseholdGroupKey(l) === targetPersonKey;
+        })
+      : [loan];
+    const items = siblings.length > 0 ? siblings : [loan];
+    if (items.length <= 1) return loan;
+
+    const summary = items
+      .map((item) => `${item.equipmentName} [${item.equipmentCode || '-'}]`)
+      .join(' | ');
+    const combinedCodes = items
+      .map((item) => item.equipmentCode)
+      .filter(Boolean)
+      .join(', ');
+    return {
+      ...loan,
+      itemsSummary: summary,
+      equipmentCode: combinedCodes || loan.equipmentCode,
+    };
+  };
+
+  const handleConfirmAddToContract = (openPrintAfter = false) => {
+    if (!addToContractGroup || addEquipIds.length === 0) return;
+    const base = addToContractGroup.loans[0];
+    if (!base) return;
+
+    const chosen = addEquipIds
+      .map((id) => equipmentList.find((e) => e.id === id))
+      .filter(Boolean) as MedicalEquipment[];
+    if (chosen.length === 0) return;
+
+    const contractNo =
+      selectedContractNo.trim() || base.contractNumber || base.loanCode || `TR_${Date.now()}`;
+    const todayIso = new Date().toISOString().split('T')[0];
+
+    const createdItems: EquipmentLoan[] = [];
+    chosen.forEach((eq, idx) => {
+      const customCode =
+        chosen.length === 1 && addEquipCustomCode.trim()
+          ? addEquipCustomCode.trim()
+          : eq.assetCode;
+      const newLoan: EquipmentLoan = {
+        ...base,
+        id: `LOAN-${Date.now() + idx}-${Math.random().toString(36).slice(2, 5)}`,
+        loanCode: contractNo,
+        contractNumber: contractNo,
+        docNo: contractNo,
+        equipmentId: eq.id,
+        equipmentCode: customCode,
+        equipmentName: eq.name,
+        equipmentCategory: eq.category,
+        itemsSummary: undefined,
+        status: addEquipStatus,
+        deliveryDate: addEquipStatus === 'borrowed' ? base.deliveryDate || todayIso : undefined,
+        notes: `${base.notes || ''} [เพิ่มเข้าสัญญาเดิม: ${contractNo}]`.trim(),
+        createdAt: new Date().toISOString(),
+        isPublicCitizenRequest: false,
+      };
+      createdItems.push(newLoan);
+      if (onAddRegisteredLoan) {
+        onAddRegisteredLoan(newLoan);
+      }
+    });
+
+    setRegisterSuccessMsg(
+      `✅ เพิ่มอุปกรณ์ ${createdItems.length} รายการ (${chosen.map((c) => c.name).join(', ')}) เข้าสัญญาเลขที่ ${contractNo} ของคุณ "${addToContractGroup.patientName}" เรียบร้อยแล้ว`
+    );
+    setTimeout(() => setRegisterSuccessMsg(''), 8000);
+
+    if (openPrintAfter) {
+      const allForContract = [
+        ...addToContractGroup.loans.filter(
+          (l) => (l.contractNumber || l.loanCode || l.docNo || '').trim() === contractNo
+        ),
+        ...createdItems,
+      ];
+      const mergedSummary = allForContract
+        .map((item) => `${item.equipmentName} [${item.equipmentCode || '-'}]`)
+        .join(' | ');
+      setPrintModalLoan({
+        ...base,
+        contractNumber: contractNo,
+        loanCode: contractNo,
+        docNo: contractNo,
+        itemsSummary: mergedSummary,
+      });
+    }
+
+    setAddToContractGroup(null);
+    setAddEquipIds([]);
+    setAddEquipCustomCode('');
+  };
+
   const handleSaveEditEquipment = (e?: React.FormEvent) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!editingEquipment) return;
@@ -3448,6 +3564,17 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                   </div>
                                 ))}
                               </div>
+                              <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAddToContractModal(group)}
+                                  className="px-2 py-0.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10.5px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="เพิ่มอุปกรณ์ชิ้นอื่น (เช่น ที่นอนลม, รถเข็น) เข้าเลขที่สัญญาเดิมของผู้ป่วยรายนี้"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  <span>เพิ่มอุปกรณ์ (ใช้สัญญาเดิม)</span>
+                                </button>
+                              </div>
                             </td>
 
                             {/* กำหนดส่งคืน */}
@@ -3531,9 +3658,9 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
                                     <button
                                       type="button"
-                                      onClick={() => setPrintModalLoan(loan)}
+                                      onClick={() => setPrintModalLoan(buildMergedContractLoanForPrint(loan))}
                                       className="px-1.5 py-0.5 bg-white hover:bg-teal-50 text-teal-800 border border-teal-200 rounded text-[11px] font-medium flex items-center gap-0.5 cursor-pointer transition-colors"
-                                      title="พิมพ์สัญญาทางการ A4"
+                                      title="พิมพ์สัญญาทางการ A4 (รวมทุกอุปกรณ์ในสัญญาเดียวกัน)"
                                     >
                                       <Printer className="w-3 h-3 text-teal-600" />
                                       <span>สัญญา</span>
@@ -3541,7 +3668,12 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
                                     <button
                                       type="button"
-                                      onClick={() => exportOfficialMedicalLoanDocx(loan, savedSignerSettings || DEFAULT_SIGNER_SETTINGS)}
+                                      onClick={() =>
+                                        exportOfficialMedicalLoanDocx(
+                                          buildMergedContractLoanForPrint(loan),
+                                          savedSignerSettings || DEFAULT_SIGNER_SETTINGS
+                                        )
+                                      }
                                       className="p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded cursor-pointer transition-colors"
                                       title="ส่งออกเอกสาร Word (.docx)"
                                     >
@@ -4914,6 +5046,17 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                     );
                                   })}
                                 </div>
+                                <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenAddToContractModal(group)}
+                                    className="px-2 py-0.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10.5px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                    title="เพิ่มอุปกรณ์ชิ้นอื่น (เช่น ที่นอนลม, รถเข็น) เข้าเลขที่สัญญาเดิมของผู้ป่วยรายนี้"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>เพิ่มอุปกรณ์ (ใช้สัญญาเดิม)</span>
+                                  </button>
+                                </div>
                               </td>
 
                               {/* 4. ผู้ขอยืม, เบอร์โทร & พิกัด */}
@@ -5040,9 +5183,9 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                         {/* Document buttons */}
                                         <button
                                           type="button"
-                                          onClick={() => setPrintModalLoan(loan)}
+                                          onClick={() => setPrintModalLoan(buildMergedContractLoanForPrint(loan))}
                                           className="px-1.5 py-0.5 bg-white hover:bg-teal-50 text-teal-800 border border-teal-200 rounded text-[11px] font-medium flex items-center gap-0.5 cursor-pointer transition-colors"
-                                          title="พิมพ์สัญญาทางการ A4"
+                                          title="พิมพ์สัญญาทางการ A4 (รวมทุกอุปกรณ์ในสัญญาเดียวกัน)"
                                         >
                                           <Printer className="w-3 h-3 text-teal-600" />
                                           <span>สัญญา</span>
@@ -5050,7 +5193,12 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
                                         <button
                                           type="button"
-                                          onClick={() => exportOfficialMedicalLoanDocx(loan, savedSignerSettings || DEFAULT_SIGNER_SETTINGS)}
+                                          onClick={() =>
+                                            exportOfficialMedicalLoanDocx(
+                                              buildMergedContractLoanForPrint(loan),
+                                              savedSignerSettings || DEFAULT_SIGNER_SETTINGS
+                                            )
+                                          }
                                           className="p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded cursor-pointer transition-colors"
                                           title="ส่งออกเอกสาร Word (.docx)"
                                         >
@@ -5084,6 +5232,17 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                                       </div>
                                     );
                                   })}
+                                </div>
+                                <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenAddToContractModal(group)}
+                                    className="px-2 py-0.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10.5px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                    title="เพิ่มอุปกรณ์ชิ้นอื่น (เช่น ที่นอนลม, รถเข็น) เข้าเลขที่สัญญาเดิมของผู้ป่วยรายนี้"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>เพิ่มอุปกรณ์ (ใช้สัญญาเดิม)</span>
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -6282,6 +6441,198 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
               >
                 <span>✓ ยืนยันเข้าคิวจองล่วงหน้า</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Equipment to Existing Contract Modal (ใช้สัญญาเดิม เพิ่มอุปกรณ์ เช่น ที่นอนลม) */}
+      {addToContractGroup && (
+        <div className="fixed inset-0 z-[99990] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
+            <div className="bg-gradient-to-r from-teal-700 to-emerald-700 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/15 rounded-xl">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base">
+                    เพิ่มอุปกรณ์เข้าสัญญาเดิม (ใช้เลขสัญญาเดิม)
+                  </h3>
+                  <p className="text-[11px] text-white/85">
+                    ผู้ป่วย: <strong>{addToContractGroup.patientName}</strong> • {addToContractGroup.villageName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAddToContractGroup(null)}
+                className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/15 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+              {/* Contract Number & Existing Items */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="font-bold text-slate-700">เลขที่สัญญาเดิมที่จะใช้ร่วมกัน:</label>
+                  <input
+                    type="text"
+                    value={selectedContractNo}
+                    onChange={(e) => setSelectedContractNo(e.target.value)}
+                    className="px-2.5 py-1 rounded-lg border border-teal-300 bg-white font-mono font-bold text-teal-900 text-xs w-52 focus:ring-2 focus:ring-teal-500 outline-none"
+                  />
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  <span className="font-bold text-slate-700">อุปกรณ์เดิมในระบบ ({addToContractGroup.loans.length} รายการ):</span>
+                  <div className="mt-1 space-y-1">
+                    {addToContractGroup.loans.map((l, idx) => (
+                      <div key={l.id} className="flex items-center justify-between bg-white px-2.5 py-1 rounded border border-slate-200">
+                        <span className="font-semibold text-slate-800">
+                          {idx + 1}. {l.equipmentName}
+                        </span>
+                        <span className="font-mono text-[10.5px] text-teal-700 font-bold">
+                          {l.equipmentCode || '-'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Select Additional Equipment Checkboxes */}
+              <div className="space-y-2">
+                <label className="font-extrabold text-slate-800 block">
+                  เลือกอุปกรณ์ที่ต้องการยืมเพิ่ม (ติ๊กเลือกได้ 1 หรือหลายรายการ):
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                  {equipmentList.map((eq) => {
+                    const isChecked = addEquipIds.includes(eq.id);
+                    const avail = Math.max(0, eq.availableQuantity ?? eq.totalQuantity ?? 0);
+                    return (
+                      <label
+                        key={eq.id}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          isChecked
+                            ? 'bg-teal-50 border-teal-500 ring-1 ring-teal-400 shadow-2xs'
+                            : 'bg-white hover:bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            setAddEquipIds((prev) =>
+                              prev.includes(eq.id) ? prev.filter((id) => id !== eq.id) : [...prev, eq.id]
+                            );
+                          }}
+                          className="mt-0.5 w-4 h-4 accent-teal-600 rounded shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-slate-900 text-xs leading-snug">{eq.name}</div>
+                          <div className="flex items-center justify-between mt-1 text-[10.5px]">
+                            <span className="font-mono text-slate-500">{eq.assetCode}</span>
+                            <span
+                              className={`px-1.5 py-0.2 rounded font-bold ${
+                                avail > 0
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {avail > 0 ? `ว่าง ${avail}` : 'คิวจอง/หมด'}
+                            </span>
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Optional Custom Asset Code if 1 item selected */}
+              {addEquipIds.length === 1 && (
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    รหัสครุภัณฑ์ (เว้นว่างไว้เพื่อใช้รหัสคลังอัตโนมัติ):
+                  </label>
+                  <input
+                    type="text"
+                    value={addEquipCustomCode}
+                    onChange={(e) => setAddEquipCustomCode(e.target.value)}
+                    placeholder={`เช่น ${equipmentList.find((e) => e.id === addEquipIds[0])?.assetCode || 'EQ-MAT-01'}`}
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-mono text-xs outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              )}
+
+              {/* Initial Status for the newly added items */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 block">สถานะของอุปกรณ์ที่เพิ่มใหม่:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAddEquipStatus('borrowed')}
+                    className={`py-2 px-2 rounded-xl font-bold border text-[11px] cursor-pointer transition-all ${
+                      addEquipStatus === 'borrowed'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    🟢 ส่งมอบแล้ว / ยืมอยู่
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddEquipStatus('approved')}
+                    className={`py-2 px-2 rounded-xl font-bold border text-[11px] cursor-pointer transition-all ${
+                      addEquipStatus === 'approved'
+                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    ✍️ อนุมัติแล้ว (รอนำส่ง)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddEquipStatus('pending')}
+                    className={`py-2 px-2 rounded-xl font-bold border text-[11px] cursor-pointer transition-all ${
+                      addEquipStatus === 'pending'
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    ⏳ รอลงนาม
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAddToContractGroup(null)}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={addEquipIds.length === 0}
+                onClick={() => handleConfirmAddToContract(false)}
+                className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white font-bold text-xs cursor-pointer shadow-xs"
+              >
+                💾 บันทึกเพิ่มเข้าสัญญาเดิม ({addEquipIds.length})
+              </button>
+              <button
+                type="button"
+                disabled={addEquipIds.length === 0}
+                onClick={() => handleConfirmAddToContract(true)}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>บันทึก & พิมพ์สัญญา A4 รวมทุกรายการ</span>
               </button>
             </div>
           </div>

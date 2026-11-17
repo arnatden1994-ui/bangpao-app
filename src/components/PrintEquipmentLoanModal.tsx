@@ -248,10 +248,10 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
                         เตียงเฟาว์เลอร์ชนิดมือหมุน
                       </td>
                       <td className="w-[20%] py-0.5 whitespace-nowrap">
-                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isBed ? '1' : '.....'}</span> เตียง
+                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isBed ? (chk.bedQty || 1) : '.....'}</span> เตียง
                       </td>
                       <td className="w-[36%] py-0.5 whitespace-nowrap">
-                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isBed ? chk.code : '.................................'}</span>
+                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isBed ? chk.bedCode : '.................................'}</span>
                       </td>
                     </tr>
 
@@ -263,10 +263,10 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
                         ถังออกซิเจนพร้อมอุปกรณ์การใช้ครบชุด
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isOxygen ? '1' : '.....'}</span> ถัง
+                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isOxygen ? (chk.oxygenQty || 1) : '.....'}</span> ถัง
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isOxygen ? chk.code : '................................'}</span>
+                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isOxygen ? chk.oxygenCode : '................................'}</span>
                       </td>
                     </tr>
 
@@ -278,10 +278,10 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
                         รถนั่งคนพิการชนิดพับได้ทำด้วยโลหะ
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isWheelchair ? '1' : '.....'}</span> คัน
+                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isWheelchair ? (chk.wheelchairQty || 1) : '.....'}</span> คัน
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isWheelchair ? chk.code : '.................................'}</span>
+                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isWheelchair ? chk.wheelchairCode : '.................................'}</span>
                       </td>
                     </tr>
 
@@ -293,10 +293,10 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
                         เครื่องดูดเสมหะ
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isSuction ? '1' : '.....'}</span> เครื่อง
+                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isSuction ? (chk.suctionQty || 1) : '.....'}</span> เครื่อง
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isSuction ? chk.code : '.................................'}</span>
+                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isSuction ? chk.suctionCode : '.................................'}</span>
                       </td>
                     </tr>
 
@@ -308,10 +308,10 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
                         ที่นอนลม
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isAirMattress ? '1' : '.....'}</span> ชุด
+                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isAirMattress ? (chk.airMattressQty || 1) : '.....'}</span> ชุด
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isAirMattress ? chk.code : '.................................'}</span>
+                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isAirMattress ? chk.airMattressCode : '.................................'}</span>
                       </td>
                     </tr>
 
@@ -320,13 +320,13 @@ export const PrintEquipmentLoanModal: React.FC<PrintEquipmentLoanModalProps> = (
                         <span className="inline-block w-[13pt] h-[13pt] border border-black text-center leading-[13pt] text-[11pt] font-bold align-[-2px] mr-1.5">
                           {chk.isOther ? '✓' : ''}
                         </span>
-                        อื่นๆ ระบุ <span className="border-b border-dotted border-black px-1 font-bold min-w-[110px] inline-block text-center">{chk.isOther ? (loan.equipmentName || '') : '.........................'}</span>
+                        อื่นๆ ระบุ <span className="border-b border-dotted border-black px-1 font-bold min-w-[110px] inline-block text-center">{chk.isOther ? (chk.otherName || loan.equipmentName || '') : '.........................'}</span>
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isOther ? '1' : '.....'}</span> &nbsp;&nbsp;&nbsp;&nbsp;
+                        จำนวน <span className="border-b border-dotted border-black px-1 font-bold min-w-[32px] inline-block text-center">{chk.isOther ? (chk.otherQty || 1) : '.....'}</span> &nbsp;&nbsp;&nbsp;&nbsp;
                       </td>
                       <td className="py-0.5 whitespace-nowrap">
-                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isOther ? chk.code : '.................................'}</span>
+                        หมายเลขครุภัณฑ์ <span className="border-b border-dotted border-black px-1 font-bold min-w-[120px] inline-block text-center">{chk.isOther ? chk.otherCode : '.................................'}</span>
                       </td>
                     </tr>
                   </tbody>

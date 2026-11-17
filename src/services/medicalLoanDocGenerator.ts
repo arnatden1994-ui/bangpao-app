@@ -208,7 +208,7 @@ export function createBlankMedicalLoan(): EquipmentLoan {
 }
 
 export function getEquipmentChecklist(loan: EquipmentLoan) {
-  if (loan.id === 'TEMPLATE_BLANK' || !loan.equipmentName) {
+  if (loan.id === 'TEMPLATE_BLANK' || (!loan.equipmentName && !loan.itemsSummary)) {
     return {
       isBed: false,
       isOxygen: false,
@@ -216,32 +216,96 @@ export function getEquipmentChecklist(loan: EquipmentLoan) {
       isSuction: false,
       isAirMattress: false,
       isOther: false,
+      bedQty: 0,
+      oxygenQty: 0,
+      wheelchairQty: 0,
+      suctionQty: 0,
+      airMattressQty: 0,
+      otherQty: 0,
+      bedCode: '',
+      oxygenCode: '',
+      wheelchairCode: '',
+      suctionCode: '',
+      airMattressCode: '',
+      otherCode: '',
+      otherName: '',
       code: '.................................',
     };
   }
 
-  const eqName = ((loan.itemsSummary || '') + ' ' + (loan.equipmentName || '')).toLowerCase();
-  const eqCat = (loan.equipmentCategory || '').toLowerCase();
-  const code = loan.equipmentCode || 'EQ-001';
+  // รองรับหลายรายการในสัญญาเดียว เช่น "เตียง... [EQ-BED-01] | ที่นอนลม... [EQ-MAT-01]"
+  const rawSegments = (loan.itemsSummary || loan.equipmentName || '')
+    .split('|')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const segments =
+    rawSegments.length > 0
+      ? rawSegments
+      : [`${loan.equipmentName || ''} [${loan.equipmentCode || ''}]`];
 
-  const isBed = eqName.includes('เตียง') || eqCat === 'bed';
-  const isOxygen = eqName.includes('ออกซิเจน') || eqCat === 'oxygen_concentrator';
-  const isWheelchair =
-    eqName.includes('รถนั่ง') ||
-    eqName.includes('วีลแชร์') ||
-    eqName.includes('wheelchair') ||
-    eqName.includes('รถเข็น') ||
-    eqCat === 'wheelchair';
-  const isSuction = eqName.includes('เสมหะ') || eqName.includes('suction') || eqCat === 'suction_machine';
-  const isAirMattress = eqName.includes('ที่นอน') || eqName.includes('mattress') || eqCat === 'air_mattress';
+  const bedCodes: string[] = [];
+  const oxygenCodes: string[] = [];
+  const wheelchairCodes: string[] = [];
+  const suctionCodes: string[] = [];
+  const airMattressCodes: string[] = [];
+  const otherCodes: string[] = [];
+  const otherNames: string[] = [];
 
-  const hasOtherKeyword =
-    eqName.includes('ไม้เท้า') ||
-    eqName.includes('ไม้ค้ำ') ||
-    eqName.includes('เก้าอี้นั่งถ่าย') ||
-    eqName.includes('วอล์คเกอร์') ||
-    eqCat === 'other';
-  const isOther = hasOtherKeyword || (!isBed && !isOxygen && !isWheelchair && !isSuction && !isAirMattress);
+  let bedQty = 0;
+  let oxygenQty = 0;
+  let wheelchairQty = 0;
+  let suctionQty = 0;
+  let airMattressQty = 0;
+  let otherQty = 0;
+
+  const fallbackCode = loan.equipmentCode || 'EQ-001';
+
+  segments.forEach((seg, idx) => {
+    const codeMatch = seg.match(/\[([^\]]+)\]/);
+    const segCode = codeMatch?.[1]?.trim() || (idx === 0 ? fallbackCode : '-');
+    const cleanSeg = seg.replace(/\[[^\]]+\]/g, '').trim();
+    const low = cleanSeg.toLowerCase();
+    const eqCat = idx === 0 ? (loan.equipmentCategory || '').toLowerCase() : '';
+
+    const segBed = low.includes('เตียง') || eqCat === 'bed';
+    const segOxygen = low.includes('ออกซิเจน') || eqCat === 'oxygen_concentrator';
+    const segWheelchair =
+      low.includes('รถนั่ง') ||
+      low.includes('วีลแชร์') ||
+      low.includes('wheelchair') ||
+      low.includes('รถเข็น') ||
+      eqCat === 'wheelchair';
+    const segSuction = low.includes('เสมหะ') || low.includes('suction') || eqCat === 'suction_machine';
+    const segAirMattress = low.includes('ที่นอน') || low.includes('mattress') || eqCat === 'air_mattress';
+
+    if (segBed) {
+      bedQty += 1;
+      if (segCode && segCode !== '-') bedCodes.push(segCode);
+    } else if (segOxygen) {
+      oxygenQty += 1;
+      if (segCode && segCode !== '-') oxygenCodes.push(segCode);
+    } else if (segWheelchair) {
+      wheelchairQty += 1;
+      if (segCode && segCode !== '-') wheelchairCodes.push(segCode);
+    } else if (segSuction) {
+      suctionQty += 1;
+      if (segCode && segCode !== '-') suctionCodes.push(segCode);
+    } else if (segAirMattress) {
+      airMattressQty += 1;
+      if (segCode && segCode !== '-') airMattressCodes.push(segCode);
+    } else {
+      otherQty += 1;
+      if (segCode && segCode !== '-') otherCodes.push(segCode);
+      if (cleanSeg) otherNames.push(cleanSeg);
+    }
+  });
+
+  const isBed = bedQty > 0;
+  const isOxygen = oxygenQty > 0;
+  const isWheelchair = wheelchairQty > 0;
+  const isSuction = suctionQty > 0;
+  const isAirMattress = airMattressQty > 0;
+  const isOther = otherQty > 0;
 
   return {
     isBed,
@@ -250,7 +314,20 @@ export function getEquipmentChecklist(loan: EquipmentLoan) {
     isSuction,
     isAirMattress,
     isOther,
-    code,
+    bedQty,
+    oxygenQty,
+    wheelchairQty,
+    suctionQty,
+    airMattressQty,
+    otherQty,
+    bedCode: bedCodes.join(', ') || fallbackCode,
+    oxygenCode: oxygenCodes.join(', ') || fallbackCode,
+    wheelchairCode: wheelchairCodes.join(', ') || fallbackCode,
+    suctionCode: suctionCodes.join(', ') || fallbackCode,
+    airMattressCode: airMattressCodes.join(', ') || fallbackCode,
+    otherCode: otherCodes.join(', ') || fallbackCode,
+    otherName: otherNames.join(', ') || loan.equipmentName || '',
+    code: fallbackCode,
   };
 }
 
@@ -486,63 +563,50 @@ export function generateOfficialMedicalLoanDocxBytes(
     createAddressLine3PatientXml('1E824765', pAddr.province, relation)
   );
 
-  // 9. Equipment Checklist (All 6 rows in Table + Floating Checkbox Anchors)
-  // Row 0: bed -> AnchorId 2416939B
-  // Row 1: oxygen -> AnchorId 7E69D3C8
-  // Row 2: wheelchair -> AnchorId 3D95DEDF
-  // Row 3: suction -> AnchorId 786F3857
-  // Row 4: air mattress -> AnchorId 70C5236F
-  // Row 5: other -> AnchorId 0B96788E
-  let targetRow = 0;
-  let targetAnchorId = '2416939B';
+  // 9. Equipment Checklist (All 6 rows in Table + Floating Checkbox Anchors — รองรับหลายรายการในสัญญาเดียว)
+  const matchedRows: Array<{ row: number; anchorId: string; qty: number; code: string }> = [];
+  if (chk.isBed) matchedRows.push({ row: 0, anchorId: '2416939B', qty: chk.bedQty || 1, code: chk.bedCode });
+  if (chk.isOxygen) matchedRows.push({ row: 1, anchorId: '7E69D3C8', qty: chk.oxygenQty || 1, code: chk.oxygenCode });
+  if (chk.isWheelchair) matchedRows.push({ row: 2, anchorId: '3D95DEDF', qty: chk.wheelchairQty || 1, code: chk.wheelchairCode });
+  if (chk.isSuction) matchedRows.push({ row: 3, anchorId: '786F3857', qty: chk.suctionQty || 1, code: chk.suctionCode });
+  if (chk.isAirMattress) matchedRows.push({ row: 4, anchorId: '70C5236F', qty: chk.airMattressQty || 1, code: chk.airMattressCode });
+  if (chk.isOther) matchedRows.push({ row: 5, anchorId: '0B96788E', qty: chk.otherQty || 1, code: chk.otherCode });
 
-  if (chk.isBed) {
-    targetRow = 0;
-    targetAnchorId = '2416939B';
-  } else if (chk.isOxygen) {
-    targetRow = 1;
-    targetAnchorId = '7E69D3C8';
-  } else if (chk.isWheelchair) {
-    targetRow = 2;
-    targetAnchorId = '3D95DEDF';
-  } else if (chk.isSuction) {
-    targetRow = 3;
-    targetAnchorId = '786F3857';
-  } else if (chk.isAirMattress) {
-    targetRow = 4;
-    targetAnchorId = '70C5236F';
-  } else {
-    targetRow = 5;
-    targetAnchorId = '0B96788E';
+  if (matchedRows.length === 0) {
+    matchedRows.push({ row: 5, anchorId: '0B96788E', qty: 1, code: chk.code || '-' });
   }
 
-  // Check the corresponding checkbox (replace rId8 with rId9)
-  docXml = docXml.replace(
-    new RegExp(`(<wp:anchor[^>]*wp14:anchorId="${targetAnchorId}"[\\s\\S]*?r:embed=")rId8(")`),
-    '$1rId9$2'
-  );
+  // Check every corresponding checkbox (replace rId8 with rId9)
+  matchedRows.forEach((m) => {
+    docXml = docXml.replace(
+      new RegExp(`(<wp:anchor[^>]*wp14:anchorId="${m.anchorId}"[\\s\\S]*?r:embed=")rId8(")`),
+      '$1rId9$2'
+    );
+  });
 
-  // Update table row with quantity and asset code
+  // Update every matched table row with its quantity and asset code
   docXml = docXml.replace(/(<w:tbl[\s\S]*?<\/w:tbl>)/, (tblXml) => {
     const rows = tblXml.split('</w:tr>');
-    if (rows[targetRow]) {
-      if (targetRow === 5 && (loan.equipmentName || chk.isOther)) {
-        rows[targetRow] = rows[targetRow].replace(
-          '<w:t>อื่นๆ ระบุ</w:t>',
-          `<w:t xml:space="preserve">อื่นๆ ระบุ  ${loan.equipmentName || ''}</w:t>`
+    matchedRows.forEach((m) => {
+      if (rows[m.row]) {
+        if (m.row === 5 && (chk.otherName || loan.equipmentName || chk.isOther)) {
+          rows[m.row] = rows[m.row].replace(
+            '<w:t>อื่นๆ ระบุ</w:t>',
+            `<w:t xml:space="preserve">อื่นๆ ระบุ  ${chk.otherName || loan.equipmentName || ''}</w:t>`
+          );
+        }
+        // Cell 2: Quantity
+        rows[m.row] = rows[m.row].replace(
+          /(<w:tc><w:tcPr><w:tcW w:w="561"[\s\S]*?<w:p[^>]*><w:pPr>[\s\S]*?<\/w:pPr>)(<\/w:p><\/w:tc>)/,
+          `$1<w:r><w:rPr><w:rFonts w:ascii="TH SarabunIT๙" w:hAnsi="TH SarabunIT๙" w:cs="TH SarabunIT๙"/><w:sz w:val="32"/><w:szCs w:val="32"/><w:jc w:val="center"/><w:cs/></w:rPr><w:t>  ${m.qty}</w:t></w:r>$2`
+        );
+        // Cell 5: Asset Code
+        rows[m.row] = rows[m.row].replace(
+          /(<w:tc><w:tcPr><w:tcW w:w="1926"[\s\S]*?<w:p[^>]*><w:pPr>[\s\S]*?<\/w:pPr>)(<\/w:p><\/w:tc>)/,
+          `$1<w:r><w:rPr><w:rFonts w:ascii="TH SarabunIT๙" w:hAnsi="TH SarabunIT๙" w:cs="TH SarabunIT๙"/><w:sz w:val="32"/><w:szCs w:val="32"/><w:cs/></w:rPr><w:t>  ${m.code || '-'}</w:t></w:r>$2`
         );
       }
-      // Cell 2: Quantity
-      rows[targetRow] = rows[targetRow].replace(
-        /(<w:tc><w:tcPr><w:tcW w:w="561"[\s\S]*?<w:p[^>]*><w:pPr>[\s\S]*?<\/w:pPr>)(<\/w:p><\/w:tc>)/,
-        `$1<w:r><w:rPr><w:rFonts w:ascii="TH SarabunIT๙" w:hAnsi="TH SarabunIT๙" w:cs="TH SarabunIT๙"/><w:sz w:val="32"/><w:szCs w:val="32"/><w:jc w:val="center"/><w:cs/></w:rPr><w:t>  1</w:t></w:r>$2`
-      );
-      // Cell 5: Asset Code
-      rows[targetRow] = rows[targetRow].replace(
-        /(<w:tc><w:tcPr><w:tcW w:w="1926"[\s\S]*?<w:p[^>]*><w:pPr>[\s\S]*?<\/w:pPr>)(<\/w:p><\/w:tc>)/,
-        `$1<w:r><w:rPr><w:rFonts w:ascii="TH SarabunIT๙" w:hAnsi="TH SarabunIT๙" w:cs="TH SarabunIT๙"/><w:sz w:val="32"/><w:szCs w:val="32"/><w:cs/></w:rPr><w:t>  ${chk.code || '-'}</w:t></w:r>$2`
-      );
-    }
+    });
     return rows.join('</w:tr>');
   });
 
@@ -1143,10 +1207,10 @@ export function generateOfficialMedicalLoanHtml(
                 <span class="chk-icon">${chk.isBed ? '✓' : '&nbsp;'}</span>เตียงเฟาว์เลอร์ชนิดมือหมุน
               </td>
               <td style="width:20%; white-space:nowrap;">
-                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isBed ? '1' : '.....'}</span> เตียง
+                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isBed ? (chk.bedQty || 1) : '.....'}</span> เตียง
               </td>
               <td style="width:36%; white-space:nowrap;">
-                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isBed ? chk.code : '.................................'}</span>
+                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isBed ? chk.bedCode : '.................................'}</span>
               </td>
             </tr>
             <tr>
@@ -1154,10 +1218,10 @@ export function generateOfficialMedicalLoanHtml(
                 <span class="chk-icon">${chk.isOxygen ? '✓' : '&nbsp;'}</span>ถังออกซิเจนพร้อมอุปกรณ์การใช้ครบชุด
               </td>
               <td style="white-space:nowrap;">
-                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isOxygen ? '1' : '.....'}</span> ถัง
+                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isOxygen ? (chk.oxygenQty || 1) : '.....'}</span> ถัง
               </td>
               <td style="white-space:nowrap;">
-                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isOxygen ? chk.code : '................................'}</span>
+                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isOxygen ? chk.oxygenCode : '................................'}</span>
               </td>
             </tr>
             <tr>
@@ -1165,10 +1229,10 @@ export function generateOfficialMedicalLoanHtml(
                 <span class="chk-icon">${chk.isWheelchair ? '✓' : '&nbsp;'}</span>รถนั่งคนพิการชนิดพับได้ทำด้วยโลหะ
               </td>
               <td style="white-space:nowrap;">
-                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isWheelchair ? '1' : '.....'}</span> คัน
+                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isWheelchair ? (chk.wheelchairQty || 1) : '.....'}</span> คัน
               </td>
               <td style="white-space:nowrap;">
-                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isWheelchair ? chk.code : '.................................'}</span>
+                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isWheelchair ? chk.wheelchairCode : '.................................'}</span>
               </td>
             </tr>
             <tr>
@@ -1176,10 +1240,10 @@ export function generateOfficialMedicalLoanHtml(
                 <span class="chk-icon">${chk.isSuction ? '✓' : '&nbsp;'}</span>เครื่องดูดเสมหะ
               </td>
               <td style="white-space:nowrap;">
-                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isSuction ? '1' : '.....'}</span> เครื่อง
+                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isSuction ? (chk.suctionQty || 1) : '.....'}</span> เครื่อง
               </td>
               <td style="white-space:nowrap;">
-                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isSuction ? chk.code : '.................................'}</span>
+                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isSuction ? chk.suctionCode : '.................................'}</span>
               </td>
             </tr>
             <tr>
@@ -1187,21 +1251,21 @@ export function generateOfficialMedicalLoanHtml(
                 <span class="chk-icon">${chk.isAirMattress ? '✓' : '&nbsp;'}</span>ที่นอนลม
               </td>
               <td style="white-space:nowrap;">
-                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isAirMattress ? '1' : '.....'}</span> ชุด
+                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isAirMattress ? (chk.airMattressQty || 1) : '.....'}</span> ชุด
               </td>
               <td style="white-space:nowrap;">
-                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isAirMattress ? chk.code : '.................................'}</span>
+                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isAirMattress ? chk.airMattressCode : '.................................'}</span>
               </td>
             </tr>
             <tr>
               <td style="white-space:nowrap;">
-                <span class="chk-icon">${chk.isOther ? '✓' : '&nbsp;'}</span>อื่นๆ ระบุ <span class="dot-val" style="min-width:110px; text-align:center;">${chk.isOther ? (loan.equipmentName || '') : '.........................'}</span>
+                <span class="chk-icon">${chk.isOther ? '✓' : '&nbsp;'}</span>อื่นๆ ระบุ <span class="dot-val" style="min-width:110px; text-align:center;">${chk.isOther ? (chk.otherName || loan.equipmentName || '') : '.........................'}</span>
               </td>
               <td style="white-space:nowrap;">
-                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isOther ? '1' : '.....'}</span> &nbsp;&nbsp;&nbsp;&nbsp;
+                จำนวน <span class="dot-val" style="min-width:32px; text-align:center;">${chk.isOther ? (chk.otherQty || 1) : '.....'}</span> &nbsp;&nbsp;&nbsp;&nbsp;
               </td>
               <td style="white-space:nowrap;">
-                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isOther ? chk.code : '.................................'}</span>
+                หมายเลขครุภัณฑ์ <span class="dot-val" style="min-width:120px; text-align:center;">${chk.isOther ? chk.otherCode : '.................................'}</span>
               </td>
             </tr>
           </tbody>
