@@ -898,7 +898,7 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
       const found = householdGroups.find(
         (h) => h.id === id || h.householdKey === id || h.loans.some((l) => l.id === id)
       );
-      if (found && found.primaryStatus === 'pending' && !seen.has(found.householdKey)) {
+      if (found && !seen.has(found.householdKey)) {
         seen.add(found.householdKey);
         list.push(found);
       }
@@ -908,7 +908,9 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
 
   const orderedSelectedLoans = useMemo(() => {
     return orderedSelectedHouseholds.flatMap((h) =>
-      h.loans.filter((l) => l.status === 'pending' || l.status === 'approved')
+      h.primaryStatus === 'pending'
+        ? h.loans.filter((l) => l.status === 'pending' || l.status === 'approved')
+        : h.loans
     );
   }, [orderedSelectedHouseholds]);
 
@@ -3073,8 +3075,20 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     คิวจัดรอบส่งมอบ — เลื่อนขึ้น-ลง, เปลี่ยนลำดับ # หรือคลิกหมุดบนแผนที่
                   </p>
                 </div>
-                <span className="px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[11px] font-extrabold shrink-0">
-                  ในคิว {orderedSelectedHouseholds.length} / {householdGroups.length} หลัง
+                <span
+                  className={`px-2.5 py-1 rounded-full border text-[11px] font-extrabold shrink-0 ${
+                    pendingDispatchHouseholdsCount > 0
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : orderedSelectedHouseholds.length > 0
+                      ? 'bg-sky-50 text-sky-800 border-sky-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}
+                >
+                  {pendingDispatchHouseholdsCount > 0
+                    ? `ในคิว ${orderedSelectedHouseholds.length} / รอส่ง ${pendingDispatchHouseholdsCount} หลัง`
+                    : orderedSelectedHouseholds.length > 0
+                    ? `นำทาง ${orderedSelectedHouseholds.length} หลัง`
+                    : 'ส่งมอบครบแล้ว (0 รอส่ง)'}
                 </span>
               </div>
 
@@ -3095,13 +3109,14 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                   className="flex items-center justify-center gap-1 px-2 py-1.5 font-bold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3 shrink-0" />
-                  <span className="truncate">เลือกทีละบ้านใหม่</span>
+                  <span className="truncate">ล้างคิวเลือกใหม่</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={autoSortNearestFromHq}
-                  className="flex items-center justify-center gap-1 px-2 py-1.5 font-bold rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 transition-colors cursor-pointer"
+                  disabled={orderedSelectedHouseholds.length === 0 && pendingDispatchHouseholdsCount === 0}
+                  className="flex items-center justify-center gap-1 px-2 py-1.5 font-bold rounded-lg bg-sky-50 hover:bg-sky-100 disabled:opacity-40 text-sky-800 border border-sky-200 transition-colors cursor-pointer"
                 >
                   <Sparkles className="w-3 h-3 shrink-0" />
                   <span className="truncate">เรียงใกล้สุด</span>
@@ -3110,7 +3125,8 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                 <button
                   type="button"
                   onClick={autoSortByMoo}
-                  className="flex items-center justify-center px-2 py-1.5 font-bold rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition-colors cursor-pointer"
+                  disabled={orderedSelectedHouseholds.length === 0 && pendingDispatchHouseholdsCount === 0}
+                  className="flex items-center justify-center px-2 py-1.5 font-bold rounded-lg bg-teal-50 hover:bg-teal-100 disabled:opacity-40 text-teal-800 border border-teal-200 transition-colors cursor-pointer"
                 >
                   <span className="truncate">เรียง ม.1➔ม.7</span>
                 </button>
@@ -3124,14 +3140,22 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
                     <span className="truncate">ดึงรอส่ง ({pendingDispatchHouseholdsCount})</span>
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={selectAllHouseholds}
-                    className="flex items-center justify-center px-2 py-1.5 font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer"
-                    title="ดึงทุกบ้านที่มียืมอุปกรณ์เข้าคิวเพื่อตรวจเยี่ยมหรือส่งมอบ"
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) toggleHouseholdInQueue(val);
+                    }}
+                    className="px-2 py-1.5 font-bold rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer text-[11px] outline-none focus:ring-2 focus:ring-teal-500"
+                    title="เลือกชื่อผู้ป่วยเพื่อเพิ่มเข้าเส้นทางนำทาง Google Maps"
                   >
-                    <span className="truncate">ดึงทุกบ้าน ({householdGroups.length})</span>
-                  </button>
+                    <option value="">+ เลือกชื่อนำทาง</option>
+                    {householdGroups.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        ม.{h.moo} {h.patientName}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
 
@@ -3182,30 +3206,56 @@ export const MedicalEquipmentView: React.FC<MedicalEquipmentViewProps> = ({
               {/* Delivery Queue Cards List */}
               <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
                 {orderedSelectedHouseholds.length === 0 ? (
-                  <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs space-y-2">
-                    <Truck className="w-8 h-8 mx-auto text-slate-300" />
-                    <div className="font-extrabold text-slate-700">ยังไม่มีบ้านในคิวนำส่ง</div>
-                    <div className="text-[11px] text-slate-500">
-                      กดปุ่มด้านล่าง หรือคลิกหมุดบนแผนที่เพื่อเพิ่มบ้านเข้าคิวนำส่ง/ตรวจเยี่ยม
-                    </div>
-                    <div className="flex items-center justify-center gap-2 pt-2">
-                      {pendingDispatchHouseholdsCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={selectOnlyPendingLoans}
-                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs"
-                        >
-                          🚚 ดึงเฉพาะรอส่ง ({pendingDispatchHouseholdsCount} หลัง)
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={selectAllHouseholds}
-                        className="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs cursor-pointer shadow-xs"
-                      >
-                        📋 ดึงทุกบ้านเข้าคิว ({householdGroups.length} หลัง)
-                      </button>
-                    </div>
+                  <div className="p-6 text-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs space-y-2.5">
+                    {pendingDispatchHouseholdsCount > 0 ? (
+                      <>
+                        <Truck className="w-8 h-8 mx-auto text-amber-400" />
+                        <div className="font-extrabold text-slate-800">
+                          มีบ้านรอจัดส่งอุปกรณ์ {pendingDispatchHouseholdsCount} หลัง
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          กดปุ่มด้านล่างเพื่อดึงรายการที่รอนำส่งเข้าคิว หรือคลิกหมุดบนแผนที่ทีละหลัง
+                        </div>
+                        <div className="flex items-center justify-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={selectOnlyPendingLoans}
+                            className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                          >
+                            🚚 ดึงเฉพาะบ้านรอนำส่ง ({pendingDispatchHouseholdsCount} หลัง)
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500" />
+                        <div className="font-extrabold text-slate-800">
+                          ไม่มีคิวที่ต้องนำส่งอุปกรณ์ในขณะนี้ (ส่งมอบครบทุกบ้านแล้ว)
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          หากต้องการนำทางไปเยี่ยมติดตามหรือรับคืนอุปกรณ์ สามารถเลือกชื่อผู้ป่วยด้านล่าง หรือคลิกหมุดบนแผนที่ได้เลย
+                        </div>
+                        {householdGroups.length > 0 && (
+                          <div className="pt-1 flex items-center justify-center">
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val) toggleHouseholdInQueue(val);
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-teal-300 bg-teal-50/70 text-teal-900 font-bold text-xs cursor-pointer outline-none focus:ring-2 focus:ring-teal-500 max-w-full"
+                            >
+                              <option value="">📍 เลือกชื่อผู้ป่วยเพื่อนำทางไปบ้าน...</option>
+                              {householdGroups.map((h) => (
+                                <option key={h.id} value={h.id}>
+                                  ม.{h.moo} — {h.patientName} ({h.loans.length} รายการ)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 ) : (
                   orderedSelectedHouseholds.map((household, idx) => (
